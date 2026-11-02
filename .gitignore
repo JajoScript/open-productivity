@@ -1,0 +1,6 @@
+# IA
+.claude/
+
+# Temporal files
+temp/
+*.temp
