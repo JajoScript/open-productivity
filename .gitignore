@@ -1,6 +1,11 @@
 # IA
 .claude/
+AGENTS.md
+CLAUDE.md
 
 # Temporal files
 temp/
 *.temp
+
+# Rust
+/target/
