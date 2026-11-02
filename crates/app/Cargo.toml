@@ -1,0 +1,18 @@
+[package]
+name = "open-productivity-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+
+[[bin]]
+name = "open-productivity"
+path = "src/main.rs"
+
+[dependencies]
+open-productivity-core = { path = "../core" }
+slint = "1.18.1"
+
+[build-dependencies]
+slint-build = "1.18.1"
