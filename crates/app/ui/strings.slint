@@ -1,0 +1,27 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+// Messages shown by native dialogs and the log; msgids are English, see lang/README.md.
+export global Strings {
+    out property <string> already-running: @tr("Open Productivity is already running.");
+    out property <string> pick-folder: @tr("Choose the folder where your data will be stored");
+    out property <string> newer-schema: @tr("This instance was created with a newer version of Open Productivity. Update the application to open it.");
+    out property <string> missing-arg: @tr("The folder after --instance is missing.");
+    out property <string> corrupt-registry: @tr("The instance list file is damaged and will be replaced when you choose a folder.");
+
+    public pure function no-instance-here(path: string) -> string {
+        return @tr("There is no Open Productivity instance in {}. Create a new one here?", path);
+    }
+
+    public pure function folder-not-found(path: string) -> string {
+        return @tr("The instance folder was not found: {}. Choose another one.", path);
+    }
+
+    public pure function db-failed(error: string) -> string {
+        return @tr("Could not open the database: {}", error);
+    }
+
+    public pure function failed(error: string) -> string {
+        return @tr("Unexpected error: {}", error);
+    }
+}

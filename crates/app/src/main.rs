@@ -15,41 +15,7 @@ use rfd::{FileDialog, MessageButtons, MessageDialog, MessageDialogResult, Messag
 
 slint::include_modules!();
 
-/// User-facing strings, kept together so they can move to translations later.
-mod messages {
-    use std::fmt::Display;
-    use std::path::Path;
-
-    pub const TITLE: &str = "Open Productivity";
-    pub const ALREADY_RUNNING: &str = "Open Productivity ya está abierta.";
-    pub const PICK_FOLDER: &str = "Elige la carpeta donde guardar tus datos";
-    pub const NEWER_SCHEMA: &str = "Esta instancia fue creada con una versión más nueva de Open Productivity. Actualiza la aplicación para abrirla.";
-    pub const MISSING_ARG: &str = "Falta la carpeta después de --instance.";
-    pub const CORRUPT_REGISTRY: &str =
-        "El archivo con la lista de instancias está dañado y se reemplazará al elegir una carpeta.";
-
-    pub fn no_instance_here(p: &Path) -> String {
-        format!(
-            "No hay una instancia de Open Productivity en {}. ¿Crear una nueva aquí?",
-            p.display()
-        )
-    }
-
-    pub fn folder_not_found(p: &Path) -> String {
-        format!(
-            "No se encontró la carpeta de la instancia: {}. Elige otra.",
-            p.display()
-        )
-    }
-
-    pub fn db_failed(e: &dyn Display) -> String {
-        format!("No se pudo abrir la base de datos: {e}")
-    }
-
-    pub fn failed(e: &dyn Display) -> String {
-        format!("Error inesperado: {e}")
-    }
-}
+const TITLE: &str = "Open Productivity";
 
 fn log(app_dir: &Path, level: &str, msg: &str) {
     // shortcut: unix timestamps, switch to readable dates once chrono is a dependency
@@ -69,7 +35,7 @@ fn log(app_dir: &Path, level: &str, msg: &str) {
 fn dialog(level: MessageLevel, text: &str) {
     MessageDialog::new()
         .set_level(level)
-        .set_title(messages::TITLE)
+        .set_title(TITLE)
         .set_description(text)
         .set_buttons(MessageButtons::Ok)
         .show();
@@ -88,98 +54,106 @@ fn warn(app_dir: &Path, msg: &str) {
 
 /// Only a folder the user just picked may become an instance without asking,
 /// so a typo or a moved database never turns into a silent empty instance.
-fn confirm_new(dir: &Path) -> bool {
+fn confirm_new(s: &Strings, dir: &Path) -> bool {
     dir.join("open-productivity.db").is_file()
         || MessageDialog::new()
             .set_level(MessageLevel::Warning)
-            .set_title(messages::TITLE)
-            .set_description(messages::no_instance_here(dir))
+            .set_title(TITLE)
+            .set_description(
+                s.invoke_no_instance_here(dir.display().to_string().into())
+                    .as_str(),
+            )
             .set_buttons(MessageButtons::YesNo)
             .show()
             == MessageDialogResult::Yes
 }
 
 /// Asks for a folder and remembers it; `None` when the user cancels.
-fn pick_and_register(app_dir: &Path, registry: &Path) -> Option<PathBuf> {
+fn pick_and_register(s: &Strings, app_dir: &Path, registry: &Path) -> Option<PathBuf> {
     let dir = FileDialog::new()
-        .set_title(messages::PICK_FOLDER)
+        .set_title(s.get_pick_folder().as_str())
         .pick_folder()?;
     if let Err(e) = instances::register(registry, &dir) {
-        fatal(app_dir, &messages::failed(&e));
+        fatal(app_dir, &s.invoke_failed(e.to_string().into()));
     }
     Some(dir)
 }
 
-fn choose_instance(app_dir: &Path) -> Option<PathBuf> {
+fn choose_instance(s: &Strings, app_dir: &Path) -> Option<PathBuf> {
     let mut args = std::env::args_os().skip(1);
     while let Some(a) = args.next() {
         if a == "--instance" {
             // Explicit instance: leave the registry untouched.
             let Some(p) = args.next() else {
-                fatal(app_dir, messages::MISSING_ARG)
+                fatal(app_dir, &s.get_missing_arg())
             };
             let dir = PathBuf::from(p);
-            return confirm_new(&dir).then_some(dir);
+            return confirm_new(s, &dir).then_some(dir);
         }
     }
 
     let registry = app_dir.join("instances.json");
     match instances::resolve(&registry) {
-        Ok(dir) if confirm_new(&dir) => return Some(dir),
+        Ok(dir) if confirm_new(s, &dir) => return Some(dir),
         Ok(_) => {}
         Err(Error::Missing(None)) => {}
-        Err(Error::Missing(Some(p))) => warn(app_dir, &messages::folder_not_found(&p)),
-        Err(Error::Corrupt(_)) => warn(app_dir, messages::CORRUPT_REGISTRY),
-        Err(e @ Error::Io(_)) => fatal(app_dir, &messages::failed(&e)),
+        Err(Error::Missing(Some(p))) => warn(
+            app_dir,
+            &s.invoke_folder_not_found(p.display().to_string().into()),
+        ),
+        Err(Error::Corrupt(_)) => warn(app_dir, &s.get_corrupt_registry()),
+        Err(e @ Error::Io(_)) => fatal(app_dir, &s.invoke_failed(e.to_string().into())),
     }
-    pick_and_register(app_dir, &registry)
+    pick_and_register(s, app_dir, &registry)
 }
 
 fn main() {
     let app_dir = dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("open-productivity");
+    // The strings live in the window, so a failure here has nothing to translate with yet.
+    let window = match AppWindow::new() {
+        Ok(w) => w,
+        Err(e) => fatal(&app_dir, &format!("Could not start Open Productivity: {e}")),
+    };
+    let s = window.global::<Strings>();
     if let Err(e) = fs::create_dir_all(&app_dir) {
-        fatal(&app_dir, &messages::failed(&e));
+        fatal(&app_dir, &s.invoke_failed(e.to_string().into()));
     }
 
     // Held until exit; the OS releases the lock if the process dies.
     let lock = match File::create(app_dir.join("open-productivity.lock")) {
         Ok(f) => f,
-        Err(e) => fatal(&app_dir, &messages::failed(&e)),
+        Err(e) => fatal(&app_dir, &s.invoke_failed(e.to_string().into())),
     };
     // shortcut: a second launch only shows a dialog, upgrade to focusing the running window
     // when there is an IPC channel (e.g. when file/URL opening is added).
     if lock.try_lock().is_err() {
-        dialog(MessageLevel::Info, messages::ALREADY_RUNNING);
+        dialog(MessageLevel::Info, &s.get_already_running());
         return;
     }
 
-    let Some(instance) = choose_instance(&app_dir) else {
+    let Some(instance) = choose_instance(&s, &app_dir) else {
         return;
     };
 
     if let Err(e) = fs::create_dir_all(&instance) {
-        fatal(&app_dir, &messages::failed(&e));
+        fatal(&app_dir, &s.invoke_failed(e.to_string().into()));
     }
     // Kept alive while the window runs; it will be handed to the UI later.
     let _conn = match db::open(&instance.join("open-productivity.db")) {
         Ok(c) => c,
-        Err(DbError::NewerSchema { .. }) => fatal(&app_dir, messages::NEWER_SCHEMA),
-        Err(e @ DbError::Sqlite(_)) => fatal(&app_dir, &messages::db_failed(&e)),
+        Err(DbError::NewerSchema { .. }) => fatal(&app_dir, &s.get_newer_schema()),
+        Err(e @ DbError::Sqlite(_)) => fatal(&app_dir, &s.invoke_db_failed(e.to_string().into())),
     };
 
-    let window = match AppWindow::new() {
-        Ok(w) => w,
-        Err(e) => fatal(&app_dir, &messages::failed(&e)),
-    };
     let name = instance.file_name().map_or_else(
         || instance.display().to_string(),
         |n| n.to_string_lossy().into_owned(),
     );
     window.set_instance_name(name.into());
     if let Err(e) = window.run() {
-        fatal(&app_dir, &messages::failed(&e));
+        fatal(&app_dir, &s.invoke_failed(e.to_string().into()));
     }
     drop(lock);
 }

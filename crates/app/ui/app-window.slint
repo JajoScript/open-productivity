@@ -1,6 +1,9 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
+import { Strings } from "strings.slint";
+export { Strings }
+
 export component AppWindow inherits Window {
     in property <string> instance-name;
     title: "Open Productivity — " + instance-name;

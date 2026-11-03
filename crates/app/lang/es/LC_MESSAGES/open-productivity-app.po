@@ -1,0 +1,34 @@
+# SPDX-License-Identifier: GPL-3.0-or-later
+# Copyright (C) 2026 JajoScript
+msgid ""
+msgstr ""
+"Content-Type: text/plain; charset=UTF-8\n"
+"Language: es\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgid "Open Productivity is already running."
+msgstr "Open Productivity ya está abierta."
+
+msgid "Choose the folder where your data will be stored"
+msgstr "Elige la carpeta donde guardar tus datos"
+
+msgid "This instance was created with a newer version of Open Productivity. Update the application to open it."
+msgstr "Esta instancia fue creada con una versión más nueva de Open Productivity. Actualiza la aplicación para abrirla."
+
+msgid "The folder after --instance is missing."
+msgstr "Falta la carpeta después de --instance."
+
+msgid "The instance list file is damaged and will be replaced when you choose a folder."
+msgstr "El archivo con la lista de instancias está dañado y se reemplazará al elegir una carpeta."
+
+msgid "There is no Open Productivity instance in {}. Create a new one here?"
+msgstr "No hay una instancia de Open Productivity en {}. ¿Crear una nueva aquí?"
+
+msgid "The instance folder was not found: {}. Choose another one."
+msgstr "No se encontró la carpeta de la instancia: {}. Elige otra."
+
+msgid "Could not open the database: {}"
+msgstr "No se pudo abrir la base de datos: {}"
+
+msgid "Unexpected error: {}"
+msgstr "Error inesperado: {}"
