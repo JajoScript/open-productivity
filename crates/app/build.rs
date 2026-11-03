@@ -10,4 +10,12 @@ fn main() {
         .with_default_translation_context(DefaultTranslationContext::None);
     slint_build::compile_with_config("ui/app-window.slint", config)
         .expect("failed to compile Slint UI");
+
+    // Embeds the .ico as the exe icon (Explorer, taskbar).
+    if std::env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("windows") {
+        winresource::WindowsResource::new()
+            .set_icon("ui/app-icons/app.ico")
+            .compile()
+            .expect("failed to embed Windows icon");
+    }
 }

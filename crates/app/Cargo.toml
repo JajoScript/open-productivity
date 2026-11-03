@@ -18,3 +18,6 @@ slint = "1.18.1"
 
 [build-dependencies]
 slint-build = "1.18.1"
+
+[target."cfg(windows)".build-dependencies]
+winresource = "0.1.34"
