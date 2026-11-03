@@ -1,7 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Button, CheckBox, Date, LineEdit, ListView, Palette } from "std-widgets.slint";
+import { Button, Date, ListView, Palette } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkField } from "../ink-field.slint";
+import { InkCheck } from "../ink-check.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
 import { ListEntry } from "../list-entry.slint";
 import { DueButton, DueKind } from "due-button.slint";
 import { ListButton } from "list-button.slint";
@@ -34,7 +39,8 @@ export component TasksView inherits VerticalLayout {
     callback set-list(int, int);
     callback delete-list(int);
 
-    padding: 16px;
+    padding: 24px;
+    padding-top: 20px;
     spacing: 12px;
 
     HorizontalLayout {
@@ -47,10 +53,9 @@ export component TasksView inherits VerticalLayout {
             horizontal-stretch: 1;
         }
 
-        if root.view == TaskView.list: Button {
+        if root.view == TaskView.list: SubtleButton {
             icon: @image-url("../icons/trash-2.svg");
-            colorize-icon: true;
-            accessible-label: @tr("Delete list");
+            label: @tr("Delete list");
             clicked => {
                 confirm.show();
             }
@@ -64,7 +69,7 @@ export component TasksView inherits VerticalLayout {
         Rectangle {
             background: Palette.background;
             border-width: 1px;
-            border-color: Palette.foreground.with-alpha(0.25);
+            border-color: Palette.foreground.with-alpha(0.14);
             border-radius: 6px;
             VerticalLayout {
                 padding: 12px;
@@ -84,9 +89,8 @@ export component TasksView inherits VerticalLayout {
                         }
                     }
 
-                    Button {
+                    InkButton {
                         text: @tr("Delete");
-                        primary: true;
                         clicked => {
                             confirm.close();
                             root.delete-list(root.list-id);
@@ -99,15 +103,15 @@ export component TasksView inherits VerticalLayout {
 
     HorizontalLayout {
         spacing: 8px;
-        input := LineEdit {
+        input := InkField {
             placeholder-text: @tr("New task");
-            accepted => {
-                root.create-task(self.text);
+            accepted(text) => {
+                root.create-task(text);
                 self.text = "";
             }
         }
 
-        Button {
+        InkButton {
             text: @tr("Add");
             clicked => {
                 root.create-task(input.text);
@@ -118,53 +122,68 @@ export component TasksView inherits VerticalLayout {
 
     if root.error != "": Text {
         text: root.error;
-        color: #d32f2f;
+        color: Theme.critical;
         wrap: word-wrap;
     }
 
     if root.tasks.length == 0: Text {
         text: root.view == TaskView.today ? @tr("Nothing due today.") : root.view == TaskView.all ? @tr("No tasks yet. Add your first one above.") : @tr("This list is empty.");
-        color: Palette.foreground.with-alpha(0.6);
+        color: Theme.muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        vertical-stretch: 1;
     }
 
-    ListView {
-        for row in root.tasks: HorizontalLayout {
-            padding-top: 3px;
-            padding-bottom: 3px;
-            spacing: 8px;
-            CheckBox {
-                checked: row.done;
-                toggled => {
-                    root.set-done(row.id, self.checked);
-                }
-            }
+    if root.tasks.length > 0: ListView {
+        for row in root.tasks: Rectangle {
+            height: 40px;
+            border-radius: 6px;
+            background: row-touch.has-hover ? Theme.hover : transparent;
+            animate background { duration: Theme.fast; easing: Theme.ease-out; }
 
-            Text {
-                text: row.title;
-                horizontal-stretch: 1;
-                vertical-alignment: center;
-                overflow: elide;
-                color: row.done ? Palette.foreground.with-alpha(0.5) : Palette.foreground;
-            }
+            // Under the controls, so it only tracks hover for the row highlight.
+            row-touch := TouchArea { }
 
-            ListButton {
-                name: row.list-name;
-                lists: root.lists;
-                picked(list-id) => {
-                    root.set-list(row.id, list-id);
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                spacing: 4px;
+                InkCheck {
+                    checked: row.done;
+                    label: row.title;
+                    toggled(done) => {
+                        root.set-done(row.id, done);
+                    }
                 }
-            }
 
-            DueButton {
-                kind: row.due-kind;
-                day: row.due-day;
-                month: row.due-month;
-                year: row.due-year;
-                picked(date) => {
-                    root.set-due(row.id, date);
+                Text {
+                    text: row.title;
+                    horizontal-stretch: 1;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    color: row.done ? Palette.foreground.with-alpha(0.45) : Palette.foreground;
+                    animate color { duration: Theme.fast; easing: Theme.ease-out; }
                 }
-                cleared => {
-                    root.clear-due(row.id);
+
+                ListButton {
+                    name: row.list-name;
+                    lists: root.lists;
+                    picked(list-id) => {
+                        root.set-list(row.id, list-id);
+                    }
+                }
+
+                DueButton {
+                    kind: row.due-kind;
+                    day: row.due-day;
+                    month: row.due-month;
+                    year: row.due-year;
+                    picked(date) => {
+                        root.set-due(row.id, date);
+                    }
+                    cleared => {
+                        root.clear-due(row.id);
+                    }
                 }
             }
         }

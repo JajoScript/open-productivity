@@ -1,0 +1,68 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// Checkbox in the monochrome system: hairline box at rest, ink box with a check that grows in.
+export component InkCheck {
+    in property <bool> checked;
+    in property <string> label;
+    callback toggled(bool);
+
+    width: 32px;
+    min-height: 32px;
+    forward-focus: focus;
+    accessible-role: checkbox;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.checked;
+    accessible-action-default => {
+        root.toggled(!root.checked);
+    }
+
+    box := Rectangle {
+        width: 18px;
+        height: 18px;
+        border-radius: 5px;
+        border-width: root.checked ? 0px : 1.5px;
+        border-color: touch.has-hover ? Palette.foreground : Theme.muted;
+        background: root.checked ? Theme.ink : touch.has-hover ? Theme.hover : transparent;
+        animate background, border-color { duration: Theme.fast; easing: Theme.ease-out; }
+
+        Image {
+            source: @image-url("icons/check.svg");
+            colorize: Theme.on-ink;
+            width: root.checked ? 12px : 4px;
+            height: self.width;
+            opacity: root.checked ? 1 : 0;
+            animate width, opacity { duration: Theme.enter; easing: Theme.ease-out; }
+            accessible-role: none;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.toggled(!root.checked);
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space {
+                root.toggled(!root.checked);
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        width: box.width + 6px;
+        height: box.height + 6px;
+        border-radius: 8px;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}

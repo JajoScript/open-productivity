@@ -1,0 +1,65 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// Primary action in the monochrome system: an ink plate instead of Fluent's accent fill.
+export component InkButton {
+    in property <string> text;
+    callback clicked;
+
+    min-width: label.preferred-width + 32px;
+    min-height: 32px;
+    horizontal-stretch: 0;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    plate := Rectangle {
+        border-radius: 6px;
+        background: Theme.ink;
+        opacity: touch.pressed ? 0.78 : touch.has-hover ? 0.88 : 1;
+        animate opacity { duration: Theme.fast; easing: Theme.ease-out; }
+    }
+
+    label := Text {
+        text: root.text;
+        color: Theme.on-ink;
+        font-weight: 600;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+        accessible-role: none;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // Offset ring so it stays visible against the ink plate.
+    if focus.has-focus: Rectangle {
+        x: -3px;
+        y: -3px;
+        width: root.width + 6px;
+        height: root.height + 6px;
+        border-radius: 9px;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}

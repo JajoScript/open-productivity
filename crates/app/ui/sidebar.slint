@@ -1,12 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { LineEdit, ListView, Palette } from "std-widgets.slint";
+import { ListView, Palette } from "std-widgets.slint";
+import { InkField } from "ink-field.slint";
 import { ListEntry } from "list-entry.slint";
 import { NavEntry } from "nav-entry.slint";
+import { SubtleButton } from "subtle-button.slint";
+import { Theme } from "theme.slint";
 import { TaskView } from "tasks/tasks-view.slint";
 
 export component Sidebar inherits Rectangle {
+    in property <string> instance-name;
     in property <TaskView> current-view;
     in property <int> current-list-id;
     in property <int> today-count;
@@ -22,7 +26,21 @@ export component Sidebar inherits Rectangle {
 
     VerticalLayout {
         padding: 8px;
+        padding-top: 12px;
         spacing: 2px;
+        // The open instance, so the user always knows which data they are looking at.
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-right: 10px;
+            Text {
+                text: root.instance-name;
+                font-weight: 600;
+                overflow: elide;
+                height: 36px;
+                vertical-alignment: center;
+            }
+        }
+
         NavEntry {
             icon: @image-url("icons/sun.svg");
             text: @tr("Today");
@@ -45,33 +63,22 @@ export component Sidebar inherits Rectangle {
 
         HorizontalLayout {
             padding-left: 10px;
-            padding-top: 8px;
+            padding-right: 4px;
+            padding-top: 16px;
+            padding-bottom: 4px;
             Text {
                 text: @tr("Lists");
-                font-weight: 700;
-                color: Palette.foreground.with-alpha(0.7);
+                font-weight: 600;
+                color: Theme.muted;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
             }
 
-            Rectangle {
-                width: 28px;
-                height: 28px;
-                border-radius: 6px;
-                background: add-touch.has-hover ? Palette.foreground.with-alpha(0.08) : transparent;
-                accessible-role: button;
-                accessible-label: @tr("New list");
-                Image {
-                    source: @image-url("icons/plus.svg");
-                    colorize: Palette.foreground;
-                    width: 16px;
-                    height: 16px;
-                }
-
-                add-touch := TouchArea {
-                    clicked => {
-                        root.adding = true;
-                    }
+            SubtleButton {
+                icon: @image-url("icons/plus.svg");
+                label: @tr("New list");
+                clicked => {
+                    root.adding = true;
                 }
             }
         }
@@ -85,13 +92,13 @@ export component Sidebar inherits Rectangle {
                 }
                 reject
             }
-            name-input := LineEdit {
+            name-input := InkField {
                 placeholder-text: @tr("List name");
                 init => {
                     self.focus();
                 }
-                accepted => {
-                    root.create-list(self.text);
+                accepted(text) => {
+                    root.create-list(text);
                     root.adding = false;
                 }
             }

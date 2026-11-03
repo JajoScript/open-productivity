@@ -1,8 +1,40 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Button, Palette } from "std-widgets.slint";
+import { Palette } from "std-widgets.slint";
 import { ListEntry } from "../list-entry.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+
+component MenuItem inherits Rectangle {
+    in property <string> text;
+    callback clicked;
+
+    height: 30px;
+    border-radius: 4px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    Text {
+        x: 8px;
+        width: parent.width - 16px;
+        height: parent.height;
+        text: root.text;
+        vertical-alignment: center;
+        overflow: elide;
+        accessible-role: none;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
 
 // Picks the list of one task. The popup carries the ids; 0 means "no list".
 export component ListButton inherits HorizontalLayout {
@@ -11,55 +43,41 @@ export component ListButton inherits HorizontalLayout {
     callback picked(int);
 
     popup := PopupWindow {
-        x: 0px;
-        y: parent.height;
-        width: 180px;
+        // Right-aligned to the button: rows put it near the window's right edge.
+        x: parent.width - self.width;
+        y: parent.height + 2px;
+        width: 200px;
         Rectangle {
             background: Palette.background;
             border-width: 1px;
-            border-color: Palette.foreground.with-alpha(0.25);
+            border-color: Palette.foreground.with-alpha(0.14);
             border-radius: 6px;
             VerticalLayout {
                 padding: 4px;
-                Rectangle {
-                    height: 30px;
-                    background: none-touch.has-hover ? Palette.foreground.with-alpha(0.1) : transparent;
-                    Text {
-                        x: 8px;
-                        text: @tr("No list");
-                        vertical-alignment: center;
-                    }
-
-                    none-touch := TouchArea {
-                        clicked => {
-                            root.picked(0);
-                        }
+                spacing: 1px;
+                MenuItem {
+                    text: @tr("No list");
+                    clicked => {
+                        root.picked(0);
                     }
                 }
 
-                for entry in root.lists: Rectangle {
-                    height: 30px;
-                    background: touch.has-hover ? Palette.foreground.with-alpha(0.1) : transparent;
-                    Text {
-                        x: 8px;
-                        text: entry.name;
-                        vertical-alignment: center;
-                    }
-
-                    touch := TouchArea {
-                        clicked => {
-                            root.picked(entry.id);
-                        }
+                for entry in root.lists: MenuItem {
+                    text: entry.name;
+                    clicked => {
+                        root.picked(entry.id);
                     }
                 }
             }
         }
     }
 
-    Button {
-        text: root.name == "" ? @tr("No list") : root.name;
+    // Without a list only the icon shows, so unassigned rows stay quiet.
+    SubtleButton {
+        text: root.name;
+        label: root.name == "" ? @tr("No list") : root.name;
         icon: @image-url("../icons/list.svg");
-        colorize-icon: true;
+        max-width: 180px;
         clicked => {
             popup.show();
         }

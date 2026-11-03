@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JajoScript
 
 import { Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
 
 export component NavEntry inherits Rectangle {
     in property <image> icon;
@@ -12,18 +13,28 @@ export component NavEntry inherits Rectangle {
 
     height: 36px;
     border-radius: 6px;
-    background: root.selected ? Palette.accent-background.with-alpha(0.2) : touch.has-hover ? Palette.foreground.with-alpha(0.08) : transparent;
+    background: root.selected ? Theme.selected : touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    forward-focus: focus;
+    accessible-role: list-item;
+    accessible-label: root.text;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.selected;
+    accessible-action-default => {
+        root.clicked();
+    }
 
     HorizontalLayout {
         padding-left: 10px;
         padding-right: 10px;
-        spacing: 8px;
+        spacing: 10px;
         Image {
             source: root.icon;
-            colorize: Palette.foreground;
+            colorize: root.selected ? Palette.foreground : Theme.muted;
             width: 18px;
             height: 18px;
             y: (parent.height - self.height) / 2;
+            accessible-role: none;
         }
 
         Text {
@@ -31,12 +42,15 @@ export component NavEntry inherits Rectangle {
             vertical-alignment: center;
             overflow: elide;
             horizontal-stretch: 1;
+            accessible-role: none;
         }
 
-        Text {
+        // An empty count is noise, not information.
+        if root.count > 0: Text {
             text: root.count;
             vertical-alignment: center;
-            color: Palette.foreground.with-alpha(0.55);
+            color: Theme.muted;
+            accessible-role: none;
         }
     }
 
@@ -44,5 +58,22 @@ export component NavEntry inherits Rectangle {
         clicked => {
             root.clicked();
         }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
     }
 }

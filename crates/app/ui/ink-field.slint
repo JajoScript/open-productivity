@@ -1,0 +1,58 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// Single-line text field in the monochrome system: hairline at rest, ink outline when focused.
+export component InkField {
+    in-out property <string> text <=> input.text;
+    in property <string> placeholder-text;
+    callback accepted(string);
+
+    min-height: 36px;
+    horizontal-stretch: 1;
+    forward-focus: input;
+
+    frame := Rectangle {
+        border-radius: 6px;
+        background: input.has-focus ? Palette.background : touch.has-hover ? Theme.hover : Theme.field;
+        border-width: 1px;
+        border-color: input.has-focus ? Theme.ink : Theme.hairline;
+        animate background, border-color { duration: Theme.fast; easing: Theme.ease-out; }
+    }
+
+    // Below the input: only shows the hover wash and the text cursor over the padding.
+    touch := TouchArea {
+        mouse-cursor: MouseCursor.text;
+        clicked => {
+            input.focus();
+        }
+    }
+
+    if root.text == "": Text {
+        x: 12px;
+        width: root.width - 24px;
+        height: root.height;
+        text: root.placeholder-text;
+        color: Theme.muted;
+        vertical-alignment: center;
+        overflow: elide;
+        accessible-role: none;
+    }
+
+    input := TextInput {
+        x: 12px;
+        width: root.width - 24px;
+        height: root.height;
+        vertical-alignment: center;
+        single-line: true;
+        color: Palette.foreground;
+        selection-background-color: Theme.selection;
+        selection-foreground-color: Palette.foreground;
+        accessible-label: root.placeholder-text;
+        accepted => {
+            root.accepted(self.text);
+        }
+    }
+}

@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// Fluent "subtle" button: no fill at rest, so rows of them stay quiet.
+export component SubtleButton {
+    in property <image> icon;
+    in property <string> text;
+    in property <brush> color: Theme.muted;
+    // Required when there is no text, so screen readers can name the button.
+    in property <string> label: root.text;
+    callback clicked;
+
+    min-width: 28px;
+    min-height: 28px;
+    horizontal-stretch: 0;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    // Fixed 28px plate, centered in whatever height the parent layout gives the button.
+    plate := Rectangle {
+        height: 28px;
+        y: (root.height - self.height) / 2;
+        border-radius: 4px;
+        background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+        animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    }
+
+    HorizontalLayout {
+        padding-left: root.text == "" ? 6px : 8px;
+        padding-right: root.text == "" ? 6px : 10px;
+        spacing: 6px;
+        alignment: center;
+        if root.icon.width > 0: Image {
+            source: root.icon;
+            colorize: root.color;
+            width: 16px;
+            height: 16px;
+            y: (parent.height - self.height) / 2;
+            accessible-role: none;
+        }
+
+        if root.text != "": Text {
+            text: root.text;
+            color: root.color;
+            vertical-alignment: center;
+            overflow: elide;
+            accessible-role: none;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        height: plate.height;
+        y: plate.y;
+        border-radius: 5px;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
