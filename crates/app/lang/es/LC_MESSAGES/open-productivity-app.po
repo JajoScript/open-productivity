@@ -68,3 +68,36 @@ msgstr "No hay nada para hoy."
 
 msgid "{1}/{0}/{2}"
 msgstr "{0}/{1}/{2}"
+
+msgid "Could not save the list: {}"
+msgstr "No se pudo guardar la lista: {}"
+
+msgid "A list with that name already exists."
+msgstr "Ya existe una lista con ese nombre."
+
+msgid "Lists"
+msgstr "Listas"
+
+msgid "New list"
+msgstr "Nueva lista"
+
+msgid "List name"
+msgstr "Nombre de la lista"
+
+msgid "No list"
+msgstr "Sin lista"
+
+msgid "Delete list"
+msgstr "Eliminar lista"
+
+msgid "Delete the list \"{}\"? Its tasks will be kept without a list."
+msgstr "¿Eliminar la lista \"{}\"? Sus tareas se conservarán sin lista."
+
+msgid "Delete"
+msgstr "Eliminar"
+
+msgid "Cancel"
+msgstr "Cancelar"
+
+msgid "This list is empty."
+msgstr "Esta lista está vacía."

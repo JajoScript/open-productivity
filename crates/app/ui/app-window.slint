@@ -1,51 +1,53 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Date, Palette } from "std-widgets.slint";
+import { Date } from "std-widgets.slint";
 import { Strings } from "strings.slint";
-import { NavEntry } from "nav-entry.slint";
+import { ListEntry } from "list-entry.slint";
+import { Sidebar } from "sidebar.slint";
 import { DueKind, TaskRow, TaskView, TasksView } from "tasks/tasks-view.slint";
-export { Date, DueKind, Strings, TaskRow, TaskView }
+export { Date, DueKind, ListEntry, Strings, TaskRow, TaskView }
 
 export component AppWindow inherits Window {
     in property <string> instance-name;
     in property <[TaskRow]> tasks;
     in property <string> tasks-error;
     in property <TaskView> current-view;
+    in property <int> current-list-id;
+    in property <string> current-list-name;
+    in property <int> today-count;
+    in property <int> all-count;
+    in property <[ListEntry]> lists;
     callback select-view(TaskView);
     callback create-task(string);
     callback set-done(int, bool);
     callback set-due(int, Date);
     callback clear-due(int);
+    callback select-list(int);
+    callback create-list(string);
+    callback delete-list(int);
+    callback set-list(int, int);
 
     title: "Open Productivity — " + instance-name;
     preferred-width: 960px;
     preferred-height: 640px;
 
     HorizontalLayout {
-        Rectangle {
-            width: 200px;
-            background: Palette.alternate-background;
-            VerticalLayout {
-                padding: 8px;
-                alignment: start;
-                NavEntry {
-                    icon: @image-url("icons/sun.svg");
-                    text: @tr("Today");
-                    selected: root.current-view == TaskView.today;
-                    clicked => {
-                        root.select-view(TaskView.today);
-                    }
-                }
-
-                NavEntry {
-                    icon: @image-url("icons/list-todo.svg");
-                    text: @tr("Tasks");
-                    selected: root.current-view == TaskView.all;
-                    clicked => {
-                        root.select-view(TaskView.all);
-                    }
-                }
+        Sidebar {
+            width: 220px;
+            current-view: root.current-view;
+            current-list-id: root.current-list-id;
+            today-count: root.today-count;
+            all-count: root.all-count;
+            lists: root.lists;
+            select-view(v) => {
+                root.select-view(v);
+            }
+            select-list(id) => {
+                root.select-list(id);
+            }
+            create-list(name) => {
+                root.create-list(name);
             }
         }
 
@@ -53,6 +55,9 @@ export component AppWindow inherits Window {
             view: root.current-view;
             tasks: root.tasks;
             error: root.tasks-error;
+            list-id: root.current-list-id;
+            list-name: root.current-list-name;
+            lists: root.lists;
             create-task(title) => {
                 root.create-task(title);
             }
@@ -64,6 +69,12 @@ export component AppWindow inherits Window {
             }
             clear-due(id) => {
                 root.clear-due(id);
+            }
+            set-list(id, list-id) => {
+                root.set-list(id, list-id);
+            }
+            delete-list(id) => {
+                root.delete-list(id);
             }
         }
     }

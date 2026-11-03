@@ -6,6 +6,7 @@ import { Palette } from "std-widgets.slint";
 export component NavEntry inherits Rectangle {
     in property <image> icon;
     in property <string> text;
+    in property <int> count;
     in property <bool> selected;
     callback clicked;
 
@@ -15,8 +16,8 @@ export component NavEntry inherits Rectangle {
 
     HorizontalLayout {
         padding-left: 10px;
+        padding-right: 10px;
         spacing: 8px;
-        alignment: start;
         Image {
             source: root.icon;
             colorize: Palette.foreground;
@@ -28,6 +29,14 @@ export component NavEntry inherits Rectangle {
         Text {
             text: root.text;
             vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+
+        Text {
+            text: root.count;
+            vertical-alignment: center;
+            color: Palette.foreground.with-alpha(0.55);
         }
     }
 

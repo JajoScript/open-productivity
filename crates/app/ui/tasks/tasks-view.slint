@@ -2,10 +2,12 @@
 // Copyright (C) 2026 JajoScript
 
 import { Button, CheckBox, Date, LineEdit, ListView, Palette } from "std-widgets.slint";
+import { ListEntry } from "../list-entry.slint";
 import { DueButton, DueKind } from "due-button.slint";
+import { ListButton } from "list-button.slint";
 export { DueKind }
 
-export enum TaskView { today, all }
+export enum TaskView { today, all, list }
 
 export struct TaskRow {
     id: int,
@@ -15,24 +17,84 @@ export struct TaskRow {
     due-day: int,
     due-month: int,
     due-year: int,
+    list-name: string,
 }
 
 export component TasksView inherits VerticalLayout {
     in property <TaskView> view;
     in property <[TaskRow]> tasks;
     in property <string> error;
+    in property <int> list-id;
+    in property <string> list-name;
+    in property <[ListEntry]> lists;
     callback create-task(string);
     callback set-done(int, bool);
     callback set-due(int, Date);
     callback clear-due(int);
+    callback set-list(int, int);
+    callback delete-list(int);
 
     padding: 16px;
     spacing: 12px;
 
-    Text {
-        text: root.view == TaskView.today ? @tr("Today") : @tr("Tasks");
-        font-size: 24px;
-        font-weight: 700;
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            text: root.view == TaskView.today ? @tr("Today") : root.view == TaskView.all ? @tr("Tasks") : root.list-name;
+            font-size: 24px;
+            font-weight: 700;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+
+        if root.view == TaskView.list: Button {
+            icon: @image-url("../icons/trash-2.svg");
+            colorize-icon: true;
+            accessible-label: @tr("Delete list");
+            clicked => {
+                confirm.show();
+            }
+        }
+    }
+
+    confirm := PopupWindow {
+        x: root.width - 380px;
+        y: 56px;
+        width: 360px;
+        Rectangle {
+            background: Palette.background;
+            border-width: 1px;
+            border-color: Palette.foreground.with-alpha(0.25);
+            border-radius: 6px;
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: @tr("Delete the list \"{}\"? Its tasks will be kept without a list.", root.list-name);
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    Button {
+                        text: @tr("Cancel");
+                        clicked => {
+                            confirm.close();
+                        }
+                    }
+
+                    Button {
+                        text: @tr("Delete");
+                        primary: true;
+                        clicked => {
+                            confirm.close();
+                            root.delete-list(root.list-id);
+                        }
+                    }
+                }
+            }
+        }
     }
 
     HorizontalLayout {
@@ -61,12 +123,14 @@ export component TasksView inherits VerticalLayout {
     }
 
     if root.tasks.length == 0: Text {
-        text: root.view == TaskView.today ? @tr("Nothing due today.") : @tr("No tasks yet. Add your first one above.");
+        text: root.view == TaskView.today ? @tr("Nothing due today.") : root.view == TaskView.all ? @tr("No tasks yet. Add your first one above.") : @tr("This list is empty.");
         color: Palette.foreground.with-alpha(0.6);
     }
 
     ListView {
         for row in root.tasks: HorizontalLayout {
+            padding-top: 3px;
+            padding-bottom: 3px;
             spacing: 8px;
             CheckBox {
                 checked: row.done;
@@ -81,6 +145,14 @@ export component TasksView inherits VerticalLayout {
                 vertical-alignment: center;
                 overflow: elide;
                 color: row.done ? Palette.foreground.with-alpha(0.5) : Palette.foreground;
+            }
+
+            ListButton {
+                name: row.list-name;
+                lists: root.lists;
+                picked(list-id) => {
+                    root.set-list(row.id, list-id);
+                }
             }
 
             DueButton {

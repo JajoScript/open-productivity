@@ -12,25 +12,26 @@ use open_productivity_core::db::Connection;
 use open_productivity_core::tasks::{self, DueLabel, TaskError, TaskId, View};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
-use crate::{AppWindow, Date, DueKind, Strings, TaskRow, TaskView};
+use crate::{AppWindow, Date, DueKind, ListEntry, Strings, TaskRow, TaskView, lists};
 
-struct State {
-    conn: Connection,
+pub struct State {
+    pub conn: Connection,
     rows: Rc<VecModel<TaskRow>>,
-    view: Cell<View>,
+    pub sidebar: Rc<VecModel<ListEntry>>,
+    pub view: Cell<View>,
+    pub window: slint::Weak<AppWindow>,
 }
 
-fn core_view(v: TaskView) -> View {
-    match v {
-        TaskView::Today => View::Today,
-        TaskView::All => View::All,
-    }
+/// Slint ints are i32; a larger id is an error, not a panic.
+pub fn ui_id(id: i64) -> Result<i32, String> {
+    i32::try_from(id).map_err(|e| e.to_string())
 }
 
-fn ui_view(v: View) -> TaskView {
+pub fn ui_view(v: View) -> TaskView {
     match v {
         View::Today => TaskView::Today,
         View::All => TaskView::All,
+        View::List(_) => TaskView::List,
     }
 }
 
@@ -45,13 +46,13 @@ fn ui_kind(l: Option<DueLabel>) -> DueKind {
 }
 
 impl State {
-    fn reload(&self) -> Result<(), String> {
+    /// Rows of the active view plus the sidebar.
+    pub fn reload(&self) -> Result<(), String> {
         let now = Local::now().fixed_offset();
         let list = tasks::list(&self.conn, self.view.get(), now).map_err(|e| e.to_string())?;
         let mut out = Vec::with_capacity(list.len());
         for t in list {
-            // Slint ints are i32; a larger id is an error, not a panic.
-            let id = i32::try_from(t.id.0).map_err(|e| e.to_string())?;
+            let id = ui_id(t.id.0)?;
             let kind = ui_kind(tasks::due_label(&t, now.date_naive()));
             // The date parts are always the stored due date (0 when none).
             let (day, month, year) = t
@@ -65,10 +66,11 @@ impl State {
                 due_day: day,
                 due_month: month,
                 due_year: year,
+                list_name: t.list.map(|(_, name)| name).unwrap_or_default().into(),
             });
         }
         self.rows.set_vec(out);
-        Ok(())
+        self.reload_sidebar()
     }
 }
 
@@ -77,10 +79,12 @@ pub fn init(window: &AppWindow, conn: Connection) -> Timer {
     let state = Rc::new(State {
         conn,
         rows: Rc::default(),
+        sidebar: Rc::default(),
         view: Cell::new(View::Today),
+        window: window.as_weak(),
     });
-    window.set_current_view(ui_view(state.view.get()));
     window.set_tasks(ModelRc::from(state.rows.clone()));
+    window.set_lists(ModelRc::from(state.sidebar.clone()));
 
     // Shows the outcome in the view; an empty title is silently ignored.
     let finish = Rc::new({
@@ -99,13 +103,12 @@ pub fn init(window: &AppWindow, conn: Connection) -> Timer {
     finish(state.reload());
 
     window.on_select_view({
-        let (state, finish, weak) = (state.clone(), finish.clone(), window.as_weak());
-        move |v| {
-            state.view.set(core_view(v));
-            if let Some(w) = weak.upgrade() {
-                w.set_current_view(v);
-            }
-            finish(state.reload());
+        let (state, finish) = (state.clone(), finish.clone());
+        move |v| match v {
+            TaskView::Today => lists::show_view(&state, View::Today, &*finish),
+            TaskView::All => lists::show_view(&state, View::All, &*finish),
+            // A list is selected by its id with select-list.
+            TaskView::List => {}
         }
     });
 
@@ -151,9 +154,22 @@ pub fn init(window: &AppWindow, conn: Connection) -> Timer {
     });
 
     window.on_clear_due({
-        let state = state.clone();
+        let (state, after) = (state.clone(), after.clone());
         move |id| after(tasks::set_due_date(&state.conn, TaskId(id.into()), None))
     });
+
+    window.on_set_list({
+        let (state, after) = (state.clone(), after.clone());
+        move |id, list| {
+            after(tasks::set_list(
+                &state.conn,
+                TaskId(id.into()),
+                lists::list_arg(list),
+            ))
+        }
+    });
+
+    lists::init(window, &state, &finish);
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_secs(60), move || {

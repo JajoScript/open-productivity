@@ -13,6 +13,7 @@ use open_productivity_core::db::{self, DbError};
 use open_productivity_core::instances::{self, Error};
 use rfd::{FileDialog, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 
+mod lists;
 mod tasks;
 
 slint::include_modules!();

@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Button, Palette } from "std-widgets.slint";
+import { ListEntry } from "../list-entry.slint";
+
+// Picks the list of one task. The popup carries the ids; 0 means "no list".
+export component ListButton inherits HorizontalLayout {
+    in property <string> name;
+    in property <[ListEntry]> lists;
+    callback picked(int);
+
+    popup := PopupWindow {
+        x: 0px;
+        y: parent.height;
+        width: 180px;
+        Rectangle {
+            background: Palette.background;
+            border-width: 1px;
+            border-color: Palette.foreground.with-alpha(0.25);
+            border-radius: 6px;
+            VerticalLayout {
+                padding: 4px;
+                Rectangle {
+                    height: 30px;
+                    background: none-touch.has-hover ? Palette.foreground.with-alpha(0.1) : transparent;
+                    Text {
+                        x: 8px;
+                        text: @tr("No list");
+                        vertical-alignment: center;
+                    }
+
+                    none-touch := TouchArea {
+                        clicked => {
+                            root.picked(0);
+                        }
+                    }
+                }
+
+                for entry in root.lists: Rectangle {
+                    height: 30px;
+                    background: touch.has-hover ? Palette.foreground.with-alpha(0.1) : transparent;
+                    Text {
+                        x: 8px;
+                        text: entry.name;
+                        vertical-alignment: center;
+                    }
+
+                    touch := TouchArea {
+                        clicked => {
+                            root.picked(entry.id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Button {
+        text: root.name == "" ? @tr("No list") : root.name;
+        icon: @image-url("../icons/list.svg");
+        colorize-icon: true;
+        clicked => {
+            popup.show();
+        }
+    }
+}

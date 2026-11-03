@@ -1,0 +1,112 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { LineEdit, ListView, Palette } from "std-widgets.slint";
+import { ListEntry } from "list-entry.slint";
+import { NavEntry } from "nav-entry.slint";
+import { TaskView } from "tasks/tasks-view.slint";
+
+export component Sidebar inherits Rectangle {
+    in property <TaskView> current-view;
+    in property <int> current-list-id;
+    in property <int> today-count;
+    in property <int> all-count;
+    in property <[ListEntry]> lists;
+    callback select-view(TaskView);
+    callback select-list(int);
+    callback create-list(string);
+
+    property <bool> adding;
+
+    background: Palette.alternate-background;
+
+    VerticalLayout {
+        padding: 8px;
+        spacing: 2px;
+        NavEntry {
+            icon: @image-url("icons/sun.svg");
+            text: @tr("Today");
+            count: root.today-count;
+            selected: root.current-view == TaskView.today;
+            clicked => {
+                root.select-view(TaskView.today);
+            }
+        }
+
+        NavEntry {
+            icon: @image-url("icons/list-todo.svg");
+            text: @tr("Tasks");
+            count: root.all-count;
+            selected: root.current-view == TaskView.all;
+            clicked => {
+                root.select-view(TaskView.all);
+            }
+        }
+
+        HorizontalLayout {
+            padding-left: 10px;
+            padding-top: 8px;
+            Text {
+                text: @tr("Lists");
+                font-weight: 700;
+                color: Palette.foreground.with-alpha(0.7);
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+            }
+
+            Rectangle {
+                width: 28px;
+                height: 28px;
+                border-radius: 6px;
+                background: add-touch.has-hover ? Palette.foreground.with-alpha(0.08) : transparent;
+                accessible-role: button;
+                accessible-label: @tr("New list");
+                Image {
+                    source: @image-url("icons/plus.svg");
+                    colorize: Palette.foreground;
+                    width: 16px;
+                    height: 16px;
+                }
+
+                add-touch := TouchArea {
+                    clicked => {
+                        root.adding = true;
+                    }
+                }
+            }
+        }
+
+        if root.adding: FocusScope {
+            height: name-input.preferred-height;
+            key-pressed(event) => {
+                if event.text == Key.Escape {
+                    root.adding = false;
+                    return accept;
+                }
+                reject
+            }
+            name-input := LineEdit {
+                placeholder-text: @tr("List name");
+                init => {
+                    self.focus();
+                }
+                accepted => {
+                    root.create-list(self.text);
+                    root.adding = false;
+                }
+            }
+        }
+
+        ListView {
+            for entry in root.lists: NavEntry {
+                icon: @image-url("icons/list.svg");
+                text: entry.name;
+                count: entry.count;
+                selected: root.current-view == TaskView.list && root.current-list-id == entry.id;
+                clicked => {
+                    root.select-list(entry.id);
+                }
+            }
+        }
+    }
+}
