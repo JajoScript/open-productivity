@@ -4,3 +4,4 @@
 //! Domain logic and storage, independent of the UI.
 
 pub mod db;
+pub mod instances;
