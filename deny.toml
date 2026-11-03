@@ -13,5 +13,10 @@ allow = [
     "Zlib",
 ]
 
+# MPL-2.0 is GPLv3-compatible (via dirs); allowed per crate, not globally.
+exceptions = [
+    { crate = "option-ext", allow = ["MPL-2.0"] },
+]
+
 [advisories]
 unmaintained = "workspace"

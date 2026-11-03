@@ -2,7 +2,8 @@
 // Copyright (C) 2026 JajoScript
 
 export component AppWindow inherits Window {
-    title: "Open Productivity";
+    in property <string> instance-name;
+    title: "Open Productivity — " + instance-name;
     preferred-width: 960px;
     preferred-height: 640px;
 }
