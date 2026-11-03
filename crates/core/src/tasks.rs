@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-//! Tasks: create, list, mark as done and due dates.
+//! Tasks: create, list, mark as done, due dates and lists.
 
 use std::fmt;
 
 use chrono::{DateTime, Days, FixedOffset, NaiveDate, NaiveTime, SecondsFormat, Utc};
-use rusqlite::Connection;
+use rusqlite::{Connection, ffi};
+
+use crate::lists::ListId;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TaskId(pub i64);
@@ -17,12 +19,32 @@ pub struct Task {
     pub title: String,
     pub done: bool,
     pub due: Option<NaiveDate>,
+    /// The list id and its name.
+    pub list: Option<(ListId, String)>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum View {
     Today,
     All,
+    List(ListId),
+}
+
+/// Pending (not done) tasks per view. Lists without pending tasks are absent from `per_list`.
+#[derive(Debug, Default, PartialEq)]
+pub struct Counts {
+    pub today: u32,
+    pub all: u32,
+    pub per_list: Vec<(ListId, u32)>,
+}
+
+impl Counts {
+    pub fn for_list(&self, id: ListId) -> u32 {
+        self.per_list
+            .iter()
+            .find(|(l, _)| *l == id)
+            .map_or(0, |(_, n)| *n)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -38,6 +60,7 @@ pub enum TaskError {
     EmptyTitle,
     NotFound,
     BadDate(String),
+    ListNotFound,
     Sqlite(rusqlite::Error),
 }
 
@@ -47,6 +70,7 @@ impl fmt::Display for TaskError {
             TaskError::EmptyTitle => write!(f, "the title is empty"),
             TaskError::NotFound => write!(f, "task not found"),
             TaskError::BadDate(d) => write!(f, "invalid stored date: {d}"),
+            TaskError::ListNotFound => write!(f, "list not found"),
             TaskError::Sqlite(e) => write!(f, "database error: {e}"),
         }
     }
@@ -63,7 +87,15 @@ impl std::error::Error for TaskError {
 
 impl From<rusqlite::Error> for TaskError {
     fn from(e: rusqlite::Error) -> Self {
-        TaskError::Sqlite(e)
+        match e {
+            // The only foreign key a task has is its list.
+            rusqlite::Error::SqliteFailure(f, _)
+                if f.extended_code == ffi::SQLITE_CONSTRAINT_FOREIGNKEY =>
+            {
+                TaskError::ListNotFound
+            }
+            e => TaskError::Sqlite(e),
+        }
     }
 }
 
@@ -78,9 +110,13 @@ pub fn create(
         return Err(TaskError::EmptyTitle);
     }
     let due = (view == View::Today).then_some(today);
+    let list = match view {
+        View::List(id) => Some(id.0),
+        _ => None,
+    };
     conn.execute(
-        "INSERT INTO task (title, due_date) VALUES (?1, ?2)",
-        (title, due.map(|d| d.to_string())),
+        "INSERT INTO task (title, due_date, list_id) VALUES (?1, ?2, ?3)",
+        (title, due.map(|d| d.to_string()), list),
     )?;
     Ok(TaskId(conn.last_insert_rowid()))
 }
@@ -104,31 +140,42 @@ pub fn list(
         .ok_or_else(|| TaskError::BadDate(today.to_string()))?
         .with_timezone(&Utc)
         .to_rfc3339_opts(SecondsFormat::Millis, true);
-    let sql = match view {
-        View::All => {
-            "SELECT id, title, done_at IS NOT NULL, due_date FROM task              ORDER BY done_at IS NOT NULL, done_at DESC, created_at, id"
-        }
-        View::Today => {
-            "SELECT id, title, done_at IS NOT NULL, due_date FROM task              WHERE due_date <= ?1 AND (done_at IS NULL OR done_at >= ?2)              ORDER BY done_at IS NOT NULL, done_at DESC, due_date, created_at, id"
-        }
-    };
-    let mut stmt = conn.prepare(sql)?;
+    const SELECT: &str = "SELECT t.id, t.title, t.done_at IS NOT NULL, t.due_date, t.list_id, l.name \
+         FROM task t LEFT JOIN list l ON l.id = t.list_id";
+    const ALL_ORDER: &str = "ORDER BY t.done_at IS NOT NULL, t.done_at DESC, t.created_at, t.id";
     let map = |r: &rusqlite::Row| {
+        let list = match (r.get::<_, Option<i64>>(4)?, r.get::<_, Option<String>>(5)?) {
+            (Some(id), Some(name)) => Some((ListId(id), name)),
+            _ => None,
+        };
         Ok((
             Task {
                 id: TaskId(r.get(0)?),
                 title: r.get(1)?,
                 done: r.get(2)?,
                 due: None,
+                list,
             },
             r.get::<_, Option<String>>(3)?,
         ))
     };
     let rows = match view {
-        View::All => stmt.query_map([], map)?,
-        View::Today => stmt.query_map((today.to_string(), midnight), map)?,
-    }
-    .collect::<Result<Vec<_>, _>>()?;
+        View::All => conn
+            .prepare(&format!("{SELECT} {ALL_ORDER}"))?
+            .query_map([], map)?
+            .collect::<Result<Vec<_>, _>>()?,
+        View::List(id) => conn
+            .prepare(&format!("{SELECT} WHERE t.list_id = ?1 {ALL_ORDER}"))?
+            .query_map([id.0], map)?
+            .collect::<Result<Vec<_>, _>>()?,
+        View::Today => conn
+            .prepare(&format!(
+                "{SELECT} WHERE t.due_date <= ?1 AND (t.done_at IS NULL OR t.done_at >= ?2) \
+                 ORDER BY t.done_at IS NOT NULL, t.done_at DESC, t.due_date, t.created_at, t.id"
+            ))?
+            .query_map((today.to_string(), midnight), map)?
+            .collect::<Result<Vec<_>, _>>()?,
+    };
     rows.into_iter()
         .map(|(mut t, due)| {
             t.due = due
@@ -167,6 +214,38 @@ pub fn set_due_date(
     }
 }
 
+/// `None` removes the task from its list. An unknown list is `ListNotFound`.
+pub fn set_list(conn: &Connection, id: TaskId, list: Option<ListId>) -> Result<(), TaskError> {
+    match conn.execute(
+        "UPDATE task SET list_id = ?1 WHERE id = ?2",
+        (list.map(|l| l.0), id.0),
+    )? {
+        0 => Err(TaskError::NotFound),
+        _ => Ok(()),
+    }
+}
+
+/// Pending counts for the sidebar; Today uses the same rule as `View::Today`.
+pub fn counts(conn: &Connection, now: DateTime<FixedOffset>) -> Result<Counts, TaskError> {
+    let (today, all) = conn.query_row(
+        "SELECT count(due_date <= ?1 OR NULL), count(*) FROM task WHERE done_at IS NULL",
+        [now.date_naive().to_string()],
+        |r| Ok((r.get(0)?, r.get(1)?)),
+    )?;
+    let per_list = conn
+        .prepare(
+            "SELECT list_id, count(*) FROM task \
+             WHERE done_at IS NULL AND list_id IS NOT NULL GROUP BY list_id",
+        )?
+        .query_map([], |r| Ok((ListId(r.get(0)?), r.get(1)?)))?
+        .collect::<Result<_, _>>()?;
+    Ok(Counts {
+        today,
+        all,
+        per_list,
+    })
+}
+
 pub fn due_label(task: &Task, today: NaiveDate) -> Option<DueLabel> {
     let due = task.due?;
     Some(if due == today {
@@ -183,7 +262,7 @@ pub fn due_label(task: &Task, today: NaiveDate) -> Option<DueLabel> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::db;
+    use crate::{db, lists};
 
     fn setup(name: &str) -> (std::path::PathBuf, Connection) {
         let dir = std::env::temp_dir().join(format!("op-tasks-{}-{name}", std::process::id()));
@@ -225,6 +304,7 @@ mod tests {
             title: String::new(),
             done,
             due: due.map(d),
+            list: None,
         }
     }
 
@@ -425,6 +505,112 @@ mod tests {
             conn.execute("UPDATE task SET due_date = '2026-13-40'", [])
                 .is_err()
         );
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn list_of(conn: &Connection, id: TaskId) -> Option<(ListId, String)> {
+        ls(conn).into_iter().find(|t| t.id == id).unwrap().list
+    }
+
+    #[test]
+    fn create_in_list_view_assigns_the_list_without_due() {
+        let (dir, conn) = setup("create-list");
+        let work = lists::create(&conn, "Work").unwrap();
+        let id = create(&conn, "a", View::List(work), d("2026-06-15")).unwrap();
+        let t = ls(&conn).remove(0);
+        assert_eq!(t.id, id);
+        assert_eq!(t.due, None);
+        assert_eq!(t.list, Some((work, "Work".to_string())));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn create_in_unknown_list_fails_cleanly() {
+        let (dir, conn) = setup("create-bad-list");
+        let r = create(&conn, "a", View::List(ListId(42)), d("2026-06-15"));
+        assert!(matches!(r, Err(TaskError::ListNotFound)));
+        assert!(ls(&conn).is_empty());
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn list_view_shows_only_that_list_in_all_order() {
+        let (dir, conn) = setup("list-view");
+        let work = lists::create(&conn, "Work").unwrap();
+        let home = lists::create(&conn, "Home").unwrap();
+        for (title, list) in [
+            ("w1", Some(work)),
+            ("h1", Some(home)),
+            ("n1", None),
+            ("w2", Some(work)),
+        ] {
+            let id = mk(&conn, title).unwrap();
+            set_list(&conn, id, list).unwrap();
+        }
+        conn.execute(
+            "UPDATE task SET done_at = '2026-01-01T00:00:00Z' WHERE title = 'w1'",
+            [],
+        )
+        .unwrap();
+        let v = list(&conn, View::List(work), at(NOW)).unwrap();
+        let titles: Vec<_> = v.iter().map(|t| t.title.as_str()).collect();
+        assert_eq!(titles, ["w2", "w1"]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn set_list_moves_clears_and_reports_errors() {
+        let (dir, conn) = setup("set-list");
+        let work = lists::create(&conn, "Work").unwrap();
+        let id = mk(&conn, "a").unwrap();
+        assert_eq!(list_of(&conn, id), None);
+        set_list(&conn, id, Some(work)).unwrap();
+        assert_eq!(list_of(&conn, id), Some((work, "Work".to_string())));
+        set_list(&conn, id, None).unwrap();
+        assert_eq!(list_of(&conn, id), None);
+        assert!(matches!(
+            set_list(&conn, TaskId(42), Some(work)),
+            Err(TaskError::NotFound)
+        ));
+        assert!(matches!(
+            set_list(&conn, id, Some(ListId(42))),
+            Err(TaskError::ListNotFound)
+        ));
+        assert_eq!(list_of(&conn, id), None);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn counts_pending_per_view_and_list() {
+        let (dir, conn) = setup("counts");
+        let work = lists::create(&conn, "Work").unwrap();
+        let empty = lists::create(&conn, "Empty").unwrap();
+        // (list, due, done)
+        for (list, due, done) in [
+            (Some(work), Some("2026-06-15"), false),
+            (Some(work), Some("2026-06-10"), false),
+            (Some(work), Some("2026-06-15"), true),
+            (None, Some("2026-06-16"), false),
+            (None, None, false),
+            (None, Some("2026-06-15"), false),
+        ] {
+            let id = mk(&conn, "t").unwrap();
+            set_list(&conn, id, list).unwrap();
+            set_due_date(&conn, id, due.map(d)).unwrap();
+            if done {
+                set_done(&conn, id, true).unwrap();
+            }
+        }
+        let c = counts(&conn, at(NOW)).unwrap();
+        assert_eq!((c.today, c.all), (3, 5));
+        assert_eq!(c.for_list(work), 2);
+        assert_eq!(c.for_list(empty), 0);
+        assert_eq!(c.per_list, [(work, 2)]);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }
