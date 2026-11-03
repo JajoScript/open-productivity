@@ -1,7 +1,14 @@
 # IA
 .claude/
+.agents/
 AGENTS.md
 CLAUDE.md
+DESIGN.md
+PRODUCT.md
+
+# IA Skills
+.impeccable/
+skills-lock.json
 
 # Temporal files
 temp/
