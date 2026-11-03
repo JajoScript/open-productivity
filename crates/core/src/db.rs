@@ -45,6 +45,7 @@ impl From<rusqlite::Error> for DbError {
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_baseline.sql"),
     include_str!("../migrations/0002_tasks.sql"),
+    include_str!("../migrations/0003_task_due_date.sql"),
 ];
 
 pub fn open(path: &Path) -> Result<Connection, DbError> {
