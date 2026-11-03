@@ -9,6 +9,7 @@ import { DueKind, TaskRow, TaskView, TasksView } from "tasks/tasks-view.slint";
 export { Date, DueKind, ListEntry, Strings, TaskRow, TaskView }
 
 export component AppWindow inherits Window {
+    icon: @image-url("app-icons/icon_256x256.png");
     in property <string> instance-name;
     in property <[TaskRow]> tasks;
     in property <string> tasks-error;
