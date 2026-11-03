@@ -19,8 +19,8 @@ export component DueButton inherits HorizontalLayout {
     callback cleared;
 
     spacing: 0px;
-    // Fixed column, so the list buttons line up across rows whatever the date says.
-    width: 140px;
+    // Fixed column (132px label + 28px "x" slot), so dates and the "x" line up across rows.
+    width: 160px;
     alignment: start;
 
     // Right-aligned under the button: rows put it near the window's right edge.
@@ -36,6 +36,7 @@ export component DueButton inherits HorizontalLayout {
     }
 
     SubtleButton {
+        width: 132px;
         text: root.kind == DueKind.none ? @tr("Add date") : root.kind == DueKind.overdue ? @tr("Overdue") : root.kind == DueKind.today ? @tr("Today") : root.kind == DueKind.tomorrow ? @tr("Tomorrow") : Strings.date(root.day, root.month, root.year);
         icon: @image-url("../icons/calendar.svg");
         color: root.kind == DueKind.overdue ? Theme.critical : root.kind == DueKind.today ? Palette.foreground : Theme.muted;
@@ -44,11 +45,15 @@ export component DueButton inherits HorizontalLayout {
         }
     }
 
-    if root.kind != DueKind.none: SubtleButton {
-        icon: @image-url("../icons/x.svg");
-        label: @tr("Remove date");
-        clicked => {
-            root.cleared();
+    // The slot stays reserved without a date.
+    Rectangle {
+        width: 28px;
+        if root.kind != DueKind.none: SubtleButton {
+            icon: @image-url("../icons/x.svg");
+            label: @tr("Remove date");
+            clicked => {
+                root.cleared();
+            }
         }
     }
 }

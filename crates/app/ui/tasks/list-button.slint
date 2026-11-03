@@ -42,6 +42,10 @@ export component ListButton inherits HorizontalLayout {
     in property <[ListEntry]> lists;
     callback picked(int);
 
+    // Fixed column so the list labels line up across rows.
+    width: 120px;
+    alignment: start;
+
     popup := PopupWindow {
         // Right-aligned to the button: rows put it near the window's right edge.
         x: parent.width - self.width;
@@ -72,12 +76,10 @@ export component ListButton inherits HorizontalLayout {
         }
     }
 
-    // Without a list only the icon shows, so unassigned rows stay quiet.
     SubtleButton {
-        text: root.name;
-        label: root.name == "" ? @tr("No list") : root.name;
+        text: root.name == "" ? @tr("No list") : root.name;
         icon: @image-url("../icons/list.svg");
-        max-width: 180px;
+        color: root.name == "" ? Theme.muted : Palette.foreground;
         clicked => {
             popup.show();
         }

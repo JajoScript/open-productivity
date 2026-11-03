@@ -36,7 +36,8 @@ export component SubtleButton {
         padding-left: root.text == "" ? 6px : 8px;
         padding-right: root.text == "" ? 6px : 10px;
         spacing: 6px;
-        alignment: center;
+        // Start, so a button stretched to a column keeps its label at the left edge.
+        alignment: start;
         if root.icon.width > 0: Image {
             source: root.icon;
             colorize: root.color;
