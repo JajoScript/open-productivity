@@ -88,7 +88,11 @@ pub fn register(registry: &Path, dir: &Path) -> Result<(), Error> {
         std::fs::create_dir_all(parent)?;
     }
     let json = serde_json::to_string_pretty(&reg).expect("registry always serializes");
-    std::fs::write(registry, json)?;
+    // A crash mid-write would leave a truncated file that then gets replaced, losing the
+    // list; rename swaps it in one step on the same volume.
+    let tmp = registry.with_extension("json.tmp");
+    std::fs::write(&tmp, json)?;
+    std::fs::rename(tmp, registry)?;
     Ok(())
 }
 
@@ -126,6 +130,7 @@ mod tests {
         std::fs::create_dir_all(&a).unwrap();
         register(&reg, &a).unwrap();
         assert_eq!(resolve(&reg).unwrap(), a);
+        assert!(!reg.with_extension("json.tmp").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
