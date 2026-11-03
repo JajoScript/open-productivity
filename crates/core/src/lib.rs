@@ -2,3 +2,5 @@
 // Copyright (C) 2026 JajoScript
 
 //! Domain logic and storage, independent of the UI.
+
+pub mod db;
