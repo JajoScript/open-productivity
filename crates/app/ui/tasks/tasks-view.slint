@@ -1,25 +1,36 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Button, CheckBox, LineEdit, ListView, Palette } from "std-widgets.slint";
+import { Button, CheckBox, Date, LineEdit, ListView, Palette } from "std-widgets.slint";
+import { DueButton, DueKind } from "due-button.slint";
+export { DueKind }
+
+export enum TaskView { today, all }
 
 export struct TaskRow {
     id: int,
     title: string,
     done: bool,
+    due-kind: DueKind,
+    due-day: int,
+    due-month: int,
+    due-year: int,
 }
 
 export component TasksView inherits VerticalLayout {
+    in property <TaskView> view;
     in property <[TaskRow]> tasks;
     in property <string> error;
     callback create-task(string);
     callback set-done(int, bool);
+    callback set-due(int, Date);
+    callback clear-due(int);
 
     padding: 16px;
     spacing: 12px;
 
     Text {
-        text: @tr("Tasks");
+        text: root.view == TaskView.today ? @tr("Today") : @tr("Tasks");
         font-size: 24px;
         font-weight: 700;
     }
@@ -50,7 +61,7 @@ export component TasksView inherits VerticalLayout {
     }
 
     if root.tasks.length == 0: Text {
-        text: @tr("No tasks yet. Add your first one above.");
+        text: root.view == TaskView.today ? @tr("Nothing due today.") : @tr("No tasks yet. Add your first one above.");
         color: Palette.foreground.with-alpha(0.6);
     }
 
@@ -66,9 +77,23 @@ export component TasksView inherits VerticalLayout {
 
             Text {
                 text: row.title;
+                horizontal-stretch: 1;
                 vertical-alignment: center;
                 overflow: elide;
                 color: row.done ? Palette.foreground.with-alpha(0.5) : Palette.foreground;
+            }
+
+            DueButton {
+                kind: row.due-kind;
+                day: row.due-day;
+                month: row.due-month;
+                year: row.due-year;
+                picked(date) => {
+                    root.set-due(row.id, date);
+                }
+                cleared => {
+                    root.clear-due(row.id);
+                }
             }
         }
     }

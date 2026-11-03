@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Button, Date, DatePickerPopup } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+
+export enum DueKind { none, overdue, today, tomorrow, date }
+
+// The date parts are the stored due date and only matter when kind != none.
+export component DueButton inherits HorizontalLayout {
+    in property <DueKind> kind;
+    in property <int> day;
+    in property <int> month;
+    in property <int> year;
+    callback picked(Date);
+    callback cleared;
+
+    spacing: 4px;
+
+    // A popup's content is unreachable from outside, so two popups: the unset one keeps the
+    // widget's default date (today), the other starts at the task's date.
+    new-picker := DatePickerPopup {
+        accepted(date) => {
+            root.picked(date);
+        }
+    }
+
+    set-picker := DatePickerPopup {
+        date: { day: root.day, month: root.month, year: root.year };
+        accepted(date) => {
+            root.picked(date);
+        }
+    }
+
+    Button {
+        text: root.kind == DueKind.none ? @tr("Add date") : root.kind == DueKind.overdue ? @tr("Overdue") : root.kind == DueKind.today ? @tr("Today") : root.kind == DueKind.tomorrow ? @tr("Tomorrow") : Strings.date(root.day, root.month, root.year);
+        icon: root.kind == DueKind.none ? @image-url("../icons/calendar.svg") : @image-url("");
+        colorize-icon: true;
+        clicked => {
+            if root.kind == DueKind.none {
+                new-picker.show();
+            } else {
+                set-picker.show();
+            }
+        }
+    }
+
+    if root.kind != DueKind.none: Button {
+        icon: @image-url("../icons/x.svg");
+        colorize-icon: true;
+        accessible-label: @tr("Remove date");
+        clicked => {
+            root.cleared();
+        }
+    }
+}

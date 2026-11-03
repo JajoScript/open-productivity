@@ -7,7 +7,6 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
-use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use open_productivity_core::db::{self, DbError};
@@ -148,7 +147,7 @@ fn main() {
         Err(DbError::NewerSchema { .. }) => fatal(&app_dir, &s.get_newer_schema()),
         Err(e @ DbError::Sqlite(_)) => fatal(&app_dir, &s.invoke_db_failed(e.to_string().into())),
     };
-    tasks::init(&window, Rc::new(conn));
+    let _tasks_timer = tasks::init(&window, conn);
 
     let name = instance.file_name().map_or_else(
         || instance.display().to_string(),

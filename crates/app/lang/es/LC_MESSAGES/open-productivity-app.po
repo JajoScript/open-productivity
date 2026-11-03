@@ -47,3 +47,24 @@ msgstr "Añadir"
 
 msgid "No tasks yet. Add your first one above."
 msgstr "Aún no hay tareas. Añade la primera arriba."
+
+msgid "Today"
+msgstr "Hoy"
+
+msgid "Tomorrow"
+msgstr "Mañana"
+
+msgid "Overdue"
+msgstr "Vencida"
+
+msgid "Add date"
+msgstr "Añadir fecha"
+
+msgid "Remove date"
+msgstr "Quitar fecha"
+
+msgid "Nothing due today."
+msgstr "No hay nada para hoy."
+
+msgid "{1}/{0}/{2}"
+msgstr "{0}/{1}/{2}"

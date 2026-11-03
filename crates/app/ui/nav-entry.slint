@@ -1,0 +1,39 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+
+export component NavEntry inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <bool> selected;
+    callback clicked;
+
+    height: 36px;
+    border-radius: 6px;
+    background: root.selected ? Palette.accent-background.with-alpha(0.2) : touch.has-hover ? Palette.foreground.with-alpha(0.08) : transparent;
+
+    HorizontalLayout {
+        padding-left: 10px;
+        spacing: 8px;
+        alignment: start;
+        Image {
+            source: root.icon;
+            colorize: Palette.foreground;
+            width: 18px;
+            height: 18px;
+            y: (parent.height - self.height) / 2;
+        }
+
+        Text {
+            text: root.text;
+            vertical-alignment: center;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
