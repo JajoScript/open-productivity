@@ -19,19 +19,28 @@ export global Calendar {
     // The month `delta` months away from year/month (1-12).
     pure callback month(int, int, int) -> MonthView;
     pure callback today() -> Date;
+    // The date `days` away (negative goes back); the input date when out of range.
+    pure callback shift(Date, int) -> Date;
 }
 
 component DayCell inherits Rectangle {
     in property <int> day;
     in property <bool> selected;
     in property <bool> today;
+    // The keyboard cursor is on this day (and the grid has focus).
+    in property <bool> cursor;
+    in property <string> label;
     callback clicked;
 
     border-radius: 6px;
+    border-width: root.cursor ? 2px : 0px;
+    border-color: root.selected ? Theme.on-ink : Palette.foreground;
     background: root.selected ? Theme.ink : touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
     animate background { duration: Theme.fast; easing: Theme.ease-out; }
     accessible-role: button;
-    accessible-label: root.day;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.selected || root.cursor;
     accessible-action-default => {
         root.clicked();
     }
@@ -77,6 +86,23 @@ export component InkDatePopup inherits PopupWindow {
 
     close-policy: close-on-click-outside;
     width: 7 * root.cell-w + 24px;
+
+    // Keyboard cursor: starts on the task's date, else today.
+    property <Date> cursor: root.day > 0 ? { year: root.year, month: root.month, day: root.day } : Calendar.today();
+
+    // Moves the cursor and follows it when it leaves the month shown.
+    function move(days: int) {
+        root.cursor = Calendar.shift(root.cursor, days);
+        if root.cursor.month != root.view.month || root.cursor.year != root.view.year {
+            root.view = Calendar.month(root.cursor.year, root.cursor.month, 0);
+        }
+    }
+
+    // PageUp/PageDown: the cursor lands on day 1 of the other month (no day clamping needed).
+    function move-month(delta: int) {
+        root.view = Calendar.month(root.view.year, root.view.month, delta);
+        root.cursor = { year: root.view.year, month: root.view.month, day: 1 };
+    }
 
     function choose(date: Date) {
         root.close();
@@ -134,6 +160,35 @@ export component InkDatePopup inherits PopupWindow {
 
             Rectangle {
                 height: 6 * root.cell-h;
+                // One tab stop for the whole grid.
+                grid := FocusScope {
+                    init => {
+                        self.focus();
+                    }
+                    key-pressed(event) => {
+                        if event.text == Key.LeftArrow {
+                            root.move(-1);
+                        } else if event.text == Key.RightArrow {
+                            root.move(1);
+                        } else if event.text == Key.UpArrow {
+                            root.move(-7);
+                        } else if event.text == Key.DownArrow {
+                            root.move(7);
+                        } else if event.text == Key.PageUp {
+                            root.move-month(-1);
+                        } else if event.text == Key.PageDown {
+                            root.move-month(1);
+                        } else if event.text == Key.Return || event.text == Key.Space {
+                            root.choose(root.cursor);
+                        } else if event.text == Key.Escape {
+                            root.close();
+                        } else {
+                            return reject;
+                        }
+                        accept
+                    }
+                }
+
                 for d[i] in root.view.days: DayCell {
                     x: mod(i, 7) * root.cell-w;
                     y: floor(i / 7) * root.cell-h;
@@ -142,6 +197,8 @@ export component InkDatePopup inherits PopupWindow {
                     visible: d > 0;
                     day: d;
                     today: d == root.view.today;
+                    label: Strings.date(d, root.view.month, root.view.year);
+                    cursor: grid.has-focus && d == root.cursor.day && root.view.month == root.cursor.month && root.view.year == root.cursor.year;
                     selected: d == root.day && root.view.month == root.month && root.view.year == root.year;
                     clicked => {
                         root.choose({ year: root.view.year, month: root.view.month, day: d });

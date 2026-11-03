@@ -3,7 +3,7 @@
 
 //! Month grids for date pickers.
 
-use chrono::{Datelike, Months, NaiveDate};
+use chrono::{Datelike, Months, NaiveDate, TimeDelta};
 
 /// One month laid out in 6 weeks of 7 days, Monday first.
 #[derive(Debug, PartialEq, Eq)]
@@ -27,14 +27,27 @@ pub fn month_grid(year: i32, month: u32, delta: i32, today: NaiveDate) -> Option
     } else {
         base.checked_sub_months(step)?
     };
-    let len = first.checked_add_months(Months::new(1))?.signed_duration_since(first).num_days() as usize;
+    let len = first
+        .checked_add_months(Months::new(1))?
+        .signed_duration_since(first)
+        .num_days() as usize;
     let lead = first.weekday().num_days_from_monday() as usize;
     let mut cells = [None; 42];
     for (day, cell) in (1..).zip(&mut cells[lead..lead + len]) {
         *cell = Some(day);
     }
-    let today = (today.year() == first.year() && today.month() == first.month()).then(|| today.day());
-    Some(MonthGrid { first, cells, today })
+    let today =
+        (today.year() == first.year() && today.month() == first.month()).then(|| today.day());
+    Some(MonthGrid {
+        first,
+        cells,
+        today,
+    })
+}
+
+/// The date `days` away from `date` (negative goes back); `None` out of the supported range.
+pub fn shift(date: NaiveDate, days: i64) -> Option<NaiveDate> {
+    date.checked_add_signed(TimeDelta::try_days(days)?)
 }
 
 #[cfg(test)]
@@ -71,7 +84,10 @@ mod tests {
 
     #[test]
     fn leap_february_and_six_week_months_fit() {
-        assert_eq!(days(&month_grid(2028, 2, 0, d("2026-01-01")).unwrap()).len(), 29);
+        assert_eq!(
+            days(&month_grid(2028, 2, 0, d("2026-01-01")).unwrap()).len(),
+            29
+        );
         // 2026-08-01 is a Saturday: 5 blanks + 31 days needs the sixth week.
         let g = month_grid(2026, 8, 0, d("2026-01-01")).unwrap();
         assert_eq!(g.cells[35], Some(31));
@@ -80,14 +96,31 @@ mod tests {
     #[test]
     fn delta_crosses_years() {
         let today = d("2026-11-03");
-        assert_eq!(month_grid(2026, 12, 1, today).unwrap().first, d("2027-01-01"));
-        assert_eq!(month_grid(2026, 1, -1, today).unwrap().first, d("2025-12-01"));
-        assert_eq!(month_grid(2026, 11, -13, today).unwrap().first, d("2025-10-01"));
+        assert_eq!(
+            month_grid(2026, 12, 1, today).unwrap().first,
+            d("2027-01-01")
+        );
+        assert_eq!(
+            month_grid(2026, 1, -1, today).unwrap().first,
+            d("2025-12-01")
+        );
+        assert_eq!(
+            month_grid(2026, 11, -13, today).unwrap().first,
+            d("2025-10-01")
+        );
     }
 
     #[test]
     fn invalid_month_is_none() {
         assert_eq!(month_grid(2026, 0, 0, d("2026-11-03")), None);
         assert_eq!(month_grid(2026, 13, 0, d("2026-11-03")), None);
+    }
+
+    #[test]
+    fn shift_crosses_month_and_year_boundaries() {
+        assert_eq!(shift(d("2026-11-30"), 1), Some(d("2026-12-01")));
+        assert_eq!(shift(d("2026-12-28"), 7), Some(d("2027-01-04")));
+        assert_eq!(shift(d("2026-03-01"), -1), Some(d("2026-02-28")));
+        assert_eq!(shift(NaiveDate::MAX, 1), None);
     }
 }

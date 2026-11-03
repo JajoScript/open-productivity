@@ -4,7 +4,7 @@
 //! Glue between the date picker and `core::calendar`.
 
 use open_productivity_core::calendar;
-use open_productivity_core::chrono::{Datelike, Local};
+use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::{AppWindow, Calendar, Date, MonthView};
@@ -30,6 +30,19 @@ pub fn init(window: &AppWindow) {
     });
     cal.on_today(|| {
         let t = Local::now().date_naive();
-        Date { year: t.year(), month: t.month() as i32, day: t.day() as i32 }
+        Date {
+            year: t.year(),
+            month: t.month() as i32,
+            day: t.day() as i32,
+        }
+    });
+    cal.on_shift(|date, days| {
+        let moved = NaiveDate::from_ymd_opt(date.year, date.month as u32, date.day as u32)
+            .and_then(|d| calendar::shift(d, i64::from(days)));
+        moved.map_or(date, |d| Date {
+            year: d.year(),
+            month: d.month() as i32,
+            day: d.day() as i32,
+        })
     });
 }
