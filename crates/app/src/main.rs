@@ -11,7 +11,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use open_productivity_core::db::{self, DbError};
 use open_productivity_core::instances::{self, Error};
-use rfd::{FileDialog, MessageButtons, MessageDialog, MessageLevel};
+use rfd::{FileDialog, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 
 slint::include_modules!();
 
@@ -27,6 +27,13 @@ mod messages {
     pub const MISSING_ARG: &str = "Falta la carpeta después de --instance.";
     pub const CORRUPT_REGISTRY: &str =
         "El archivo con la lista de instancias está dañado y se reemplazará al elegir una carpeta.";
+
+    pub fn no_instance_here(p: &Path) -> String {
+        format!(
+            "No hay una instancia de Open Productivity en {}. ¿Crear una nueva aquí?",
+            p.display()
+        )
+    }
 
     pub fn folder_not_found(p: &Path) -> String {
         format!(
@@ -79,6 +86,19 @@ fn warn(app_dir: &Path, msg: &str) {
     dialog(MessageLevel::Warning, msg);
 }
 
+/// Only a folder the user just picked may become an instance without asking,
+/// so a typo or a moved database never turns into a silent empty instance.
+fn confirm_new(dir: &Path) -> bool {
+    dir.join("open-productivity.db").is_file()
+        || MessageDialog::new()
+            .set_level(MessageLevel::Warning)
+            .set_title(messages::TITLE)
+            .set_description(messages::no_instance_here(dir))
+            .set_buttons(MessageButtons::YesNo)
+            .show()
+            == MessageDialogResult::Yes
+}
+
 /// Asks for a folder and remembers it; `None` when the user cancels.
 fn pick_and_register(app_dir: &Path, registry: &Path) -> Option<PathBuf> {
     let dir = FileDialog::new()
@@ -95,16 +115,18 @@ fn choose_instance(app_dir: &Path) -> Option<PathBuf> {
     while let Some(a) = args.next() {
         if a == "--instance" {
             // Explicit instance: leave the registry untouched.
-            return match args.next() {
-                Some(p) => Some(PathBuf::from(p)),
-                None => fatal(app_dir, messages::MISSING_ARG),
+            let Some(p) = args.next() else {
+                fatal(app_dir, messages::MISSING_ARG)
             };
+            let dir = PathBuf::from(p);
+            return confirm_new(&dir).then_some(dir);
         }
     }
 
     let registry = app_dir.join("instances.json");
     match instances::resolve(&registry) {
-        Ok(dir) => return Some(dir),
+        Ok(dir) if confirm_new(&dir) => return Some(dir),
+        Ok(_) => {}
         Err(Error::Missing(None)) => {}
         Err(Error::Missing(Some(p))) => warn(app_dir, &messages::folder_not_found(&p)),
         Err(Error::Corrupt(_)) => warn(app_dir, messages::CORRUPT_REGISTRY),
