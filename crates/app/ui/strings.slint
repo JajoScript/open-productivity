@@ -24,4 +24,8 @@ export global Strings {
     public pure function failed(error: string) -> string {
         return @tr("Unexpected error: {}", error);
     }
+
+    public pure function task-failed(error: string) -> string {
+        return @tr("Could not save the task: {}", error);
+    }
 }

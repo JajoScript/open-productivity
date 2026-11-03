@@ -32,3 +32,18 @@ msgstr "No se pudo abrir la base de datos: {}"
 
 msgid "Unexpected error: {}"
 msgstr "Error inesperado: {}"
+
+msgid "Could not save the task: {}"
+msgstr "No se pudo guardar la tarea: {}"
+
+msgid "Tasks"
+msgstr "Tareas"
+
+msgid "New task"
+msgstr "Nueva tarea"
+
+msgid "Add"
+msgstr "Añadir"
+
+msgid "No tasks yet. Add your first one above."
+msgstr "Aún no hay tareas. Añade la primera arriba."

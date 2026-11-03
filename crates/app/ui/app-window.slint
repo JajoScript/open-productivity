@@ -1,12 +1,63 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
+import { Palette } from "std-widgets.slint";
 import { Strings } from "strings.slint";
-export { Strings }
+import { TaskRow, TasksView } from "tasks/tasks-view.slint";
+export { Strings, TaskRow }
 
 export component AppWindow inherits Window {
     in property <string> instance-name;
+    in property <[TaskRow]> tasks;
+    in property <string> tasks-error;
+    callback create-task(string);
+    callback set-done(int, bool);
+
     title: "Open Productivity — " + instance-name;
     preferred-width: 960px;
     preferred-height: 640px;
+
+    HorizontalLayout {
+        Rectangle {
+            width: 200px;
+            background: Palette.alternate-background;
+            VerticalLayout {
+                padding: 8px;
+                alignment: start;
+                Rectangle {
+                    height: 36px;
+                    border-radius: 6px;
+                    background: Palette.accent-background.with-alpha(0.2);
+                    HorizontalLayout {
+                        padding-left: 10px;
+                        spacing: 8px;
+                        alignment: start;
+                        Image {
+                            source: @image-url("icons/list-todo.svg");
+                            colorize: Palette.foreground;
+                            width: 18px;
+                            height: 18px;
+                            y: (parent.height - self.height) / 2;
+                        }
+
+                        Text {
+                            text: @tr("Tasks");
+                            vertical-alignment: center;
+                        }
+                    }
+                }
+            }
+        }
+
+        TasksView {
+            tasks: root.tasks;
+            error: root.tasks-error;
+            create-task(title) => {
+                root.create-task(title);
+            }
+            set-done(id, done) => {
+                root.set-done(id, done);
+            }
+        }
+    }
 }

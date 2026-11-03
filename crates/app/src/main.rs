@@ -7,11 +7,14 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use open_productivity_core::db::{self, DbError};
 use open_productivity_core::instances::{self, Error};
 use rfd::{FileDialog, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
+
+mod tasks;
 
 slint::include_modules!();
 
@@ -140,12 +143,12 @@ fn main() {
     if let Err(e) = fs::create_dir_all(&instance) {
         fatal(&app_dir, &s.invoke_failed(e.to_string().into()));
     }
-    // Kept alive while the window runs; it will be handed to the UI later.
-    let _conn = match db::open(&instance.join("open-productivity.db")) {
+    let conn = match db::open(&instance.join("open-productivity.db")) {
         Ok(c) => c,
         Err(DbError::NewerSchema { .. }) => fatal(&app_dir, &s.get_newer_schema()),
         Err(e @ DbError::Sqlite(_)) => fatal(&app_dir, &s.invoke_db_failed(e.to_string().into())),
     };
+    tasks::init(&window, Rc::new(conn));
 
     let name = instance.file_name().map_or_else(
         || instance.display().to_string(),

@@ -1,0 +1,75 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Button, CheckBox, LineEdit, ListView, Palette } from "std-widgets.slint";
+
+export struct TaskRow {
+    id: int,
+    title: string,
+    done: bool,
+}
+
+export component TasksView inherits VerticalLayout {
+    in property <[TaskRow]> tasks;
+    in property <string> error;
+    callback create-task(string);
+    callback set-done(int, bool);
+
+    padding: 16px;
+    spacing: 12px;
+
+    Text {
+        text: @tr("Tasks");
+        font-size: 24px;
+        font-weight: 700;
+    }
+
+    HorizontalLayout {
+        spacing: 8px;
+        input := LineEdit {
+            placeholder-text: @tr("New task");
+            accepted => {
+                root.create-task(self.text);
+                self.text = "";
+            }
+        }
+
+        Button {
+            text: @tr("Add");
+            clicked => {
+                root.create-task(input.text);
+                input.text = "";
+            }
+        }
+    }
+
+    if root.error != "": Text {
+        text: root.error;
+        color: #d32f2f;
+        wrap: word-wrap;
+    }
+
+    if root.tasks.length == 0: Text {
+        text: @tr("No tasks yet. Add your first one above.");
+        color: Palette.foreground.with-alpha(0.6);
+    }
+
+    ListView {
+        for row in root.tasks: HorizontalLayout {
+            spacing: 8px;
+            CheckBox {
+                checked: row.done;
+                toggled => {
+                    root.set-done(row.id, self.checked);
+                }
+            }
+
+            Text {
+                text: row.title;
+                vertical-alignment: center;
+                overflow: elide;
+                color: row.done ? Palette.foreground.with-alpha(0.5) : Palette.foreground;
+            }
+        }
+    }
+}
