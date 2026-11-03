@@ -5,3 +5,4 @@
 
 pub mod db;
 pub mod instances;
+pub mod tasks;

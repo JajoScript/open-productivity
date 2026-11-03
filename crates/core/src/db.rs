@@ -7,7 +7,7 @@ use std::fmt;
 use std::path::Path;
 use std::time::Duration;
 
-use rusqlite::Connection;
+pub use rusqlite::Connection;
 
 #[derive(Debug)]
 pub enum DbError {
@@ -42,7 +42,10 @@ impl From<rusqlite::Error> for DbError {
     }
 }
 
-const MIGRATIONS: &[&str] = &[include_str!("../migrations/0001_baseline.sql")];
+const MIGRATIONS: &[&str] = &[
+    include_str!("../migrations/0001_baseline.sql"),
+    include_str!("../migrations/0002_tasks.sql"),
+];
 
 pub fn open(path: &Path) -> Result<Connection, DbError> {
     let mut conn = Connection::open(path)?;
@@ -162,12 +165,13 @@ mod tests {
         let conn = open(&db).unwrap();
         conn.pragma_update(None, "user_version", 99).unwrap();
         drop(conn);
+        let supported = MIGRATIONS.len() as u32;
         assert!(matches!(
             open(&db),
             Err(DbError::NewerSchema {
                 found: 99,
-                supported: 1
-            })
+                supported: s
+            }) if s == supported
         ));
         let conn = Connection::open(&db).unwrap();
         assert_eq!(version(&conn), 99);
@@ -180,14 +184,15 @@ mod tests {
         let (dir, db) = setup("backup");
         let mut conn = open(&db).unwrap();
         let extra = "CREATE TABLE extra (id INTEGER PRIMARY KEY) STRICT;";
-        let all = [MIGRATIONS[0], extra];
+        let all = [MIGRATIONS, &[extra]].concat();
+        let before = MIGRATIONS.len() as u32;
         migrate(&mut conn, &all).unwrap();
-        assert_eq!(version(&conn), 2);
+        assert_eq!(version(&conn), before + 1);
         drop(conn);
-        let bak = dir.join("test.db.bak-v1");
+        let bak = dir.join(format!("test.db.bak-v{before}"));
         assert!(bak.exists());
         let b = Connection::open(&bak).unwrap();
-        assert_eq!(version(&b), 1);
+        assert_eq!(version(&b), before);
         assert!(!has_table(&b, "extra"));
         drop(b);
         let _ = std::fs::remove_dir_all(&dir);
@@ -197,9 +202,9 @@ mod tests {
     fn failing_migration_rolls_back() {
         let (dir, db) = setup("fail");
         let mut conn = open(&db).unwrap();
-        let all = [MIGRATIONS[0], "CREATE TABLE broken ("];
+        let all = [MIGRATIONS, &["CREATE TABLE broken ("]].concat();
         assert!(migrate(&mut conn, &all).is_err());
-        assert_eq!(version(&conn), 1);
+        assert_eq!(version(&conn), MIGRATIONS.len() as u32);
         assert!(!has_table(&conn, "broken"));
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
