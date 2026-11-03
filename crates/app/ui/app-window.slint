@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Date } from "std-widgets.slint";
+import { Date, Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
 import { Strings } from "strings.slint";
+import { Calendar, MonthView } from "ink-date-popup.slint";
 import { ListEntry } from "list-entry.slint";
 import { Sidebar } from "sidebar.slint";
 import { DueKind, TaskRow, TaskView, TasksView } from "tasks/tasks-view.slint";
-export { Date, DueKind, ListEntry, Strings, TaskRow, TaskView }
+export { Calendar, Date, DueKind, ListEntry, MonthView, Strings, TaskRow, TaskView }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -33,9 +35,27 @@ export component AppWindow inherits Window {
     preferred-width: 960px;
     preferred-height: 640px;
 
+    // Signature motion: on every view change the content is hidden for one frame,
+    // then fades in and rises into place.
+    property <bool> entering;
+    changed current-view => {
+        root.entering = true;
+    }
+    changed current-list-id => {
+        root.entering = true;
+    }
+    Timer {
+        interval: 16ms;
+        running: root.entering;
+        triggered => {
+            root.entering = false;
+        }
+    }
+
     HorizontalLayout {
         Sidebar {
             width: 220px;
+            instance-name: root.instance-name;
             current-view: root.current-view;
             current-list-id: root.current-list-id;
             today-count: root.today-count;
@@ -52,30 +72,62 @@ export component AppWindow inherits Window {
             }
         }
 
-        TasksView {
-            view: root.current-view;
-            tasks: root.tasks;
-            error: root.tasks-error;
-            list-id: root.current-list-id;
-            list-name: root.current-list-name;
-            lists: root.lists;
-            create-task(title) => {
-                root.create-task(title);
+        Rectangle {
+            horizontal-stretch: 1;
+            background: Palette.background;
+
+            // One tiled 128px texture, alpha baked into the colorize brush: no offscreen layer.
+            if Theme.grain > 0: Image {
+                width: parent.width;
+                height: parent.height;
+                source: @image-url("textures/grain.png");
+                horizontal-tiling: repeat;
+                vertical-tiling: repeat;
+                colorize: Palette.foreground.with-alpha(Theme.grain);
+                accessible-role: none;
             }
-            set-done(id, done) => {
-                root.set-done(id, done);
-            }
-            set-due(id, date) => {
-                root.set-due(id, date);
-            }
-            clear-due(id) => {
-                root.clear-due(id);
-            }
-            set-list(id, list-id) => {
-                root.set-list(id, list-id);
-            }
-            delete-list(id) => {
-                root.delete-list(id);
+
+            stage := Rectangle {
+                width: parent.width;
+                height: parent.height;
+                states [
+                    hidden when root.entering: {
+                        opacity: 0;
+                        y: 6px;
+                        out {
+                            animate opacity, y { duration: Theme.enter; easing: Theme.ease-out; }
+                        }
+                    }
+                ]
+
+                TasksView {
+                    width: parent.width;
+                    height: parent.height;
+                    view: root.current-view;
+                    tasks: root.tasks;
+                    error: root.tasks-error;
+                    list-id: root.current-list-id;
+                    list-name: root.current-list-name;
+                    lists: root.lists;
+                    create-task(title) => {
+                        root.create-task(title);
+                    }
+                    set-done(id, done) => {
+                        root.set-done(id, done);
+                    }
+                    set-due(id, date) => {
+                        root.set-due(id, date);
+                    }
+                    clear-due(id) => {
+                        root.clear-due(id);
+                    }
+                    set-list(id, list-id) => {
+                        root.set-list(id, list-id);
+                    }
+                    delete-list(id) => {
+                        root.delete-list(id);
+                    }
+                }
             }
         }
     }

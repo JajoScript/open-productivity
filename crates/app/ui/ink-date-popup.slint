@@ -1,0 +1,164 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette } from "std-widgets.slint";
+import { Strings } from "strings.slint";
+import { SubtleButton } from "subtle-button.slint";
+import { Theme } from "theme.slint";
+
+// One month as laid out by core: 42 cells, Monday first, 0 for days outside the month.
+export struct MonthView {
+    year: int,
+    month: int,
+    days: [int],
+    today: int,
+}
+
+// Implemented in Rust on top of core::calendar.
+export global Calendar {
+    // The month `delta` months away from year/month (1-12).
+    pure callback month(int, int, int) -> MonthView;
+    pure callback today() -> Date;
+}
+
+component DayCell inherits Rectangle {
+    in property <int> day;
+    in property <bool> selected;
+    in property <bool> today;
+    callback clicked;
+
+    border-radius: 6px;
+    background: root.selected ? Theme.ink : touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    accessible-role: button;
+    accessible-label: root.day;
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    Text {
+        text: root.day;
+        color: root.selected ? Theme.on-ink : Palette.foreground;
+        font-weight: root.today ? 700 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+
+    // Today is marked with a short ink bar under the number.
+    if root.today && !root.selected: Rectangle {
+        y: parent.height - 6px;
+        width: 10px;
+        height: 2px;
+        border-radius: 1px;
+        background: Palette.foreground;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// Date picker in the monochrome system. Picking a day closes it at once.
+export component InkDatePopup inherits PopupWindow {
+    // The chosen date, marked in the grid; day 0 means none (opens on today's month).
+    in property <int> day;
+    in property <int> month;
+    in property <int> year;
+    callback picked(Date);
+
+    // The popup content is rebuilt on every show(), so this starts on the right month each time;
+    // the arrows then replace it.
+    property <MonthView> view: root.day > 0 ? Calendar.month(root.year, root.month, 0) : Calendar.month(Calendar.today().year, Calendar.today().month, 0);
+    property <length> cell-w: 36px;
+    property <length> cell-h: 32px;
+
+    close-policy: close-on-click-outside;
+    width: 7 * root.cell-w + 24px;
+
+    function choose(date: Date) {
+        root.close();
+        root.picked(date);
+    }
+
+    Rectangle {
+        background: Palette.background;
+        border-width: 1px;
+        border-color: Palette.foreground.with-alpha(0.14);
+        border-radius: 8px;
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 8px;
+
+            HorizontalLayout {
+                spacing: 2px;
+                Text {
+                    text: Strings.month-year(root.view.month, root.view.year);
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                    overflow: elide;
+                }
+
+                SubtleButton {
+                    icon: @image-url("icons/chevron-left.svg");
+                    label: @tr("Previous month");
+                    color: Palette.foreground;
+                    clicked => {
+                        root.view = Calendar.month(root.view.year, root.view.month, -1);
+                    }
+                }
+
+                SubtleButton {
+                    icon: @image-url("icons/chevron-right.svg");
+                    label: @tr("Next month");
+                    color: Palette.foreground;
+                    clicked => {
+                        root.view = Calendar.month(root.view.year, root.view.month, 1);
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                for name in Strings.weekdays: Text {
+                    width: root.cell-w;
+                    text: name;
+                    font-size: 12px;
+                    color: Theme.muted;
+                    horizontal-alignment: center;
+                }
+            }
+
+            Rectangle {
+                height: 6 * root.cell-h;
+                for d[i] in root.view.days: DayCell {
+                    x: mod(i, 7) * root.cell-w;
+                    y: floor(i / 7) * root.cell-h;
+                    width: root.cell-w;
+                    height: root.cell-h;
+                    visible: d > 0;
+                    day: d;
+                    today: d == root.view.today;
+                    selected: d == root.day && root.view.month == root.month && root.view.year == root.year;
+                    clicked => {
+                        root.choose({ year: root.view.year, month: root.view.month, day: d });
+                    }
+                }
+            }
+
+            HorizontalLayout {
+                alignment: start;
+                SubtleButton {
+                    text: @tr("Today");
+                    color: Palette.foreground;
+                    clicked => {
+                        root.choose(Calendar.today());
+                    }
+                }
+            }
+        }
+    }
+}

@@ -13,6 +13,7 @@ use open_productivity_core::db::{self, DbError};
 use open_productivity_core::instances::{self, Error};
 use rfd::{FileDialog, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 
+mod calendar;
 mod lists;
 mod tasks;
 
@@ -148,6 +149,7 @@ fn main() {
         Err(DbError::NewerSchema { .. }) => fatal(&app_dir, &s.get_newer_schema()),
         Err(e @ DbError::Sqlite(_)) => fatal(&app_dir, &s.invoke_db_failed(e.to_string().into())),
     };
+    calendar::init(&window);
     let _tasks_timer = tasks::init(&window, conn);
 
     let name = instance.file_name().map_or_else(

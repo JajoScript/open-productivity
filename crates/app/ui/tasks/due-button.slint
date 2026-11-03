@@ -1,8 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Button, Date, DatePickerPopup } from "std-widgets.slint";
+import { Date, Palette } from "std-widgets.slint";
+import { InkDatePopup } from "../ink-date-popup.slint";
 import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
 
 export enum DueKind { none, overdue, today, tomorrow, date }
 
@@ -15,40 +18,35 @@ export component DueButton inherits HorizontalLayout {
     callback picked(Date);
     callback cleared;
 
-    spacing: 4px;
+    spacing: 0px;
+    // Fixed column, so the list buttons line up across rows whatever the date says.
+    width: 140px;
+    alignment: start;
 
-    // A popup's content is unreachable from outside, so two popups: the unset one keeps the
-    // widget's default date (today), the other starts at the task's date.
-    new-picker := DatePickerPopup {
-        accepted(date) => {
+    // Right-aligned under the button: rows put it near the window's right edge.
+    picker := InkDatePopup {
+        x: root.width - self.width;
+        y: root.height + 2px;
+        day: root.kind == DueKind.none ? 0 : root.day;
+        month: root.month;
+        year: root.year;
+        picked(date) => {
             root.picked(date);
         }
     }
 
-    set-picker := DatePickerPopup {
-        date: { day: root.day, month: root.month, year: root.year };
-        accepted(date) => {
-            root.picked(date);
-        }
-    }
-
-    Button {
+    SubtleButton {
         text: root.kind == DueKind.none ? @tr("Add date") : root.kind == DueKind.overdue ? @tr("Overdue") : root.kind == DueKind.today ? @tr("Today") : root.kind == DueKind.tomorrow ? @tr("Tomorrow") : Strings.date(root.day, root.month, root.year);
-        icon: root.kind == DueKind.none ? @image-url("../icons/calendar.svg") : @image-url("");
-        colorize-icon: true;
+        icon: @image-url("../icons/calendar.svg");
+        color: root.kind == DueKind.overdue ? Theme.critical : root.kind == DueKind.today ? Palette.foreground : Theme.muted;
         clicked => {
-            if root.kind == DueKind.none {
-                new-picker.show();
-            } else {
-                set-picker.show();
-            }
+            picker.show();
         }
     }
 
-    if root.kind != DueKind.none: Button {
+    if root.kind != DueKind.none: SubtleButton {
         icon: @image-url("../icons/x.svg");
-        colorize-icon: true;
-        accessible-label: @tr("Remove date");
+        label: @tr("Remove date");
         clicked => {
             root.cleared();
         }
