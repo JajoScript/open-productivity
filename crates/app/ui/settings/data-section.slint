@@ -1,0 +1,38 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+
+// Backup of the open instance: the save dialog and the export live in the app glue.
+export component DataSection inherits VerticalLayout {
+    in property <string> status;
+    in property <bool> failed;
+    callback export-copy;
+
+    spacing: 12px;
+    alignment: start;
+
+    Text {
+        text: @tr("Save a copy of this instance's database. You can open it later as an instance or keep it as a backup.");
+        wrap: word-wrap;
+    }
+
+    HorizontalLayout {
+        alignment: start;
+        SubtleButton {
+            text: @tr("Export a copy…");
+            color: Palette.foreground;
+            clicked => {
+                root.export-copy();
+            }
+        }
+    }
+
+    if root.status != "": Text {
+        text: root.status;
+        wrap: word-wrap;
+        color: root.failed ? Theme.critical : Theme.muted;
+    }
+}

@@ -15,6 +15,7 @@ use rfd::{FileDialog, MessageButtons, MessageDialog, MessageDialogResult, Messag
 
 mod about;
 mod calendar;
+mod data;
 mod lists;
 mod settings;
 mod tasks;
@@ -152,7 +153,7 @@ fn main() {
     let conn = match db::open(&instance.join("open-productivity.db")) {
         Ok(c) => c,
         Err(DbError::NewerSchema { .. }) => fatal(&app_dir, &s.get_newer_schema()),
-        Err(e @ DbError::Sqlite(_)) => fatal(&app_dir, &s.invoke_db_failed(e.to_string().into())),
+        Err(e) => fatal(&app_dir, &s.invoke_db_failed(e.to_string().into())),
     };
     calendar::init(&window);
     let _tasks_timer = tasks::init(&window, conn);

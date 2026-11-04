@@ -37,6 +37,16 @@ export global Strings {
         return @tr("Could not open the link: {}", error);
     }
 
+    out property <string> export-title: @tr("Export a copy");
+
+    public pure function export-done(path: string) -> string {
+        return @tr("Copy saved to {}", path);
+    }
+
+    public pure function export-failed(error: string) -> string {
+        return @tr("Could not export the copy: {}", error);
+    }
+
     public pure function list-failed(error: string) -> string {
         return @tr("Could not save the list: {}", error);
     }

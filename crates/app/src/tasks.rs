@@ -192,6 +192,7 @@ pub fn init(window: &AppWindow, conn: Connection) -> Timer {
     });
 
     lists::init(window, &state, &finish);
+    crate::data::init(window, &state);
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_secs(60), move || {

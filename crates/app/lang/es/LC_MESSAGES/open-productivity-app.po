@@ -236,3 +236,21 @@ msgstr "Y las demás bibliotecas de código abierto que figuran en Cargo.lock."
 
 msgid "General"
 msgstr "General"
+
+msgid "Data"
+msgstr "Datos"
+
+msgid "Save a copy of this instance's database. You can open it later as an instance or keep it as a backup."
+msgstr "Guarda una copia de la base de datos de esta instancia. Puedes abrirla después como instancia o conservarla como respaldo."
+
+msgid "Export a copy…"
+msgstr "Exportar una copia…"
+
+msgid "Export a copy"
+msgstr "Exportar una copia"
+
+msgid "Copy saved to {}"
+msgstr "Copia guardada en {}"
+
+msgid "Could not export the copy: {}"
+msgstr "No se pudo exportar la copia: {}"

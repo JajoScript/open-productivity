@@ -5,6 +5,7 @@ import { Palette, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { OptionRow } from "option-row.slint";
 import { SettingsTab } from "settings-tab.slint";
+import { DataSection } from "data-section.slint";
 import { AboutSection } from "about-section.slint";
 import { LicenseOverlay } from "license-overlay.slint";
 
@@ -15,20 +16,25 @@ export component SettingsView inherits Rectangle {
     in property <string> error;
     in property <string> version;
     in property <string> license-text;
+    in property <string> export-status;
+    in property <bool> export-failed;
+    callback export-copy;
     callback set-language(Language);
     callback open-source;
 
     property <bool> license-open;
-    // 0 = General, 1 = About; General is shown when Settings opens.
+    // 0 = General, 1 = Data, 2 = About; General is shown when Settings opens.
     property <int> tab: 0;
 
     function go-tab(delta: int) {
-        if (root.tab + delta < 0 || root.tab + delta > 1) {
+        if (root.tab + delta < 0 || root.tab + delta > 2) {
             return;
         }
         root.tab += delta;
         if root.tab == 0 {
             general-tab.focus();
+        } else if root.tab == 1 {
+            data-tab.focus();
         } else {
             about-tab.focus();
         }
@@ -78,11 +84,22 @@ export component SettingsView inherits Rectangle {
                 }
             }
 
-            about-tab := SettingsTab {
-                text: @tr("About");
+            data-tab := SettingsTab {
+                text: @tr("Data");
                 selected: root.tab == 1;
                 chosen => {
                     root.tab = 1;
+                }
+                step(d) => {
+                    root.go-tab(d);
+                }
+            }
+
+            about-tab := SettingsTab {
+                text: @tr("About");
+                selected: root.tab == 2;
+                chosen => {
+                    root.tab = 2;
                 }
                 step(d) => {
                     root.go-tab(d);
@@ -155,6 +172,19 @@ export component SettingsView inherits Rectangle {
 
         ScrollView {
             visible: root.tab == 1;
+            DataSection {
+                accessible-role: tab-panel;
+                accessible-label: @tr("Data");
+                status: root.export-status;
+                failed: root.export-failed;
+                export-copy => {
+                    root.export-copy();
+                }
+            }
+        }
+
+        ScrollView {
+            visible: root.tab == 2;
             AboutSection {
                 accessible-role: tab-panel;
                 accessible-label: @tr("About");
