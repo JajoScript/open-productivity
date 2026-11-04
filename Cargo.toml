@@ -12,3 +12,8 @@ repository = "https://github.com/JajoScript/open-productivity"
 # Optimize dependencies (Slint...) in dev builds so the app runs fast; our crates still compile quickly.
 [profile.dev.package."*"]
 opt-level = 2
+
+[profile.release]
+lto = "fat"
+codegen-units = 1
+strip = true
