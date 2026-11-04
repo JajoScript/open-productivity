@@ -1,0 +1,79 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ScrollView } from "std-widgets.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+
+// Full license text over the settings view: read-only but selectable. Esc closes.
+export component LicenseOverlay inherits FocusScope {
+    in property <string> text;
+    callback close;
+
+    init => {
+        self.focus();
+    }
+    key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.close();
+            return accept;
+        }
+        reject
+    }
+
+    // Swallows clicks so nothing underneath reacts.
+    TouchArea { }
+
+    Rectangle {
+        background: Palette.background;
+
+        VerticalLayout {
+            padding: 24px;
+            padding-top: 20px;
+            spacing: 12px;
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: @tr("License");
+                    font-size: 24px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                }
+
+                SubtleButton {
+                    icon: @image-url("../icons/x.svg");
+                    label: @tr("Close");
+                    color: Palette.foreground;
+                    clicked => {
+                        root.close();
+                    }
+                }
+            }
+
+            Rectangle {
+                vertical-stretch: 1;
+                border-radius: 6px;
+                background: Theme.field;
+                border-width: 1px;
+                border-color: Theme.hairline;
+                clip: true;
+
+                ScrollView {
+                    VerticalLayout {
+                        padding: 12px;
+                        TextInput {
+                            text: root.text;
+                            read-only: true;
+                            wrap: word-wrap;
+                            color: Palette.foreground;
+                            selection-background-color: Palette.foreground.with-alpha(0.22);
+                            selection-foreground-color: Palette.foreground;
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

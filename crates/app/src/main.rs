@@ -13,6 +13,7 @@ use open_productivity_core::db::{self, DbError};
 use open_productivity_core::instances::{self, Error};
 use rfd::{FileDialog, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
 
+mod about;
 mod calendar;
 mod lists;
 mod settings;
@@ -123,6 +124,7 @@ fn main() {
     };
     // Before any dialog, so they are translated too.
     settings::init(&window, &app_dir);
+    about::init(&window);
     let s = window.global::<Strings>();
     if let Err(e) = fs::create_dir_all(&app_dir) {
         fatal(&app_dir, &s.invoke_failed(e.to_string().into()));

@@ -33,6 +33,10 @@ export global Strings {
         return @tr("Could not save the settings: {}", error);
     }
 
+    public pure function open-failed(error: string) -> string {
+        return @tr("Could not open the link: {}", error);
+    }
+
     public pure function list-failed(error: string) -> string {
         return @tr("Could not save the list: {}", error);
     }

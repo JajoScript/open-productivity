@@ -1,16 +1,38 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Palette } from "std-widgets.slint";
+import { Palette, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { OptionRow } from "option-row.slint";
+import { SettingsTab } from "settings-tab.slint";
+import { AboutSection } from "about-section.slint";
+import { LicenseOverlay } from "license-overlay.slint";
 
 export enum Language { system, spanish, english }
 
-export component SettingsView inherits VerticalLayout {
+export component SettingsView inherits Rectangle {
     in property <Language> language;
     in property <string> error;
+    in property <string> version;
+    in property <string> license-text;
     callback set-language(Language);
+    callback open-source;
+
+    property <bool> license-open;
+    // 0 = General, 1 = About; General is shown when Settings opens.
+    property <int> tab: 0;
+
+    function go-tab(delta: int) {
+        if (root.tab + delta < 0 || root.tab + delta > 1) {
+            return;
+        }
+        root.tab += delta;
+        if root.tab == 0 {
+            general-tab.focus();
+        } else {
+            about-tab.focus();
+        }
+    }
 
     // Arrow keys move the choice and the focus together, like a native radio group.
     function go(from: int, delta: int) {
@@ -29,67 +51,131 @@ export component SettingsView inherits VerticalLayout {
         }
     }
 
-    padding: 24px;
-    padding-top: 20px;
-    spacing: 12px;
-    alignment: start;
-
-    Text {
-        text: @tr("Settings");
-        font-size: 24px;
-        font-weight: 700;
-        overflow: elide;
-    }
-
-    Text {
-        text: @tr("Language");
-        font-weight: 700;
-        color: Palette.foreground.with-alpha(0.7);
-    }
-
     VerticalLayout {
-        spacing: 2px;
-        max-width: 360px;
-        accessible-role: list;
-        accessible-label: @tr("Language");
-        // Language names stay in their own language so they can always be found.
-        system := OptionRow {
-            text: @tr("System");
-            checked: root.language == Language.system;
-            chosen => {
-                root.set-language(Language.system);
+        padding: 24px;
+        padding-top: 20px;
+        spacing: 12px;
+
+        Text {
+            text: @tr("Settings");
+            font-size: 24px;
+            font-weight: 700;
+            overflow: elide;
+        }
+
+        HorizontalLayout {
+            spacing: 4px;
+            alignment: start;
+            accessible-role: tab-list;
+            general-tab := SettingsTab {
+                text: @tr("General");
+                selected: root.tab == 0;
+                chosen => {
+                    root.tab = 0;
+                }
+                step(d) => {
+                    root.go-tab(d);
+                }
             }
-            step(d) => {
-                root.go(0, d);
+
+            about-tab := SettingsTab {
+                text: @tr("About");
+                selected: root.tab == 1;
+                chosen => {
+                    root.tab = 1;
+                }
+                step(d) => {
+                    root.go-tab(d);
+                }
             }
         }
 
-        spanish := OptionRow {
-            text: "Español";
-            checked: root.language == Language.spanish;
-            chosen => {
-                root.set-language(Language.spanish);
+        // Both panels stay alive so the language rows keep their ids; the hidden one is not focusable.
+        Rectangle {
+        ScrollView {
+            visible: root.tab == 0;
+            VerticalLayout {
+                spacing: 12px;
+                alignment: start;
+                accessible-role: tab-panel;
+                accessible-label: @tr("General");
+            Text {
+                text: @tr("Language");
+                font-weight: 700;
+                color: Palette.foreground.with-alpha(0.7);
             }
-            step(d) => {
-                root.go(1, d);
+
+            VerticalLayout {
+                spacing: 2px;
+                max-width: 360px;
+                accessible-role: list;
+                accessible-label: @tr("Language");
+                // Language names stay in their own language so they can always be found.
+                system := OptionRow {
+                    text: @tr("System");
+                    checked: root.language == Language.system;
+                    chosen => {
+                        root.set-language(Language.system);
+                    }
+                    step(d) => {
+                        root.go(0, d);
+                    }
+                }
+
+                spanish := OptionRow {
+                    text: "Español";
+                    checked: root.language == Language.spanish;
+                    chosen => {
+                        root.set-language(Language.spanish);
+                    }
+                    step(d) => {
+                        root.go(1, d);
+                    }
+                }
+
+                english := OptionRow {
+                    text: "English";
+                    checked: root.language == Language.english;
+                    chosen => {
+                        root.set-language(Language.english);
+                    }
+                    step(d) => {
+                        root.go(2, d);
+                    }
+                }
+            }
+
+            if root.error != "": Text {
+                text: root.error;
+                color: Theme.critical;
+                wrap: word-wrap;
+            }
             }
         }
 
-        english := OptionRow {
-            text: "English";
-            checked: root.language == Language.english;
-            chosen => {
-                root.set-language(Language.english);
+        ScrollView {
+            visible: root.tab == 1;
+            AboutSection {
+                accessible-role: tab-panel;
+                accessible-label: @tr("About");
+                version: root.version;
+                show-license => {
+                    root.license-open = true;
+                }
+                open-source => {
+                    root.open-source();
+                }
             }
-            step(d) => {
-                root.go(2, d);
-            }
+        }
         }
     }
 
-    if root.error != "": Text {
-        text: root.error;
-        color: Theme.critical;
-        wrap: word-wrap;
+    if root.license-open: LicenseOverlay {
+        width: parent.width;
+        height: parent.height;
+        text: root.license-text;
+        close => {
+            root.license-open = false;
+        }
     }
 }

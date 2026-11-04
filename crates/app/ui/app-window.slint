@@ -24,7 +24,10 @@ export component AppWindow inherits Window {
     in property <[ListEntry]> lists;
     in property <Language> current-language;
     in property <string> settings-error;
+    in property <string> version;
+    in property <string> license-text;
     callback set-language(Language);
+    callback open-source;
     callback select-view(TaskView);
     callback create-task(string);
     callback set-done(int, bool);
@@ -122,6 +125,11 @@ export component AppWindow inherits Window {
                     height: parent.height;
                     language: root.current-language;
                     error: root.settings-error;
+                    version: root.version;
+                    license-text: root.license-text;
+                    open-source => {
+                        root.open-source();
+                    }
                     set-language(l) => {
                         root.set-language(l);
                     }

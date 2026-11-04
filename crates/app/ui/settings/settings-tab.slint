@@ -1,0 +1,77 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// One tab of the settings tab bar: ink text and underline when selected. Arrows ask the bar to move.
+export component SettingsTab inherits Rectangle {
+    in property <string> text;
+    in property <bool> selected;
+    callback chosen;
+    callback step(int);
+
+    height: 36px;
+    border-radius: 6px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    forward-focus: focus;
+    accessible-role: tab;
+    accessible-label: root.text;
+    accessible-checkable: true;
+    accessible-checked: root.selected;
+    accessible-action-default => {
+        root.chosen();
+    }
+
+    label := Text {
+        text: root.text;
+        x: 14px;
+        vertical-alignment: center;
+        font-weight: root.selected ? 700 : 400;
+        color: root.selected ? Theme.ink : Theme.muted;
+        animate color { duration: Theme.fast; easing: Theme.ease-out; }
+        accessible-role: none;
+    }
+
+    // Reserve the width of the (bold) label so the tab does not jump.
+    width: label.preferred-width + 28px;
+
+    Rectangle {
+        y: parent.height - self.height;
+        height: 2px;
+        background: root.selected ? Theme.ink : transparent;
+        animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.chosen();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.chosen();
+                return accept;
+            }
+            if event.text == Key.LeftArrow {
+                root.step(-1);
+                return accept;
+            }
+            if event.text == Key.RightArrow {
+                root.step(1);
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}

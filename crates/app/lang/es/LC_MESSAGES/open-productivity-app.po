@@ -203,3 +203,36 @@ msgstr "Idioma"
 
 msgid "System"
 msgstr "Sistema"
+
+msgid "Could not open the link: {}"
+msgstr "No se pudo abrir el enlace: {}"
+
+msgid "License"
+msgstr "Licencia"
+
+msgid "Close"
+msgstr "Cerrar"
+
+msgid "About"
+msgstr "Acerca de"
+
+msgid "A private desktop app to organize your life. Everything stays on your device."
+msgstr "Una aplicación de escritorio privada para organizar tu vida. Todo se queda en tu dispositivo."
+
+msgid "This program is free software: you can redistribute it and/or modify it under the terms of the GNU General Public License as published by the Free Software Foundation, either version 3 of the License, or (at your option) any later version. It is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE."
+msgstr "Este programa es software libre: puedes redistribuirlo y/o modificarlo bajo los términos de la Licencia Pública General de GNU, publicada por la Free Software Foundation, ya sea la versión 3 de la Licencia o (a tu elección) cualquier versión posterior. Se distribuye con la esperanza de que sea útil, pero SIN NINGUNA GARANTÍA; ni siquiera la garantía implícita de COMERCIABILIDAD o IDONEIDAD PARA UN PROPÓSITO PARTICULAR."
+
+msgid "View license"
+msgstr "Ver licencia"
+
+msgid "Source code"
+msgstr "Código fuente"
+
+msgid "Built with"
+msgstr "Hecho con"
+
+msgid "And the other open-source libraries listed in Cargo.lock."
+msgstr "Y las demás bibliotecas de código abierto que figuran en Cargo.lock."
+
+msgid "General"
+msgstr "General"
