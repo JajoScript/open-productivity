@@ -10,6 +10,7 @@ import { Theme } from "../theme.slint";
 import { ListEntry } from "../list-entry.slint";
 import { DueButton, DueKind } from "due-button.slint";
 import { ListButton } from "list-button.slint";
+import { TaskEditor } from "task-editor.slint";
 export { DueKind }
 
 export enum TaskView { today, all, list }
@@ -17,6 +18,7 @@ export enum TaskView { today, all, list }
 export struct TaskRow {
     id: int,
     title: string,
+    note: string,
     done: bool,
     due-kind: DueKind,
     due-day: int,
@@ -38,6 +40,16 @@ export component TasksView inherits VerticalLayout {
     callback clear-due(int);
     callback set-list(int, int);
     callback delete-list(int);
+    callback update-task(int, string, string);
+    callback delete-task(int);
+
+    // The task the editor shows; set before it opens.
+    property <TaskRow> editing;
+
+    function open-editor(row: TaskRow) {
+        root.editing = row;
+        editor.show();
+    }
 
     padding: 24px;
     padding-top: 20px;
@@ -120,6 +132,21 @@ export component TasksView inherits VerticalLayout {
         }
     }
 
+    editor := TaskEditor {
+        // Fixed spot under the input row, so it never runs off the bottom for low rows.
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        task-id: root.editing.id;
+        title: root.editing.title;
+        note: root.editing.note;
+        saved(id, title, note) => {
+            root.update-task(id, title, note);
+        }
+        deleted(id) => {
+            root.delete-task(id);
+        }
+    }
+
     if root.error != "": Text {
         text: root.error;
         color: Theme.critical;
@@ -156,13 +183,67 @@ export component TasksView inherits VerticalLayout {
                     }
                 }
 
-                Text {
-                    text: row.title;
+                // Plain text with a wash on hover; opens the editor.
+                Rectangle {
                     horizontal-stretch: 1;
-                    vertical-alignment: center;
-                    overflow: elide;
-                    color: row.done ? Palette.foreground.with-alpha(0.45) : Palette.foreground;
-                    animate color { duration: Theme.fast; easing: Theme.ease-out; }
+                    border-radius: 4px;
+                    background: title-touch.pressed ? Theme.pressed : title-touch.has-hover ? Theme.hover : transparent;
+                    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+                    forward-focus: title-focus;
+                    accessible-role: button;
+                    accessible-label: row.title;
+                    accessible-action-default => {
+                        root.open-editor(row);
+                    }
+
+                    Text {
+                        x: 6px;
+                        width: parent.width - 12px;
+                        height: parent.height;
+                        text: row.title;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        color: row.done ? Palette.foreground.with-alpha(0.45) : Palette.foreground;
+                        animate color { duration: Theme.fast; easing: Theme.ease-out; }
+                        accessible-role: none;
+                    }
+
+                    title-touch := TouchArea {
+                        clicked => {
+                            root.open-editor(row);
+                        }
+                    }
+
+                    title-focus := FocusScope {
+                        width: 0px; // keyboard only; clicks go to the TouchArea
+                        key-pressed(event) => {
+                            if event.text == Key.Space || event.text == Key.Return {
+                                root.open-editor(row);
+                                return accept;
+                            }
+                            reject
+                        }
+                    }
+
+                    if title-focus.has-focus: Rectangle {
+                        border-radius: 5px;
+                        border-width: 2px;
+                        border-color: Palette.foreground;
+                    }
+                }
+
+                // The slot stays reserved so the list column lines up across rows.
+                Rectangle {
+                    width: 16px;
+                    if row.note != "": Image {
+                        source: @image-url("../icons/notebook-text.svg");
+                        colorize: Theme.muted;
+                        width: 16px;
+                        height: 16px;
+                        y: (parent.height - self.height) / 2;
+                        accessible-role: image;
+                        accessible-label: @tr("Has a note");
+                    }
                 }
 
                 ListButton {

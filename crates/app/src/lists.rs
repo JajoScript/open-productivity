@@ -55,7 +55,7 @@ impl State {
         Ok(())
     }
 
-    fn show_error(&self, msg: impl FnOnce(&Strings<'_>) -> slint::SharedString) {
+    pub fn show_error(&self, msg: impl FnOnce(&Strings<'_>) -> slint::SharedString) {
         if let Some(w) = self.window.upgrade() {
             w.set_tasks_error(msg(&w.global::<Strings>()));
         }

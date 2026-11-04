@@ -61,6 +61,7 @@ impl State {
             out.push(TaskRow {
                 id,
                 title: t.title.into(),
+                note: t.note.into(),
                 done: t.done,
                 due_kind: kind,
                 due_day: day,
@@ -167,6 +168,19 @@ pub fn init(window: &AppWindow, conn: Connection) -> Timer {
                 lists::list_arg(list),
             ))
         }
+    });
+
+    window.on_update_task({
+        let (state, after) = (state.clone(), after.clone());
+        move |id, title, note| match tasks::update(&state.conn, TaskId(id.into()), &title, &note) {
+            Err(TaskError::EmptyTitle) => state.show_error(|s| s.get_title_empty()),
+            res => after(res),
+        }
+    });
+
+    window.on_delete_task({
+        let (state, after) = (state.clone(), after.clone());
+        move |id| after(tasks::delete(&state.conn, TaskId(id.into())))
     });
 
     lists::init(window, &state, &finish);

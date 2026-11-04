@@ -167,3 +167,27 @@ msgstr "Mes anterior"
 
 msgid "Next month"
 msgstr "Mes siguiente"
+
+msgid "The title can't be empty."
+msgstr "El título no puede estar vacío."
+
+msgid "Edit task"
+msgstr "Editar tarea"
+
+msgid "Task title"
+msgstr "Título de la tarea"
+
+msgid "Note"
+msgstr "Nota"
+
+msgid "Save"
+msgstr "Guardar"
+
+msgid "Delete task"
+msgstr "Eliminar tarea"
+
+msgid "Delete \"{}\"? This can't be undone."
+msgstr "¿Eliminar \"{}\"? No se puede deshacer."
+
+msgid "Has a note"
+msgstr "Tiene una nota"

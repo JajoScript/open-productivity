@@ -1,0 +1,158 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkField } from "../ink-field.slint";
+import { InkTextArea } from "../ink-text-area.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+
+// Rebuilt on every show(), so the fields and the confirmation always start fresh.
+component EditorBody inherits FocusScope {
+    in property <string> title;
+    in property <string> note;
+    callback save(string, string);
+    callback delete;
+    callback cancel;
+
+    property <bool> confirming;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+
+        if !root.confirming: VerticalLayout {
+            spacing: 12px;
+            Text {
+                text: @tr("Edit task");
+                font-size: 14px;
+                font-weight: 700;
+            }
+
+            title-field := InkField {
+                text: root.title;
+                placeholder-text: @tr("Task title");
+                init => {
+                    self.focus();
+                }
+                accepted(text) => {
+                    root.save(text, note-field.text);
+                }
+            }
+
+            note-field := InkTextArea {
+                text: root.note;
+                placeholder-text: @tr("Note");
+                submitted => {
+                    root.save(title-field.text, self.text);
+                }
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                SubtleButton {
+                    icon: @image-url("../icons/trash-2.svg");
+                    text: @tr("Delete task");
+                    color: Theme.critical;
+                    clicked => {
+                        root.confirming = true;
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                SubtleButton {
+                    text: @tr("Cancel");
+                    color: Palette.foreground;
+                    clicked => {
+                        root.cancel();
+                    }
+                }
+
+                InkButton {
+                    text: @tr("Save");
+                    clicked => {
+                        root.save(title-field.text, note-field.text);
+                    }
+                }
+            }
+        }
+
+        if root.confirming: VerticalLayout {
+            spacing: 12px;
+            Text {
+                text: @tr("Delete \"{}\"? This can't be undone.", root.title);
+                wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+                SubtleButton {
+                    text: @tr("Cancel");
+                    color: Palette.foreground;
+                    init => {
+                        self.focus();
+                    }
+                    clicked => {
+                        root.cancel();
+                    }
+                }
+
+                SubtleButton {
+                    icon: @image-url("../icons/trash-2.svg");
+                    text: @tr("Delete");
+                    color: Theme.critical;
+                    clicked => {
+                        root.delete();
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Edits one task. Closing by clicking outside discards the changes.
+export component TaskEditor inherits PopupWindow {
+    in property <int> task-id;
+    in property <string> title;
+    in property <string> note;
+    callback saved(int, string, string);
+    callback deleted(int);
+
+    close-policy: close-on-click-outside;
+    width: 440px;
+
+    Rectangle {
+        background: Palette.background;
+        border-width: 1px;
+        border-color: Palette.foreground.with-alpha(0.14);
+        border-radius: 6px;
+        EditorBody {
+            title: root.title;
+            note: root.note;
+            save(title, note) => {
+                root.close();
+                root.saved(root.task-id, title, note);
+            }
+            delete => {
+                root.close();
+                root.deleted(root.task-id);
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}
