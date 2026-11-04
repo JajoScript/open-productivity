@@ -57,6 +57,9 @@ impl From<std::io::Error> for DbError {
     }
 }
 
+/// Name of the database file inside an instance folder.
+pub const FILE_NAME: &str = "open-productivity.db";
+
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_baseline.sql"),
     include_str!("../migrations/0002_tasks.sql"),
