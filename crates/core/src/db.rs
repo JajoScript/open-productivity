@@ -60,6 +60,9 @@ impl From<std::io::Error> for DbError {
 /// Name of the database file inside an instance folder.
 pub const FILE_NAME: &str = "open-productivity.db";
 
+/// How many pre-migration backups to keep per database.
+const BACKUPS_KEPT: usize = 2;
+
 const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0001_baseline.sql"),
     include_str!("../migrations/0002_tasks.sql"),
@@ -103,6 +106,35 @@ pub fn export(conn: &Connection, dest: &Path) -> Result<(), DbError> {
     result
 }
 
+/// Deletes all but the newest `BACKUPS_KEPT` `<db>.bak-v<N>` files; failures are ignored.
+fn prune_backups(db: &Path, newest: u32) {
+    let (Some(dir), Some(name)) = (db.parent(), db.file_name()) else {
+        return;
+    };
+    let prefix = format!("{}.bak-v", name.to_string_lossy());
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    let mut found: Vec<(u32, std::path::PathBuf)> = entries
+        .flatten()
+        .filter_map(|e| {
+            let n = e
+                .file_name()
+                .to_string_lossy()
+                .strip_prefix(&prefix)?
+                .parse()
+                .ok()?;
+            Some((n, e.path()))
+        })
+        .filter(|(n, _)| *n != newest)
+        .collect();
+    found.sort_by_key(|(n, _)| std::cmp::Reverse(*n));
+    // The fresh backup always counts as one of the kept files.
+    for (_, path) in found.into_iter().skip(BACKUPS_KEPT - 1) {
+        let _ = std::fs::remove_file(path);
+    }
+}
+
 fn migrate(conn: &mut Connection, migrations: &[&str]) -> Result<(), DbError> {
     let current: u32 = conn.pragma_query_value(None, "user_version", |r| r.get(0))?;
     let supported = migrations.len() as u32;
@@ -124,6 +156,7 @@ fn migrate(conn: &mut Connection, migrations: &[&str]) -> Result<(), DbError> {
         // If removal fails, VACUUM INTO reports the real error.
         let _ = std::fs::remove_file(&backup);
         conn.execute("VACUUM INTO ?1", [&backup])?;
+        prune_backups(Path::new(path), current);
     }
 
     for (i, sql) in migrations.iter().enumerate().skip(current as usize) {
@@ -242,6 +275,35 @@ mod tests {
         assert_eq!(version(&b), before);
         assert!(!has_table(&b, "extra"));
         drop(b);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn only_the_newest_backups_are_kept() {
+        let (dir, db) = setup("prune");
+        let mut conn = open(&db).unwrap();
+        for f in [
+            "test.db.bak-v1",
+            "test.db.bak-v2",
+            "test.db.bak-v10",
+            "other.db.bak-v1",
+            "test.db.bak-vX",
+        ] {
+            std::fs::write(dir.join(f), b"x").unwrap();
+        }
+        let extra = "CREATE TABLE extra (id INTEGER PRIMARY KEY) STRICT;";
+        migrate(&mut conn, &[MIGRATIONS, &[extra]].concat()).unwrap();
+        drop(conn);
+        let new = format!("test.db.bak-v{}", MIGRATIONS.len());
+        let mut names: Vec<String> = std::fs::read_dir(&dir)
+            .unwrap()
+            .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+            .filter(|n| n.contains(".bak-v"))
+            .collect();
+        names.sort();
+        let mut want = vec!["other.db.bak-v1", "test.db.bak-v10", "test.db.bak-vX", &new];
+        want.sort();
+        assert_eq!(names, want);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
