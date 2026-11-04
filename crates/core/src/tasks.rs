@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-//! Tasks: create, list, mark as done, due dates and lists.
+//! Tasks: create, list, mark as done, due dates, lists, edit and delete.
 
 use std::fmt;
 
@@ -17,6 +17,7 @@ pub struct TaskId(pub i64);
 pub struct Task {
     pub id: TaskId,
     pub title: String,
+    pub note: String,
     pub done: bool,
     pub due: Option<NaiveDate>,
     /// The list id and its name.
@@ -140,11 +141,11 @@ pub fn list(
         .ok_or_else(|| TaskError::BadDate(today.to_string()))?
         .with_timezone(&Utc)
         .to_rfc3339_opts(SecondsFormat::Millis, true);
-    const SELECT: &str = "SELECT t.id, t.title, t.done_at IS NOT NULL, t.due_date, t.list_id, l.name \
+    const SELECT: &str = "SELECT t.id, t.title, t.note, t.done_at IS NOT NULL, t.due_date, t.list_id, l.name \
          FROM task t LEFT JOIN list l ON l.id = t.list_id";
     const ALL_ORDER: &str = "ORDER BY t.done_at IS NOT NULL, t.done_at DESC, t.created_at, t.id";
     let map = |r: &rusqlite::Row| {
-        let list = match (r.get::<_, Option<i64>>(4)?, r.get::<_, Option<String>>(5)?) {
+        let list = match (r.get::<_, Option<i64>>(5)?, r.get::<_, Option<String>>(6)?) {
             (Some(id), Some(name)) => Some((ListId(id), name)),
             _ => None,
         };
@@ -152,11 +153,12 @@ pub fn list(
             Task {
                 id: TaskId(r.get(0)?),
                 title: r.get(1)?,
-                done: r.get(2)?,
+                note: r.get(2)?,
+                done: r.get(3)?,
                 due: None,
                 list,
             },
-            r.get::<_, Option<String>>(3)?,
+            r.get::<_, Option<String>>(4)?,
         ))
     };
     let rows = match view {
@@ -220,6 +222,29 @@ pub fn set_list(conn: &Connection, id: TaskId, list: Option<ListId>) -> Result<(
         "UPDATE task SET list_id = ?1 WHERE id = ?2",
         (list.map(|l| l.0), id.0),
     )? {
+        0 => Err(TaskError::NotFound),
+        _ => Ok(()),
+    }
+}
+
+/// The title is trimmed and must not be empty; the note keeps inner newlines but loses
+/// trailing whitespace.
+pub fn update(conn: &Connection, id: TaskId, title: &str, note: &str) -> Result<(), TaskError> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(TaskError::EmptyTitle);
+    }
+    match conn.execute(
+        "UPDATE task SET title = ?1, note = ?2 WHERE id = ?3",
+        (title, note.trim_end(), id.0),
+    )? {
+        0 => Err(TaskError::NotFound),
+        _ => Ok(()),
+    }
+}
+
+pub fn delete(conn: &Connection, id: TaskId) -> Result<(), TaskError> {
+    match conn.execute("DELETE FROM task WHERE id = ?1", [id.0])? {
         0 => Err(TaskError::NotFound),
         _ => Ok(()),
     }
@@ -302,6 +327,7 @@ mod tests {
         Task {
             id: TaskId(1),
             title: String::new(),
+            note: String::new(),
             done,
             due: due.map(d),
             list: None,
@@ -380,6 +406,82 @@ mod tests {
         set_done(&conn, id, false).unwrap();
         assert!(done_at(&conn, id).is_none());
         assert!(!ls(&conn)[0].done);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn update_changes_title_and_note_and_trims() {
+        let (dir, conn) = setup("update");
+        let id = mk(&conn, "a").unwrap();
+        update(
+            &conn,
+            id,
+            "  new title 
+",
+            "  line 1
+
+line 3 
+	 ",
+        )
+        .unwrap();
+        let t = &ls(&conn)[0];
+        assert_eq!(t.title, "new title");
+        assert_eq!(
+            t.note,
+            "  line 1
+
+line 3"
+        );
+        update(&conn, id, "new title", "").unwrap();
+        assert_eq!(ls(&conn)[0].note, "");
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn update_with_empty_title_changes_nothing() {
+        let (dir, conn) = setup("update-empty");
+        let id = mk(&conn, "a").unwrap();
+        update(&conn, id, "a", "keep").unwrap();
+        assert!(matches!(
+            update(
+                &conn, id, " 
+", "other"
+            ),
+            Err(TaskError::EmptyTitle)
+        ));
+        let t = &ls(&conn)[0];
+        assert_eq!((t.title.as_str(), t.note.as_str()), ("a", "keep"));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn update_and_delete_unknown_id_are_not_found() {
+        let (dir, conn) = setup("edit-missing");
+        assert!(matches!(
+            update(&conn, TaskId(42), "a", ""),
+            Err(TaskError::NotFound)
+        ));
+        assert!(matches!(
+            delete(&conn, TaskId(42)),
+            Err(TaskError::NotFound)
+        ));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn delete_removes_the_task_and_its_count() {
+        let (dir, conn) = setup("delete");
+        let a = mk(&conn, "a").unwrap();
+        mk(&conn, "b").unwrap();
+        assert_eq!(counts(&conn, at(NOW)).unwrap().all, 2);
+        delete(&conn, a).unwrap();
+        assert_eq!(titles(&conn), ["b"]);
+        assert_eq!(counts(&conn, at(NOW)).unwrap().all, 1);
+        assert!(matches!(delete(&conn, a), Err(TaskError::NotFound)));
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }
