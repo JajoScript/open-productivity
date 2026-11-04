@@ -16,6 +16,11 @@ El workspace tiene dos crates:
 - `crates/app`: la aplicación de escritorio (binario `open-productivity`).
 
 
+## Datos
+
+Tus datos viven en la carpeta de instancia que elijas (cada una tiene su propia base `open-productivity.db`) y puedes tener varias y cambiar entre ellas desde Configuración > Datos. No guardes una instancia en una carpeta sincronizada (OneDrive, Dropbox, Google Drive): SQLite puede perder o corromper cambios ahí.
+
+
 ## Licencia
 
 Copyright (C) 2026 JajoScript
