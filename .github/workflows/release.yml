@@ -1,0 +1,36 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v5
+      - run: rustup toolchain install
+      - uses: Swatinem/rust-cache@v2
+      - name: Check the tag matches the workspace version
+        shell: bash
+        run: |
+          VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match workspace version v$VERSION in Cargo.toml"
+            exit 1
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - run: cargo build --release --locked
+      - name: Publish release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          EXE="open-productivity-$VERSION-windows-x86_64.exe"
+          cp target/release/open-productivity.exe "$EXE"
+          sha256sum "$EXE" > "$EXE.sha256"
+          gh release create "$GITHUB_REF_NAME" "$EXE" "$EXE.sha256" \
+            --title "Open Productivity $VERSION" --generate-notes
