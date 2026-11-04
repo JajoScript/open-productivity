@@ -12,7 +12,13 @@ pub use rusqlite::Connection;
 #[derive(Debug)]
 pub enum DbError {
     Sqlite(rusqlite::Error),
-    NewerSchema { found: u32, supported: u32 },
+    NewerSchema {
+        found: u32,
+        supported: u32,
+    },
+    Io(std::io::Error),
+    /// The export destination is the open database itself.
+    SameFile,
 }
 
 impl fmt::Display for DbError {
@@ -23,6 +29,8 @@ impl fmt::Display for DbError {
                 f,
                 "database schema v{found} is newer than supported v{supported}"
             ),
+            DbError::Io(e) => write!(f, "file error: {e}"),
+            DbError::SameFile => write!(f, "the destination is the open database itself"),
         }
     }
 }
@@ -31,7 +39,8 @@ impl std::error::Error for DbError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             DbError::Sqlite(e) => Some(e),
-            DbError::NewerSchema { .. } => None,
+            DbError::Io(e) => Some(e),
+            DbError::NewerSchema { .. } | DbError::SameFile => None,
         }
     }
 }
@@ -39,6 +48,12 @@ impl std::error::Error for DbError {
 impl From<rusqlite::Error> for DbError {
     fn from(e: rusqlite::Error) -> Self {
         DbError::Sqlite(e)
+    }
+}
+
+impl From<std::io::Error> for DbError {
+    fn from(e: std::io::Error) -> Self {
+        DbError::Io(e)
     }
 }
 
@@ -57,6 +72,32 @@ pub fn open(path: &Path) -> Result<Connection, DbError> {
     conn.busy_timeout(Duration::from_secs(5))?;
     migrate(&mut conn, MIGRATIONS)?;
     Ok(conn)
+}
+
+/// Writes a consistent copy of the database to `dest`, replacing any file there.
+pub fn export(conn: &Connection, dest: &Path) -> Result<(), DbError> {
+    if let Some(src) = conn.path().filter(|p| !p.is_empty()) {
+        let same = Path::new(src) == dest
+            || matches!((std::fs::canonicalize(src), std::fs::canonicalize(dest)),
+                (Ok(a), Ok(b)) if a == b);
+        if same {
+            return Err(DbError::SameFile);
+        }
+    }
+    // Copy beside the target and rename, so an existing file survives a failed copy.
+    let mut tmp = dest.as_os_str().to_owned();
+    tmp.push(".tmp");
+    let tmp = std::path::PathBuf::from(tmp);
+    // If removal fails, VACUUM INTO reports the real error.
+    let _ = std::fs::remove_file(&tmp);
+    let result = conn
+        .execute("VACUUM INTO ?1", [tmp.to_string_lossy()])
+        .map_err(DbError::from)
+        .and_then(|_| std::fs::rename(&tmp, dest).map_err(DbError::from));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result
 }
 
 fn migrate(conn: &mut Connection, migrations: &[&str]) -> Result<(), DbError> {
@@ -209,6 +250,53 @@ mod tests {
         assert!(migrate(&mut conn, &all).is_err());
         assert_eq!(version(&conn), MIGRATIONS.len() as u32);
         assert!(!has_table(&conn, "broken"));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_is_an_openable_copy() {
+        let (dir, db) = setup("export");
+        let conn = open(&db).unwrap();
+        conn.execute("INSERT INTO task (title) VALUES ('copied')", [])
+            .unwrap();
+        let dest = dir.join("copy.db");
+        export(&conn, &dest).unwrap();
+        assert!(!dir.join("copy.db.tmp").exists());
+        let copy = open(&dest).unwrap();
+        assert_eq!(version(&copy), version(&conn));
+        let n: u32 = copy
+            .query_row("SELECT count(*) FROM task WHERE title='copied'", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(n, 1);
+        drop((copy, conn));
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_replaces_an_existing_file() {
+        let (dir, db) = setup("export-over");
+        let conn = open(&db).unwrap();
+        let dest = dir.join("copy.db");
+        std::fs::write(&dest, b"old").unwrap();
+        export(&conn, &dest).unwrap();
+        assert_eq!(version(&open(&dest).unwrap()), version(&conn));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn export_onto_the_open_db_is_refused() {
+        let (dir, db) = setup("export-same");
+        let conn = open(&db).unwrap();
+        assert!(matches!(export(&conn, &db), Err(DbError::SameFile)));
+        // A different spelling of the same path is caught too.
+        let alias = dir.join(".").join("test.db");
+        assert!(matches!(export(&conn, &alias), Err(DbError::SameFile)));
+        assert_eq!(version(&conn), MIGRATIONS.len() as u32);
+        assert!(!dir.join("test.db.tmp").exists());
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }
