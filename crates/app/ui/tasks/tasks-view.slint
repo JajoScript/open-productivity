@@ -40,7 +40,7 @@ export component TasksView inherits VerticalLayout {
     callback clear-due(int);
     callback set-list(int, int);
     callback delete-list(int);
-    callback update-task(int, string, string);
+    callback update-task(int, string, string) -> bool;
     callback delete-task(int);
 
     // The task the editor shows; set before it opens.
@@ -140,7 +140,7 @@ export component TasksView inherits VerticalLayout {
         title: root.editing.title;
         note: root.editing.note;
         saved(id, title, note) => {
-            root.update-task(id, title, note);
+            return root.update-task(id, title, note);
         }
         deleted(id) => {
             root.delete-task(id);

@@ -30,7 +30,7 @@ export component AppWindow inherits Window {
     callback create-list(string);
     callback delete-list(int);
     callback set-list(int, int);
-    callback update-task(int, string, string);
+    callback update-task(int, string, string) -> bool;
     callback delete-task(int);
 
     title: "Open Productivity — " + instance-name;
@@ -130,7 +130,7 @@ export component AppWindow inherits Window {
                         root.delete-list(id);
                     }
                     update-task(id, title, note) => {
-                        root.update-task(id, title, note);
+                        return root.update-task(id, title, note);
                     }
                     delete-task(id) => {
                         root.delete-task(id);

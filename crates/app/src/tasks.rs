@@ -19,6 +19,8 @@ pub struct State {
     rows: Rc<VecModel<TaskRow>>,
     pub sidebar: Rc<VecModel<ListEntry>>,
     pub view: Cell<View>,
+    // Day of the last reload, so the timer only rebuilds rows when it changes.
+    day: Cell<NaiveDate>,
     pub window: slint::Weak<AppWindow>,
 }
 
@@ -49,6 +51,7 @@ impl State {
     /// Rows of the active view plus the sidebar.
     pub fn reload(&self) -> Result<(), String> {
         let now = Local::now().fixed_offset();
+        self.day.set(now.date_naive());
         let list = tasks::list(&self.conn, self.view.get(), now).map_err(|e| e.to_string())?;
         let mut out = Vec::with_capacity(list.len());
         for t in list {
@@ -82,6 +85,7 @@ pub fn init(window: &AppWindow, conn: Connection) -> Timer {
         rows: Rc::default(),
         sidebar: Rc::default(),
         view: Cell::new(View::Today),
+        day: Cell::new(Local::now().date_naive()),
         window: window.as_weak(),
     });
     window.set_tasks(ModelRc::from(state.rows.clone()));
@@ -173,8 +177,12 @@ pub fn init(window: &AppWindow, conn: Connection) -> Timer {
     window.on_update_task({
         let (state, after) = (state.clone(), after.clone());
         move |id, title, note| match tasks::update(&state.conn, TaskId(id.into()), &title, &note) {
-            Err(TaskError::EmptyTitle) => state.show_error(|s| s.get_title_empty()),
-            res => after(res),
+            // The editor stays open with the typed text and shows the message itself.
+            Err(TaskError::EmptyTitle) => false,
+            res => {
+                after(res);
+                true
+            }
         }
     });
 
@@ -187,7 +195,10 @@ pub fn init(window: &AppWindow, conn: Connection) -> Timer {
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_secs(60), move || {
-        finish(state.reload())
+        // set_vec closes open popups, so reload only when the day rolls over.
+        if Local::now().date_naive() != state.day.get() {
+            finish(state.reload())
+        }
     });
     timer
 }

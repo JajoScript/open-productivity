@@ -6,17 +6,19 @@ import { InkButton } from "../ink-button.slint";
 import { InkField } from "../ink-field.slint";
 import { InkTextArea } from "../ink-text-area.slint";
 import { SubtleButton } from "../subtle-button.slint";
+import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
 
 // Rebuilt on every show(), so the fields and the confirmation always start fresh.
 component EditorBody inherits FocusScope {
     in property <string> title;
     in property <string> note;
-    callback save(string, string);
+    callback save(string, string) -> bool;
     callback delete;
     callback cancel;
 
     property <bool> confirming;
+    property <bool> title-empty;
 
     capture-key-pressed(event) => {
         if event.text == Key.Escape {
@@ -45,15 +47,20 @@ component EditorBody inherits FocusScope {
                     self.focus();
                 }
                 accepted(text) => {
-                    root.save(text, note-field.text);
+                    title-empty = !root.save(text, note-field.text);
                 }
+            }
+
+            if root.title-empty: Text {
+                text: Strings.title-empty;
+                color: Theme.critical;
             }
 
             note-field := InkTextArea {
                 text: root.note;
                 placeholder-text: @tr("Note");
                 submitted => {
-                    root.save(title-field.text, self.text);
+                    title-empty = !root.save(title-field.text, self.text);
                 }
             }
 
@@ -83,7 +90,7 @@ component EditorBody inherits FocusScope {
                 InkButton {
                     text: @tr("Save");
                     clicked => {
-                        root.save(title-field.text, note-field.text);
+                        title-empty = !root.save(title-field.text, note-field.text);
                     }
                 }
             }
@@ -128,7 +135,8 @@ export component TaskEditor inherits PopupWindow {
     in property <int> task-id;
     in property <string> title;
     in property <string> note;
-    callback saved(int, string, string);
+    // Returns false when the task was not saved; the editor then stays open.
+    callback saved(int, string, string) -> bool;
     callback deleted(int);
 
     close-policy: close-on-click-outside;
@@ -143,8 +151,11 @@ export component TaskEditor inherits PopupWindow {
             title: root.title;
             note: root.note;
             save(title, note) => {
-                root.close();
-                root.saved(root.task-id, title, note);
+                if root.saved(root.task-id, title, note) {
+                    root.close();
+                    return true;
+                }
+                false
             }
             delete => {
                 root.close();
