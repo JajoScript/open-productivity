@@ -37,6 +37,18 @@ export global Strings {
         return @tr("Could not open the link: {}", error);
     }
 
+    public pure function synced-warning(path: string) -> string {
+        return @tr("{} looks like a synced folder (OneDrive, Dropbox, Google Drive). SQLite can lose or corrupt changes there. Use it anyway?", path);
+    }
+
+    public pure function already-instance(path: string) -> string {
+        return @tr("{} is already an instance. Use Open folder to open it.", path);
+    }
+
+    public pure function instances-failed(error: string) -> string {
+        return @tr("Could not change the instances: {}", error);
+    }
+
     out property <string> export-title: @tr("Export a copy");
 
     public pure function export-done(path: string) -> string {

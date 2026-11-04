@@ -5,7 +5,7 @@ import { Palette, ScrollView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { OptionRow } from "option-row.slint";
 import { SettingsTab } from "settings-tab.slint";
-import { DataSection } from "data-section.slint";
+import { DataSection, InstanceRow } from "data-section.slint";
 import { AboutSection } from "about-section.slint";
 import { LicenseOverlay } from "license-overlay.slint";
 
@@ -18,7 +18,13 @@ export component SettingsView inherits Rectangle {
     in property <string> license-text;
     in property <string> export-status;
     in property <bool> export-failed;
+    in property <[InstanceRow]> instances;
+    in property <string> instances-status;
     callback export-copy;
+    callback open-instance(string);
+    callback remove-instance(string);
+    callback new-instance;
+    callback open-folder;
     callback set-language(Language);
     callback open-source;
 
@@ -177,6 +183,20 @@ export component SettingsView inherits Rectangle {
                 accessible-label: @tr("Data");
                 status: root.export-status;
                 failed: root.export-failed;
+                instances: root.instances;
+                instances-status: root.instances-status;
+                open-instance(p) => {
+                    root.open-instance(p);
+                }
+                remove-instance(p) => {
+                    root.remove-instance(p);
+                }
+                new-instance => {
+                    root.new-instance();
+                }
+                open-folder => {
+                    root.open-folder();
+                }
                 export-copy => {
                     root.export-copy();
                 }

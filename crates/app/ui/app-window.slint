@@ -8,8 +8,9 @@ import { Calendar, MonthView } from "ink-date-popup.slint";
 import { ListEntry } from "list-entry.slint";
 import { Sidebar } from "sidebar.slint";
 import { Language, SettingsView } from "settings/settings-view.slint";
+import { InstanceRow } from "settings/data-section.slint";
 import { DueKind, TaskRow, TaskView, TasksView } from "tasks/tasks-view.slint";
-export { Calendar, Date, DueKind, Language, ListEntry, MonthView, Strings, TaskRow, TaskView }
+export { Calendar, Date, DueKind, InstanceRow, Language, ListEntry, MonthView, Strings, TaskRow, TaskView }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -28,6 +29,13 @@ export component AppWindow inherits Window {
     in property <string> license-text;
     in-out property <string> export-status;
     in property <bool> export-failed;
+    in property <[InstanceRow]> instances;
+    in-out property <string> instances-status;
+    callback instances-opened;
+    callback open-instance(string);
+    callback remove-instance(string);
+    callback new-instance;
+    callback open-folder;
     callback set-language(Language);
     callback open-source;
     callback export-copy;
@@ -54,6 +62,10 @@ export component AppWindow inherits Window {
     property <bool> settings-open;
     changed settings-open => {
         root.export-status = "";
+        root.instances-status = "";
+        if root.settings-open {
+            root.instances-opened();
+        }
         root.entering = true;
     }
     changed current-view => {
@@ -133,6 +145,20 @@ export component AppWindow inherits Window {
                     license-text: root.license-text;
                     export-status: root.export-status;
                     export-failed: root.export-failed;
+                    instances: root.instances;
+                    instances-status: root.instances-status;
+                    open-instance(p) => {
+                        root.open-instance(p);
+                    }
+                    remove-instance(p) => {
+                        root.remove-instance(p);
+                    }
+                    new-instance => {
+                        root.new-instance();
+                    }
+                    open-folder => {
+                        root.open-folder();
+                    }
                     export-copy => {
                         root.export-copy();
                     }

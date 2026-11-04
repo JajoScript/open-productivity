@@ -5,14 +5,125 @@ import { Palette } from "std-widgets.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 
-// Backup of the open instance: the save dialog and the export live in the app glue.
+export struct InstanceRow { path: string, name: string, current: bool, exists: bool }
+
+// Instances (data folders) and backup of the open one; dialogs and the work live in the app glue.
 export component DataSection inherits VerticalLayout {
     in property <string> status;
     in property <bool> failed;
+    in property <[InstanceRow]> instances;
+    in property <string> instances-status;
     callback export-copy;
+    callback open-instance(string);
+    callback remove-instance(string);
+    callback new-instance;
+    callback open-folder;
 
     spacing: 12px;
     alignment: start;
+
+    Text {
+        text: @tr("Instances");
+        font-weight: 700;
+        color: Palette.foreground.with-alpha(0.7);
+    }
+
+    Text {
+        text: @tr("Each instance is a folder with its own data. Only one is open at a time.");
+        wrap: word-wrap;
+    }
+
+    Text {
+        text: @tr("Don't keep instances in synced folders (OneDrive, Dropbox, Google Drive): SQLite can lose or corrupt changes there.");
+        wrap: word-wrap;
+        color: Theme.muted;
+    }
+
+    VerticalLayout {
+        spacing: 2px;
+        accessible-role: list;
+        accessible-label: @tr("Instances");
+        for row in root.instances: HorizontalLayout {
+            spacing: 8px;
+            VerticalLayout {
+                horizontal-stretch: 1;
+                min-width: 0px;
+                HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: row.name;
+                        font-weight: 600;
+                        overflow: elide;
+                    }
+
+                    if row.current: Text {
+                        text: @tr("Current");
+                        color: Theme.muted;
+                    }
+
+                    if !row.exists: Text {
+                        text: @tr("Not found");
+                        color: Theme.critical;
+                    }
+                }
+
+                Text {
+                    text: row.path;
+                    color: Theme.muted;
+                    overflow: elide;
+                }
+            }
+
+            if !row.current && row.exists: SubtleButton {
+                text: @tr("Open");
+                label: @tr("Open {}", row.name);
+                color: Palette.foreground;
+                clicked => {
+                    root.open-instance(row.path);
+                }
+            }
+
+            if !row.current: SubtleButton {
+                text: @tr("Remove from list");
+                label: @tr("Remove {} from list", row.name);
+                clicked => {
+                    root.remove-instance(row.path);
+                }
+            }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 8px;
+        alignment: start;
+        SubtleButton {
+            text: @tr("New instance…");
+            color: Palette.foreground;
+            clicked => {
+                root.new-instance();
+            }
+        }
+
+        SubtleButton {
+            text: @tr("Open folder…");
+            color: Palette.foreground;
+            clicked => {
+                root.open-folder();
+            }
+        }
+    }
+
+    if root.instances-status != "": Text {
+        text: root.instances-status;
+        wrap: word-wrap;
+        color: Theme.critical;
+    }
+
+    Text {
+        text: @tr("Backup");
+        font-weight: 700;
+        color: Palette.foreground.with-alpha(0.7);
+    }
 
     Text {
         text: @tr("Save a copy of this instance's database. You can open it later as an instance or keep it as a backup.");

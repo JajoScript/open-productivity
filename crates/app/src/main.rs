@@ -4,18 +4,22 @@
 // Hide the console window in release builds on Windows.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+use std::cell::Cell;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use open_productivity_core::db::{self, DbError};
 use open_productivity_core::instances::{self, Error};
-use rfd::{FileDialog, MessageButtons, MessageDialog, MessageDialogResult, MessageLevel};
+use rfd::{FileDialog, MessageButtons, MessageDialog, MessageLevel};
 
 mod about;
 mod calendar;
 mod data;
+mod dialogs;
+mod instances_ui;
 mod lists;
 mod settings;
 mod tasks;
@@ -59,22 +63,6 @@ fn warn(app_dir: &Path, msg: &str) {
     dialog(MessageLevel::Warning, msg);
 }
 
-/// Only a folder the user just picked may become an instance without asking,
-/// so a typo or a moved database never turns into a silent empty instance.
-fn confirm_new(s: &Strings, dir: &Path) -> bool {
-    dir.join("open-productivity.db").is_file()
-        || MessageDialog::new()
-            .set_level(MessageLevel::Warning)
-            .set_title(TITLE)
-            .set_description(
-                s.invoke_no_instance_here(dir.display().to_string().into())
-                    .as_str(),
-            )
-            .set_buttons(MessageButtons::YesNo)
-            .show()
-            == MessageDialogResult::Yes
-}
-
 /// Asks for a folder and remembers it; `None` when the user cancels.
 fn pick_and_register(s: &Strings, app_dir: &Path, registry: &Path) -> Option<PathBuf> {
     let dir = FileDialog::new()
@@ -95,13 +83,13 @@ fn choose_instance(s: &Strings, app_dir: &Path) -> Option<PathBuf> {
                 fatal(app_dir, &s.get_missing_arg())
             };
             let dir = PathBuf::from(p);
-            return confirm_new(s, &dir).then_some(dir);
+            return dialogs::confirm_new(s, &dir).then_some(dir);
         }
     }
 
     let registry = app_dir.join("instances.json");
     match instances::resolve(&registry) {
-        Ok(dir) if confirm_new(s, &dir) => return Some(dir),
+        Ok(dir) if dialogs::confirm_new(s, &dir) => return Some(dir),
         Ok(_) => {}
         Err(Error::Missing(None)) => {}
         Err(Error::Missing(Some(p))) => warn(
@@ -150,13 +138,15 @@ fn main() {
     if let Err(e) = fs::create_dir_all(&instance) {
         fatal(&app_dir, &s.invoke_failed(e.to_string().into()));
     }
-    let conn = match db::open(&instance.join("open-productivity.db")) {
+    let conn = match db::open(&instance.join(db::FILE_NAME)) {
         Ok(c) => c,
         Err(DbError::NewerSchema { .. }) => fatal(&app_dir, &s.get_newer_schema()),
         Err(e) => fatal(&app_dir, &s.invoke_db_failed(e.to_string().into())),
     };
     calendar::init(&window);
-    let _tasks_timer = tasks::init(&window, conn);
+    let switching = Rc::new(Cell::new(false));
+    instances_ui::init(&window, &app_dir, &instance, &switching);
+    let tasks_timer = tasks::init(&window, conn);
 
     let name = instance.file_name().map_or_else(
         || instance.display().to_string(),
@@ -166,5 +156,20 @@ fn main() {
     if let Err(e) = window.run() {
         fatal(&app_dir, &s.invoke_failed(e.to_string().into()));
     }
-    drop(lock);
+    if switching.get() {
+        // Release the database and the lock before the new process needs them. The window
+        // owns the callbacks that hold the connection, so it goes too.
+        drop(tasks_timer);
+        drop(window);
+        drop(lock);
+        let spawned =
+            std::env::current_exe().and_then(|exe| std::process::Command::new(exe).spawn());
+        if let Err(e) = spawned {
+            // The window (and its translations) is gone, so this message stays in English.
+            fatal(
+                &app_dir,
+                &format!("Could not restart Open Productivity: {e}"),
+            );
+        }
+    }
 }

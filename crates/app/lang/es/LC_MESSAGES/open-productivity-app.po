@@ -254,3 +254,48 @@ msgstr "Copia guardada en {}"
 
 msgid "Could not export the copy: {}"
 msgstr "No se pudo exportar la copia: {}"
+
+msgid "{} looks like a synced folder (OneDrive, Dropbox, Google Drive). SQLite can lose or corrupt changes there. Use it anyway?"
+msgstr "{} parece una carpeta sincronizada (OneDrive, Dropbox, Google Drive). SQLite puede perder o corromper cambios ahí. ¿Usarla de todos modos?"
+
+msgid "{} is already an instance. Use Open folder to open it."
+msgstr "{} ya es una instancia. Usa Abrir carpeta para abrirla."
+
+msgid "Could not change the instances: {}"
+msgstr "No se pudieron cambiar las instancias: {}"
+
+msgid "Instances"
+msgstr "Instancias"
+
+msgid "Each instance is a folder with its own data. Only one is open at a time."
+msgstr "Cada instancia es una carpeta con sus propios datos. Solo hay una abierta a la vez."
+
+msgid "Don't keep instances in synced folders (OneDrive, Dropbox, Google Drive): SQLite can lose or corrupt changes there."
+msgstr "No guardes instancias en carpetas sincronizadas (OneDrive, Dropbox, Google Drive): SQLite puede perder o corromper cambios ahí."
+
+msgid "Current"
+msgstr "Actual"
+
+msgid "Not found"
+msgstr "No encontrada"
+
+msgid "Open"
+msgstr "Abrir"
+
+msgid "Open {}"
+msgstr "Abrir {}"
+
+msgid "Remove from list"
+msgstr "Quitar de la lista"
+
+msgid "Remove {} from list"
+msgstr "Quitar {} de la lista"
+
+msgid "New instance…"
+msgstr "Nueva instancia…"
+
+msgid "Open folder…"
+msgstr "Abrir carpeta…"
+
+msgid "Backup"
+msgstr "Respaldo"
