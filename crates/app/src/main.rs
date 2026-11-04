@@ -15,6 +15,7 @@ use rfd::{FileDialog, MessageButtons, MessageDialog, MessageDialogResult, Messag
 
 mod calendar;
 mod lists;
+mod settings;
 mod tasks;
 
 slint::include_modules!();
@@ -120,6 +121,8 @@ fn main() {
         Ok(w) => w,
         Err(e) => fatal(&app_dir, &format!("Could not start Open Productivity: {e}")),
     };
+    // Before any dialog, so they are translated too.
+    settings::init(&window, &app_dir);
     let s = window.global::<Strings>();
     if let Err(e) = fs::create_dir_all(&app_dir) {
         fatal(&app_dir, &s.invoke_failed(e.to_string().into()));

@@ -191,3 +191,15 @@ msgstr "¿Eliminar \"{}\"? No se puede deshacer."
 
 msgid "Has a note"
 msgstr "Tiene una nota"
+
+msgid "Could not save the settings: {}"
+msgstr "No se pudieron guardar los ajustes: {}"
+
+msgid "Settings"
+msgstr "Configuración"
+
+msgid "Language"
+msgstr "Idioma"
+
+msgid "System"
+msgstr "Sistema"

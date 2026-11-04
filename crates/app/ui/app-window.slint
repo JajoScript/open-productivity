@@ -7,8 +7,9 @@ import { Strings } from "strings.slint";
 import { Calendar, MonthView } from "ink-date-popup.slint";
 import { ListEntry } from "list-entry.slint";
 import { Sidebar } from "sidebar.slint";
+import { Language, SettingsView } from "settings/settings-view.slint";
 import { DueKind, TaskRow, TaskView, TasksView } from "tasks/tasks-view.slint";
-export { Calendar, Date, DueKind, ListEntry, MonthView, Strings, TaskRow, TaskView }
+export { Calendar, Date, DueKind, Language, ListEntry, MonthView, Strings, TaskRow, TaskView }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -21,6 +22,9 @@ export component AppWindow inherits Window {
     in property <int> today-count;
     in property <int> all-count;
     in property <[ListEntry]> lists;
+    in property <Language> current-language;
+    in property <string> settings-error;
+    callback set-language(Language);
     callback select-view(TaskView);
     callback create-task(string);
     callback set-done(int, bool);
@@ -40,6 +44,11 @@ export component AppWindow inherits Window {
     // Signature motion: on every view change the content is hidden for one frame,
     // then fades in and rises into place.
     property <bool> entering;
+    // Settings is a page of its own, not a task view; any task navigation leaves it.
+    property <bool> settings-open;
+    changed settings-open => {
+        root.entering = true;
+    }
     changed current-view => {
         root.entering = true;
     }
@@ -63,10 +72,16 @@ export component AppWindow inherits Window {
             today-count: root.today-count;
             all-count: root.all-count;
             lists: root.lists;
+            settings-open: root.settings-open;
+            open-settings => {
+                root.settings-open = true;
+            }
             select-view(v) => {
+                root.settings-open = false;
                 root.select-view(v);
             }
             select-list(id) => {
+                root.settings-open = false;
                 root.select-list(id);
             }
             create-list(name) => {
@@ -102,7 +117,17 @@ export component AppWindow inherits Window {
                     }
                 ]
 
-                TasksView {
+                if root.settings-open: SettingsView {
+                    width: parent.width;
+                    height: parent.height;
+                    language: root.current-language;
+                    error: root.settings-error;
+                    set-language(l) => {
+                        root.set-language(l);
+                    }
+                }
+
+                if !root.settings-open: TasksView {
                     width: parent.width;
                     height: parent.height;
                     view: root.current-view;

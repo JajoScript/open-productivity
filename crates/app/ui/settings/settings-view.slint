@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { OptionRow } from "option-row.slint";
+
+export enum Language { system, spanish, english }
+
+export component SettingsView inherits VerticalLayout {
+    in property <Language> language;
+    in property <string> error;
+    callback set-language(Language);
+
+    // Arrow keys move the choice and the focus together, like a native radio group.
+    function go(from: int, delta: int) {
+        if (from + delta < 0 || from + delta > 2) {
+            return;
+        }
+        if (from + delta == 0) {
+            system.focus();
+            root.set-language(Language.system);
+        } else if (from + delta == 1) {
+            spanish.focus();
+            root.set-language(Language.spanish);
+        } else {
+            english.focus();
+            root.set-language(Language.english);
+        }
+    }
+
+    padding: 24px;
+    padding-top: 20px;
+    spacing: 12px;
+    alignment: start;
+
+    Text {
+        text: @tr("Settings");
+        font-size: 24px;
+        font-weight: 700;
+        overflow: elide;
+    }
+
+    Text {
+        text: @tr("Language");
+        font-weight: 700;
+        color: Palette.foreground.with-alpha(0.7);
+    }
+
+    VerticalLayout {
+        spacing: 2px;
+        max-width: 360px;
+        accessible-role: list;
+        accessible-label: @tr("Language");
+        // Language names stay in their own language so they can always be found.
+        system := OptionRow {
+            text: @tr("System");
+            checked: root.language == Language.system;
+            chosen => {
+                root.set-language(Language.system);
+            }
+            step(d) => {
+                root.go(0, d);
+            }
+        }
+
+        spanish := OptionRow {
+            text: "Español";
+            checked: root.language == Language.spanish;
+            chosen => {
+                root.set-language(Language.spanish);
+            }
+            step(d) => {
+                root.go(1, d);
+            }
+        }
+
+        english := OptionRow {
+            text: "English";
+            checked: root.language == Language.english;
+            chosen => {
+                root.set-language(Language.english);
+            }
+            step(d) => {
+                root.go(2, d);
+            }
+        }
+    }
+
+    if root.error != "": Text {
+        text: root.error;
+        color: Theme.critical;
+        wrap: word-wrap;
+    }
+}
