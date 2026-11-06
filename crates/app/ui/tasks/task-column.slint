@@ -3,7 +3,6 @@
 
 import { Button, Date, ListView, Palette } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
-import { InkField } from "../ink-field.slint";
 import { InkCheck } from "../ink-check.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
@@ -25,13 +24,194 @@ export struct TaskRow {
     due-month: int,
     due-year: int,
     list-name: string,
+    // From core (`first_done`): this row opens the "Completed" section.
+    first-done: bool,
 }
 
+// Row-shaped field for a new task: an empty box where the checkbox goes, no frame.
+component AddRow inherits Rectangle {
+    callback accepted(string);
+
+    height: 40px;
+    border-radius: 6px;
+    background: input.has-focus ? transparent : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+
+    touch := TouchArea {
+        mouse-cursor: MouseCursor.text;
+        clicked => {
+            input.focus();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 10px;
+        spacing: 4px;
+        Rectangle {
+            width: 32px;
+            Rectangle {
+                width: 18px;
+                height: 18px;
+                border-radius: 5px;
+                border-width: 1.5px;
+                border-color: Theme.hairline;
+            }
+        }
+
+        Rectangle {
+            if input.text == "": Text {
+                x: 6px;
+                width: parent.width - 12px;
+                height: parent.height;
+                text: @tr("Add task…");
+                color: Theme.muted;
+                vertical-alignment: center;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            input := TextInput {
+                x: 6px;
+                width: parent.width - 12px;
+                height: parent.height;
+                vertical-alignment: center;
+                single-line: true;
+                color: Palette.foreground;
+                selection-background-color: Theme.selection;
+                selection-foreground-color: Palette.foreground;
+                accessible-label: @tr("Add task…");
+                accepted => {
+                    root.accepted(self.text);
+                    self.text = "";
+                }
+            }
+        }
+    }
+}
+
+// One task: checkbox, title (opens the editor), note mark, list and due date.
+component TaskLine inherits Rectangle {
+    in property <TaskRow> task;
+    in property <[ListEntry]> lists;
+    callback toggled(bool);
+    callback opened;
+    callback list-picked(int);
+    callback due-picked(Date);
+    callback due-cleared;
+
+    height: 40px;
+    border-radius: 6px;
+    background: row-touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+
+    // Under the controls, so it only tracks hover for the row highlight.
+    row-touch := TouchArea { }
+
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 4px;
+        spacing: 4px;
+        InkCheck {
+            checked: root.task.done;
+            label: root.task.title;
+            toggled(done) => {
+                root.toggled(done);
+            }
+        }
+
+        // Plain text with a wash on hover; opens the editor.
+        Rectangle {
+            horizontal-stretch: 1;
+            border-radius: 4px;
+            background: title-touch.pressed ? Theme.pressed : title-touch.has-hover ? Theme.hover : transparent;
+            animate background { duration: Theme.fast; easing: Theme.ease-out; }
+            forward-focus: title-focus;
+            accessible-role: button;
+            accessible-label: root.task.title;
+            accessible-action-default => {
+                root.opened();
+            }
+
+            Text {
+                x: 6px;
+                width: parent.width - 12px;
+                height: parent.height;
+                text: root.task.title;
+                vertical-alignment: center;
+                overflow: elide;
+                color: root.task.done ? Palette.foreground.with-alpha(0.45) : Palette.foreground;
+                animate color { duration: Theme.fast; easing: Theme.ease-out; }
+                accessible-role: none;
+            }
+
+            title-touch := TouchArea {
+                clicked => {
+                    root.opened();
+                }
+            }
+
+            title-focus := FocusScope {
+                width: 0px; // keyboard only; clicks go to the TouchArea
+                key-pressed(event) => {
+                    if event.text == Key.Space || event.text == Key.Return {
+                        root.opened();
+                        return accept;
+                    }
+                    reject
+                }
+            }
+
+            if title-focus.has-focus: Rectangle {
+                border-radius: 5px;
+                border-width: 2px;
+                border-color: Palette.foreground;
+            }
+        }
+
+        // The slot stays reserved so the list column lines up across rows.
+        Rectangle {
+            width: 16px;
+            if root.task.note != "": Image {
+                source: @image-url("../icons/notebook-text.svg");
+                colorize: Theme.muted;
+                width: 16px;
+                height: 16px;
+                y: (parent.height - self.height) / 2;
+                accessible-role: image;
+                accessible-label: @tr("Has a note");
+            }
+        }
+
+        ListButton {
+            name: root.task.list-name;
+            lists: root.lists;
+            picked(list-id) => {
+                root.list-picked(list-id);
+            }
+        }
+
+        DueButton {
+            kind: root.task.due-kind;
+            day: root.task.due-day;
+            month: root.task.due-month;
+            year: root.task.due-year;
+            picked(date) => {
+                root.due-picked(date);
+            }
+            cleared => {
+                root.due-cleared();
+            }
+        }
+    }
+}
 // The tasks of one view: title, new task field and the rows.
 export component TaskColumn inherits VerticalLayout {
     in property <TaskView> view;
     // From core (`View::can_create`): whether the view takes new tasks.
     in property <bool> can-create;
+    in property <int> pending-count;
+    in property <int> done-count;
     in property <[TaskRow]> tasks;
     in property <string> error;
     in property <int> list-id;
@@ -65,6 +245,12 @@ export component TaskColumn inherits VerticalLayout {
             font-size: 24px;
             font-weight: 700;
             overflow: elide;
+        }
+
+        Text {
+            text: @tr("{n} pending" | "{n} pending" % root.pending-count);
+            color: Theme.muted;
+            vertical-alignment: center;
             horizontal-stretch: 1;
         }
 
@@ -116,22 +302,9 @@ export component TaskColumn inherits VerticalLayout {
         }
     }
 
-    if root.can-create: HorizontalLayout {
-        spacing: 8px;
-        input := InkField {
-            placeholder-text: @tr("New task");
-            accepted(text) => {
-                root.create-task(text);
-                self.text = "";
-            }
-        }
-
-        InkButton {
-            text: @tr("Add");
-            clicked => {
-                root.create-task(input.text);
-                input.text = "";
-            }
+    if root.can-create: AddRow {
+        accepted(text) => {
+            root.create-task(text);
         }
     }
 
@@ -165,109 +338,33 @@ export component TaskColumn inherits VerticalLayout {
     }
 
     if root.tasks.length > 0: ListView {
-        for row in root.tasks: Rectangle {
-            height: 40px;
-            border-radius: 6px;
-            background: row-touch.has-hover ? Theme.hover : transparent;
-            animate background { duration: Theme.fast; easing: Theme.ease-out; }
+        for row in root.tasks: VerticalLayout {
+            if row.first-done: Text {
+                text: @tr("COMPLETED · {}", root.done-count);
+                font-size: 12px;
+                font-weight: 600;
+                color: Theme.muted;
+                height: 36px;
+                vertical-alignment: bottom;
+            }
 
-            // Under the controls, so it only tracks hover for the row highlight.
-            row-touch := TouchArea { }
-
-            HorizontalLayout {
-                padding-left: 4px;
-                padding-right: 4px;
-                spacing: 4px;
-                InkCheck {
-                    checked: row.done;
-                    label: row.title;
-                    toggled(done) => {
-                        root.set-done(row.id, done);
-                    }
+            TaskLine {
+                task: row;
+                lists: root.lists;
+                toggled(done) => {
+                    root.set-done(row.id, done);
                 }
-
-                // Plain text with a wash on hover; opens the editor.
-                Rectangle {
-                    horizontal-stretch: 1;
-                    border-radius: 4px;
-                    background: title-touch.pressed ? Theme.pressed : title-touch.has-hover ? Theme.hover : transparent;
-                    animate background { duration: Theme.fast; easing: Theme.ease-out; }
-                    forward-focus: title-focus;
-                    accessible-role: button;
-                    accessible-label: row.title;
-                    accessible-action-default => {
-                        root.open-editor(row);
-                    }
-
-                    Text {
-                        x: 6px;
-                        width: parent.width - 12px;
-                        height: parent.height;
-                        text: row.title;
-                        vertical-alignment: center;
-                        overflow: elide;
-                        color: row.done ? Palette.foreground.with-alpha(0.45) : Palette.foreground;
-                        animate color { duration: Theme.fast; easing: Theme.ease-out; }
-                        accessible-role: none;
-                    }
-
-                    title-touch := TouchArea {
-                        clicked => {
-                            root.open-editor(row);
-                        }
-                    }
-
-                    title-focus := FocusScope {
-                        width: 0px; // keyboard only; clicks go to the TouchArea
-                        key-pressed(event) => {
-                            if event.text == Key.Space || event.text == Key.Return {
-                                root.open-editor(row);
-                                return accept;
-                            }
-                            reject
-                        }
-                    }
-
-                    if title-focus.has-focus: Rectangle {
-                        border-radius: 5px;
-                        border-width: 2px;
-                        border-color: Palette.foreground;
-                    }
+                opened => {
+                    root.open-editor(row);
                 }
-
-                // The slot stays reserved so the list column lines up across rows.
-                Rectangle {
-                    width: 16px;
-                    if row.note != "": Image {
-                        source: @image-url("../icons/notebook-text.svg");
-                        colorize: Theme.muted;
-                        width: 16px;
-                        height: 16px;
-                        y: (parent.height - self.height) / 2;
-                        accessible-role: image;
-                        accessible-label: @tr("Has a note");
-                    }
+                list-picked(list-id) => {
+                    root.set-list(row.id, list-id);
                 }
-
-                ListButton {
-                    name: row.list-name;
-                    lists: root.lists;
-                    picked(list-id) => {
-                        root.set-list(row.id, list-id);
-                    }
+                due-picked(date) => {
+                    root.set-due(row.id, date);
                 }
-
-                DueButton {
-                    kind: row.due-kind;
-                    day: row.due-day;
-                    month: row.due-month;
-                    year: row.due-year;
-                    picked(date) => {
-                        root.set-due(row.id, date);
-                    }
-                    cleared => {
-                        root.clear-due(row.id);
-                    }
+                due-cleared => {
+                    root.clear-due(row.id);
                 }
             }
         }

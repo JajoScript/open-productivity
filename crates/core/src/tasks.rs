@@ -82,6 +82,23 @@ impl Counts {
             .find(|(l, _)| *l == id)
             .map_or(0, |(_, n)| *n)
     }
+
+    pub fn for_view(&self, view: View) -> u32 {
+        match view {
+            View::Today => self.today,
+            View::Scheduled => self.scheduled,
+            View::Inbox => self.inbox,
+            View::Overdue => self.overdue,
+            View::All => self.all,
+            View::List(id) => self.for_list(id),
+        }
+    }
+}
+
+/// Index of the first done task in a `list` result, which puts every pending task first;
+/// the length when nothing is done.
+pub fn first_done(tasks: &[Task]) -> usize {
+    tasks.partition_point(|t| !t.done)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -648,20 +665,20 @@ line 3"
             set_done(&conn, id, done).unwrap();
         }
         let c = counts(&conn, at(NOW)).unwrap();
-        for (view, n) in [
-            (View::Today, c.today),
-            (View::Scheduled, c.scheduled),
-            (View::Inbox, c.inbox),
-            (View::Overdue, c.overdue),
-            (View::All, c.all),
-            (View::List(work), c.for_list(work)),
+        for view in [
+            View::Today,
+            View::Scheduled,
+            View::Inbox,
+            View::Overdue,
+            View::All,
+            View::List(work),
         ] {
-            let pending = list(&conn, view, at(NOW))
-                .unwrap()
-                .iter()
-                .filter(|t| !t.done)
-                .count();
-            assert_eq!(pending, n as usize, "{view:?}");
+            let tasks = list(&conn, view, at(NOW)).unwrap();
+            let pending = tasks.iter().filter(|t| !t.done).count();
+            assert_eq!(pending, c.for_view(view) as usize, "{view:?}");
+            // Pending first, so the done ones start right after them.
+            assert_eq!(first_done(&tasks), pending, "{view:?}");
+            assert!(tasks[first_done(&tasks)..].iter().all(|t| t.done));
         }
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);

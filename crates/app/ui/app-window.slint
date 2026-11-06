@@ -22,6 +22,11 @@ export component AppWindow inherits Window {
     in property <int> current-list-id;
     in property <string> current-list-name;
     in property <bool> can-create;
+    in property <int> pending-count;
+    in property <int> done-count;
+    in property <Date> today;
+    // 0 is Monday.
+    in property <int> today-weekday;
     in property <ViewCounts> counts;
     in property <[ListEntry]> lists;
     in property <Language> current-language;
@@ -165,6 +170,10 @@ export component AppWindow inherits Window {
                     instance-name: root.instance-name;
                     view: root.current-view;
                     can-create: root.can-create;
+                    pending-count: root.pending-count;
+                    done-count: root.done-count;
+                    today: root.today;
+                    today-weekday: root.today-weekday;
                     counts: root.counts;
                     select-view(v) => {
                         root.select-view(v);

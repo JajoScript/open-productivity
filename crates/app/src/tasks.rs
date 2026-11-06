@@ -56,8 +56,10 @@ impl State {
         let now = Local::now().fixed_offset();
         self.day.set(now.date_naive());
         let list = tasks::list(&self.conn, self.view.get(), now).map_err(|e| e.to_string())?;
+        let first_done = tasks::first_done(&list);
+        let done_count = ui_id((list.len() - first_done) as i64)?;
         let mut out = Vec::with_capacity(list.len());
-        for t in list {
+        for (i, t) in list.into_iter().enumerate() {
             let id = ui_id(t.id.0)?;
             let kind = ui_kind(tasks::due_label(&t, now.date_naive()));
             // The date parts are always the stored due date (0 when none).
@@ -74,9 +76,20 @@ impl State {
                 due_month: month,
                 due_year: year,
                 list_name: t.list.map(|(_, name)| name).unwrap_or_default().into(),
+                first_done: i == first_done,
             });
         }
         self.rows.set_vec(out);
+        if let Some(w) = self.window.upgrade() {
+            w.set_done_count(done_count);
+            let today = now.date_naive();
+            w.set_today(Date {
+                year: today.year(),
+                month: today.month() as i32,
+                day: today.day() as i32,
+            });
+            w.set_today_weekday(today.weekday().num_days_from_monday() as i32);
+        }
         self.reload_panel()
     }
 }

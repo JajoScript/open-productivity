@@ -3,6 +3,7 @@
 
 import { Date, Palette } from "std-widgets.slint";
 import { ListEntry } from "../list-entry.slint";
+import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
 import { ListsPanel, ViewCounts } from "lists-panel.slint";
 import { DueKind, TaskColumn, TaskRow, TaskView } from "task-column.slint";
@@ -76,6 +77,11 @@ export component TasksView inherits VerticalLayout {
     in property <string> instance-name;
     in property <TaskView> view;
     in property <bool> can-create;
+    in property <int> pending-count;
+    in property <int> done-count;
+    in property <Date> today;
+    // 0 is Monday.
+    in property <int> today-weekday;
     in property <[TaskRow]> tasks;
     in property <string> error;
     in property <int> list-id;
@@ -100,10 +106,16 @@ export component TasksView inherits VerticalLayout {
         padding-top: 8px;
         HorizontalLayout {
             spacing: 16px;
+            Text {
+                text: Strings.long-date(root.today.day, root.today.month, root.today-weekday);
+                font-weight: 700;
+                vertical-alignment: center;
+            }
+
             // The open instance, so the user always knows which data they are looking at.
             Text {
                 text: root.instance-name;
-                font-weight: 600;
+                color: Theme.muted;
                 overflow: elide;
                 vertical-alignment: center;
                 horizontal-stretch: 1;
@@ -158,6 +170,8 @@ export component TasksView inherits VerticalLayout {
         TaskColumn {
             view: root.view;
             can-create: root.can-create;
+            pending-count: root.pending-count;
+            done-count: root.done-count;
             tasks: root.tasks;
             error: root.error;
             list-id: root.list-id;

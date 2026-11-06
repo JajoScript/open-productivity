@@ -39,12 +39,6 @@ msgstr "No se pudo guardar la tarea: {}"
 msgid "Tasks"
 msgstr "Tareas"
 
-msgid "New task"
-msgstr "Nueva tarea"
-
-msgid "Add"
-msgstr "Añadir"
-
 msgid "No tasks yet. Add your first one above."
 msgstr "Aún no hay tareas. Añade la primera arriba."
 
@@ -330,3 +324,38 @@ msgstr "El inbox está vacío."
 
 msgid "Nothing overdue."
 msgstr "No hay nada atrasado."
+
+msgid "Add task…"
+msgstr "Añadir tarea…"
+
+msgid "{n} pending"
+msgid_plural "{n} pending"
+msgstr[0] "{n} pendiente"
+msgstr[1] "{n} pendientes"
+
+msgid "COMPLETED · {}"
+msgstr "COMPLETADAS · {}"
+
+msgid "{0}, {1} {2}"
+msgstr "{0}, {2} de {1}"
+
+msgid "Monday"
+msgstr "Lunes"
+
+msgid "Tuesday"
+msgstr "Martes"
+
+msgid "Wednesday"
+msgstr "Miércoles"
+
+msgid "Thursday"
+msgstr "Jueves"
+
+msgid "Friday"
+msgstr "Viernes"
+
+msgid "Saturday"
+msgstr "Sábado"
+
+msgid "Sunday"
+msgstr "Domingo"

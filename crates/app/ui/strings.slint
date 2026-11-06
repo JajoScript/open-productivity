@@ -77,6 +77,16 @@ export global Strings {
         return @tr("{0} {1}", month-name(month), year);
     }
 
+    // Header of the Tasks module, e.g. "Thursday, November 5"; translations reorder it.
+    public pure function long-date(day: int, month: int, weekday: int) -> string {
+        return @tr("{0}, {1} {2}", weekday-name(weekday), month-name(month), day);
+    }
+
+    // 0 is Monday.
+    pure function weekday-name(weekday: int) -> string {
+        return weekday == 0 ? @tr("Monday") : weekday == 1 ? @tr("Tuesday") : weekday == 2 ? @tr("Wednesday") : weekday == 3 ? @tr("Thursday") : weekday == 4 ? @tr("Friday") : weekday == 5 ? @tr("Saturday") : @tr("Sunday");
+    }
+
     pure function month-name(month: int) -> string {
         return month == 1 ? @tr("January") : month == 2 ? @tr("February") : month == 3 ? @tr("March") : month == 4 ? @tr("April") : month == 5 ? @tr("May") : month == 6 ? @tr("June") : month == 7 ? @tr("July") : month == 8 ? @tr("August") : month == 9 ? @tr("September") : month == 10 ? @tr("October") : month == 11 ? @tr("November") : @tr("December");
     }

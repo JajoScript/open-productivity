@@ -51,6 +51,7 @@ impl State {
                 all: ui_id(counts.all.into())?,
             });
             w.set_can_create(view.can_create());
+            w.set_pending_count(ui_id(counts.for_view(view).into())?);
             w.set_current_list_name(current_name.into());
             w.set_current_list_id(match view {
                 View::List(id) => ui_id(id.0)?,

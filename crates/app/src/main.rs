@@ -227,6 +227,14 @@ mod tests {
     }
 
     #[test]
+    fn long_date_names_the_weekday_month_and_day() {
+        let w = window();
+        let s = w.global::<Strings>();
+        // 0 is Monday, so 3 is Thursday.
+        assert_eq!(s.invoke_long_date(5, 11, 3), "Thursday, November 5");
+    }
+
+    #[test]
     fn rail_switches_modules_and_the_tasks_tab_survives() {
         let w = window();
         // The lists panel only shows in the Lists tab.
