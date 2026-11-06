@@ -45,6 +45,12 @@ pub fn month_grid(year: i32, month: u32, delta: i32, today: NaiveDate) -> Option
     })
 }
 
+/// Monday of the week that holds `date`.
+// shortcut: weeks start on Monday, like `month_grid`; follow the locale with a first-day option.
+pub fn week_start(date: NaiveDate) -> NaiveDate {
+    date - TimeDelta::days(date.weekday().num_days_from_monday().into())
+}
+
 /// The date `days` away from `date` (negative goes back); `None` out of the supported range.
 pub fn shift(date: NaiveDate, days: i64) -> Option<NaiveDate> {
     date.checked_add_signed(TimeDelta::try_days(days)?)
@@ -114,6 +120,15 @@ mod tests {
     fn invalid_month_is_none() {
         assert_eq!(month_grid(2026, 0, 0, d("2026-11-03")), None);
         assert_eq!(month_grid(2026, 13, 0, d("2026-11-03")), None);
+    }
+
+    #[test]
+    fn week_starts_on_monday() {
+        // 2026-11-05 is a Thursday.
+        assert_eq!(week_start(d("2026-11-05")), d("2026-11-02"));
+        assert_eq!(week_start(d("2026-11-02")), d("2026-11-02"));
+        // Sunday belongs to the week before, across a year boundary.
+        assert_eq!(week_start(d("2027-01-03")), d("2026-12-28"));
     }
 
     #[test]

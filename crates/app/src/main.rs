@@ -23,6 +23,7 @@ mod instances_ui;
 mod lists;
 mod settings;
 mod tasks;
+mod week;
 
 slint::include_modules!();
 
@@ -224,6 +225,22 @@ mod tests {
         let esc = slint::platform::Key::Escape.into();
         w.window().dispatch_event(E::KeyPressed { text: esc });
         assert!(find(&w, "List name").is_none());
+    }
+
+    #[test]
+    fn week_tab_replaces_the_lists_and_tasks() {
+        let w = window();
+        click(&w, "Week");
+        assert!(find(&w, "Next week").is_some());
+        assert!(find(&w, "Add task…").is_none());
+        click(&w, "Lists");
+        assert!(find(&w, "Next week").is_none());
+        assert!(find(&w, "New list").is_some());
+        let s = w.global::<Strings>();
+        assert_eq!(
+            s.invoke_week_range(30, 11, 6, 12),
+            "November 30 – December 6"
+        );
     }
 
     #[test]

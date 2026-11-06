@@ -7,20 +7,28 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
+use open_productivity_core::calendar;
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
-use open_productivity_core::tasks::{self, DueLabel, TaskError, TaskId, View};
+use open_productivity_core::tasks::{self, DueLabel, Task, TaskError, TaskId, View};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
-use crate::{AppWindow, Date, DueKind, ListEntry, Strings, TaskRow, TaskView, lists};
+use crate::{
+    AppWindow, Date, DueKind, ListEntry, Strings, TaskRow, TaskView, TasksTab, WeekDay, lists, week,
+};
 
 pub struct State {
     pub conn: Rc<Connection>,
     rows: Rc<VecModel<TaskRow>>,
     pub panel: Rc<VecModel<ListEntry>>,
     pub view: Cell<View>,
+    /// The open tab, so a reload only queries what is on screen.
+    pub tab: Cell<TasksTab>,
+    /// Monday of the week the Week tab shows.
+    pub monday: Cell<NaiveDate>,
+    pub week: Rc<VecModel<WeekDay>>,
     // Day of the last reload, so the timer only rebuilds rows when it changes.
-    day: Cell<NaiveDate>,
+    pub day: Cell<NaiveDate>,
     pub window: slint::Weak<AppWindow>,
 }
 
@@ -50,45 +58,54 @@ fn ui_kind(l: Option<DueLabel>) -> DueKind {
     }
 }
 
+pub fn task_row(t: Task, today: NaiveDate, first_done: bool) -> Result<TaskRow, String> {
+    let kind = ui_kind(tasks::due_label(&t, today));
+    // The date parts are always the stored due date (0 when none).
+    let (day, month, year) = t
+        .due
+        .map_or((0, 0, 0), |d| (d.day() as i32, d.month() as i32, d.year()));
+    Ok(TaskRow {
+        id: ui_id(t.id.0)?,
+        title: t.title.into(),
+        note: t.note.into(),
+        done: t.done,
+        due_kind: kind,
+        due_day: day,
+        due_month: month,
+        due_year: year,
+        list_name: t.list.map(|(_, name)| name).unwrap_or_default().into(),
+        first_done,
+    })
+}
+
 impl State {
-    /// Rows of the active view plus the lists panel.
+    /// Only what the open tab shows: the week, or the view's rows plus the lists panel.
     pub fn reload(&self) -> Result<(), String> {
         let now = Local::now().fixed_offset();
-        self.day.set(now.date_naive());
-        let list = tasks::list(&self.conn, self.view.get(), now).map_err(|e| e.to_string())?;
-        let first_done = tasks::first_done(&list);
-        let done_count = ui_id((list.len() - first_done) as i64)?;
-        let mut out = Vec::with_capacity(list.len());
-        for (i, t) in list.into_iter().enumerate() {
-            let id = ui_id(t.id.0)?;
-            let kind = ui_kind(tasks::due_label(&t, now.date_naive()));
-            // The date parts are always the stored due date (0 when none).
-            let (day, month, year) = t
-                .due
-                .map_or((0, 0, 0), |d| (d.day() as i32, d.month() as i32, d.year()));
-            out.push(TaskRow {
-                id,
-                title: t.title.into(),
-                note: t.note.into(),
-                done: t.done,
-                due_kind: kind,
-                due_day: day,
-                due_month: month,
-                due_year: year,
-                list_name: t.list.map(|(_, name)| name).unwrap_or_default().into(),
-                first_done: i == first_done,
-            });
-        }
-        self.rows.set_vec(out);
+        let today = now.date_naive();
+        self.day.set(today);
         if let Some(w) = self.window.upgrade() {
-            w.set_done_count(done_count);
-            let today = now.date_naive();
             w.set_today(Date {
                 year: today.year(),
                 month: today.month() as i32,
                 day: today.day() as i32,
             });
             w.set_today_weekday(today.weekday().num_days_from_monday() as i32);
+        }
+        if self.tab.get() == TasksTab::Week {
+            return self.reload_week(today);
+        }
+        let list = tasks::list(&self.conn, self.view.get(), now).map_err(|e| e.to_string())?;
+        let first_done = tasks::first_done(&list);
+        let done_count = ui_id((list.len() - first_done) as i64)?;
+        let rows = list
+            .into_iter()
+            .enumerate()
+            .map(|(i, t)| task_row(t, today, i == first_done))
+            .collect::<Result<Vec<_>, _>>()?;
+        self.rows.set_vec(rows);
+        if let Some(w) = self.window.upgrade() {
+            w.set_done_count(done_count);
         }
         self.reload_panel()
     }
@@ -101,10 +118,14 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         rows: Rc::default(),
         panel: Rc::default(),
         view: Cell::new(View::Today),
+        tab: Cell::new(TasksTab::Today),
+        monday: Cell::new(calendar::week_start(Local::now().date_naive())),
+        week: Rc::default(),
         day: Cell::new(Local::now().date_naive()),
         window: window.as_weak(),
     });
     window.set_tasks(ModelRc::from(state.rows.clone()));
+    window.set_week_days(ModelRc::from(state.week.clone()));
     window.set_lists(ModelRc::from(state.panel.clone()));
 
     // Shows the outcome in the view; an empty title is silently ignored.
@@ -213,7 +234,24 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         move |id| after(tasks::delete(&state.conn, TaskId(id.into())))
     });
 
+    window.on_select_tab({
+        let (state, finish) = (state.clone(), finish.clone());
+        move |tab| {
+            match tab {
+                TasksTab::Today => state.view.set(View::Today),
+                // The week tab always opens on the current week.
+                TasksTab::Week => state
+                    .monday
+                    .set(calendar::week_start(Local::now().date_naive())),
+                TasksTab::Lists => {}
+            }
+            state.tab.set(tab);
+            finish(state.reload())
+        }
+    });
+
     lists::init(window, &state, &finish);
+    week::init(window, &state, &finish);
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_secs(60), move || {

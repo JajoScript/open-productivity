@@ -1,0 +1,171 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { ListView, Palette } from "std-widgets.slint";
+import { InkCheck } from "../ink-check.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { DueKind, TaskRow } from "task-column.slint";
+import { TaskEditor } from "task-editor.slint";
+
+// One day of the week and the tasks due on it.
+export struct WeekDay {
+    day: int,
+    month: int,
+    // 0 is Monday.
+    weekday: int,
+    today: bool,
+    tasks: [TaskRow],
+}
+
+// A task in a day column: checkbox and title, which opens the editor.
+component WeekTask inherits Rectangle {
+    in property <TaskRow> task;
+    callback toggled(bool);
+    callback opened;
+
+    height: 32px;
+    border-radius: 4px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+
+    touch := TouchArea {
+        clicked => {
+            root.opened();
+        }
+    }
+
+    HorizontalLayout {
+        InkCheck {
+            checked: root.task.done;
+            label: root.task.title;
+            toggled(done) => {
+                root.toggled(done);
+            }
+        }
+
+        Text {
+            text: root.task.title;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+            color: root.task.done ? Palette.foreground.with-alpha(0.45) : root.task.due-kind == DueKind.overdue ? Theme.critical : Palette.foreground;
+            accessible-role: none;
+        }
+    }
+}
+
+// Monday to Sunday, one column per day, tasks placed by due date.
+export component WeekView inherits VerticalLayout {
+    in property <[WeekDay]> days;
+    // -1 / +1 moves a week; 0 goes back to the current one.
+    callback shift(int);
+    callback set-done(int, bool);
+    callback update-task(int, string, string) -> bool;
+    callback delete-task(int);
+
+    property <TaskRow> editing;
+
+    padding: 24px;
+    padding-top: 20px;
+    spacing: 12px;
+
+    HorizontalLayout {
+        spacing: 4px;
+        if root.days.length == 7: Text {
+            text: Strings.week-range(root.days[0].day, root.days[0].month, root.days[6].day, root.days[6].month);
+            font-size: 24px;
+            font-weight: 700;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/chevron-left.svg");
+            label: @tr("Previous week");
+            clicked => {
+                root.shift(-1);
+            }
+        }
+
+        SubtleButton {
+            text: @tr("Today");
+            color: Palette.foreground;
+            clicked => {
+                root.shift(0);
+            }
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/chevron-right.svg");
+            label: @tr("Next week");
+            clicked => {
+                root.shift(1);
+            }
+        }
+    }
+
+    editor := TaskEditor {
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        task-id: root.editing.id;
+        title: root.editing.title;
+        note: root.editing.note;
+        saved(id, title, note) => {
+            return root.update-task(id, title, note);
+        }
+        deleted(id) => {
+            root.delete-task(id);
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 8px;
+        vertical-stretch: 1;
+        for d in root.days: Rectangle {
+            // Equal columns whatever their content.
+            preferred-width: 0px;
+            horizontal-stretch: 1;
+            border-radius: 6px;
+            background: d.today ? Theme.field : transparent;
+            border-width: 1px;
+            border-color: Theme.hairline;
+
+            VerticalLayout {
+                padding: 6px;
+                spacing: 4px;
+                HorizontalLayout {
+                    padding-left: 4px;
+                    spacing: 4px;
+                    height: 28px;
+                    Text {
+                        text: Strings.weekdays[d.weekday];
+                        color: d.today ? Palette.foreground : Theme.muted;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: d.day;
+                        font-weight: d.today ? 700 : 400;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                }
+
+                ListView {
+                    for t in d.tasks: WeekTask {
+                        task: t;
+                        toggled(done) => {
+                            root.set-done(t.id, done);
+                        }
+                        opened => {
+                            root.editing = t;
+                            editor.show();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

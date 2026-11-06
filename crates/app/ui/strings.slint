@@ -82,6 +82,11 @@ export global Strings {
         return @tr("{0}, {1} {2}", weekday-name(weekday), month-name(month), day);
     }
 
+    // Week tab title, e.g. "November 2 – November 8"; translations reorder it.
+    public pure function week-range(start-day: int, start-month: int, end-day: int, end-month: int) -> string {
+        return @tr("{1} {0} – {3} {2}", start-day, month-name(start-month), end-day, month-name(end-month));
+    }
+
     // 0 is Monday.
     pure function weekday-name(weekday: int) -> string {
         return weekday == 0 ? @tr("Monday") : weekday == 1 ? @tr("Tuesday") : weekday == 2 ? @tr("Wednesday") : weekday == 3 ? @tr("Thursday") : weekday == 4 ? @tr("Friday") : weekday == 5 ? @tr("Saturday") : @tr("Sunday");

@@ -8,6 +8,7 @@ use std::fmt;
 use chrono::{DateTime, Days, FixedOffset, NaiveDate, NaiveTime, SecondsFormat, Utc};
 use rusqlite::{Connection, ffi};
 
+use crate::calendar;
 use crate::lists::ListId;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -219,13 +220,40 @@ pub fn list(
         ("", "t.created_at, t.id")
     };
     let sql = format!(
-        "WITH p(today, midnight) AS (SELECT ?1, ?2) \
-         SELECT t.id, t.title, t.note, t.done_at IS NOT NULL, t.due_date, t.list_id, l.name \
-         FROM task t LEFT JOIN list l ON l.id = t.list_id CROSS JOIN p \
+        "WITH p(today, midnight) AS (SELECT ?1, ?2) {SELECT_TASKS} CROSS JOIN p \
          WHERE ({}) {done} \
          ORDER BY t.done_at IS NOT NULL, t.done_at DESC, {order}",
         view.rule()
     );
+    query(conn, &sql, (today.to_string(), midnight))
+}
+
+/// Tasks due on each of the 7 days from `monday`, pending first, then oldest created first.
+pub fn week(conn: &Connection, monday: NaiveDate) -> Result<[Vec<Task>; 7], TaskError> {
+    let sunday =
+        calendar::shift(monday, 6).ok_or_else(|| TaskError::BadDate(monday.to_string()))?;
+    let sql = format!(
+        "{SELECT_TASKS} WHERE t.due_date BETWEEN ?1 AND ?2 \
+         ORDER BY t.due_date, t.done_at IS NOT NULL, t.created_at, t.id"
+    );
+    let mut days: [Vec<Task>; 7] = Default::default();
+    for t in query(conn, &sql, (monday.to_string(), sunday.to_string()))? {
+        // In range by the query, so the offset is 0..=6.
+        let i = t.due.map_or(0, |d| (d - monday).num_days()) as usize;
+        days[i].push(t);
+    }
+    Ok(days)
+}
+
+const SELECT_TASKS: &str = "SELECT t.id, t.title, t.note, t.done_at IS NOT NULL, t.due_date, \
+     t.list_id, l.name FROM task t LEFT JOIN list l ON l.id = t.list_id";
+
+/// Runs a `SELECT_TASKS` query and parses the stored due dates.
+fn query(
+    conn: &Connection,
+    sql: &str,
+    params: impl rusqlite::Params,
+) -> Result<Vec<Task>, TaskError> {
     let map = |r: &rusqlite::Row| {
         let list = match (r.get::<_, Option<i64>>(5)?, r.get::<_, Option<String>>(6)?) {
             (Some(id), Some(name)) => Some((ListId(id), name)),
@@ -243,8 +271,8 @@ pub fn list(
             r.get::<_, Option<String>>(4)?,
         ))
     };
-    conn.prepare(&sql)?
-        .query_map((today.to_string(), midnight), map)?
+    conn.prepare(sql)?
+        .query_map(params, map)?
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
         .map(|(mut t, due)| {
@@ -605,6 +633,45 @@ line 3"
         }
         let dues: Vec<_> = ls(&conn).into_iter().map(|t| t.due).collect();
         assert_eq!(dues, [Some(today), Some(d("2026-06-16")), None, None]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn week_puts_each_task_on_its_due_day() {
+        let (dir, conn) = setup("week");
+        for (title, due, done) in [
+            ("mon", Some("2026-11-02"), false),
+            ("sun", Some("2026-11-08"), false),
+            ("thu-done", Some("2026-11-05"), true),
+            ("thu", Some("2026-11-05"), false),
+            ("before", Some("2026-11-01"), false),
+            ("after", Some("2026-11-09"), false),
+            ("none", None, false),
+        ] {
+            let id = mk(&conn, title).unwrap();
+            set_due_date(&conn, id, due.map(d)).unwrap();
+            set_done(&conn, id, done).unwrap();
+        }
+        let w = week(&conn, d("2026-11-02")).unwrap();
+        let titles: Vec<Vec<&str>> = w
+            .iter()
+            .map(|day| day.iter().map(|t| t.title.as_str()).collect())
+            .collect();
+        let empty: Vec<&str> = vec![];
+        assert_eq!(
+            titles,
+            [
+                vec!["mon"],
+                empty.clone(),
+                empty.clone(),
+                // Pending before done.
+                vec!["thu", "thu-done"],
+                empty.clone(),
+                empty.clone(),
+                vec!["sun"],
+            ]
+        );
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

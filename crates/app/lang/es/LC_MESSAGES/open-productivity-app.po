@@ -359,3 +359,14 @@ msgstr "Sábado"
 
 msgid "Sunday"
 msgstr "Domingo"
+msgid "Week"
+msgstr "Semana"
+
+msgid "Previous week"
+msgstr "Semana anterior"
+
+msgid "Next week"
+msgstr "Semana siguiente"
+
+msgid "{1} {0} – {3} {2}"
+msgstr "{0} de {1} – {2} de {3}"
