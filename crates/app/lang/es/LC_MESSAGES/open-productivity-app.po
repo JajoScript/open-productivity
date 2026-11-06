@@ -100,40 +100,40 @@ msgid "{0} {1}"
 msgstr "{0} de {1}"
 
 msgid "January"
-msgstr "Enero"
+msgstr "enero"
 
 msgid "February"
-msgstr "Febrero"
+msgstr "febrero"
 
 msgid "March"
-msgstr "Marzo"
+msgstr "marzo"
 
 msgid "April"
-msgstr "Abril"
+msgstr "abril"
 
 msgid "May"
-msgstr "Mayo"
+msgstr "mayo"
 
 msgid "June"
-msgstr "Junio"
+msgstr "junio"
 
 msgid "July"
-msgstr "Julio"
+msgstr "julio"
 
 msgid "August"
-msgstr "Agosto"
+msgstr "agosto"
 
 msgid "September"
-msgstr "Septiembre"
+msgstr "septiembre"
 
 msgid "October"
-msgstr "Octubre"
+msgstr "octubre"
 
 msgid "November"
-msgstr "Noviembre"
+msgstr "noviembre"
 
 msgid "December"
-msgstr "Diciembre"
+msgstr "diciembre"
 
 msgid "Mo"
 msgstr "Lu"
