@@ -3197,6 +3197,7 @@ name = "open-productivity-app"
 version = "0.1.0"
 dependencies = [
  "dirs",
+ "i-slint-backend-testing",
  "open-productivity-core",
  "rfd",
  "slint",

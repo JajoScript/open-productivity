@@ -54,12 +54,6 @@ impl State {
         }
         Ok(())
     }
-
-    pub fn show_error(&self, msg: impl FnOnce(&Strings<'_>) -> slint::SharedString) {
-        if let Some(w) = self.window.upgrade() {
-            w.set_tasks_error(msg(&w.global::<Strings>()));
-        }
-    }
 }
 
 pub fn init(
@@ -72,13 +66,23 @@ pub fn init(
         move |id| show_view(&state, View::List(ListId(id.into())), &*finish)
     });
 
+    // Returns the message to show in the list creator; empty closes it.
     window.on_create_list({
         let (state, finish) = (state.clone(), finish.clone());
-        move |name| match lists::create(&state.conn, &name) {
-            Err(ListError::EmptyName) => {}
-            Err(ListError::DuplicateName) => state.show_error(|s| s.get_list_exists()),
-            Err(e) => state.show_error(|s| s.invoke_list_failed(e.to_string().into())),
-            Ok(_) => finish(state.reload()),
+        move |name| {
+            let Some(w) = state.window.upgrade() else {
+                return Default::default();
+            };
+            let s = w.global::<Strings>();
+            match lists::create(&state.conn, &name) {
+                Err(ListError::EmptyName) => s.get_list_name_empty(),
+                Err(ListError::DuplicateName) => s.get_list_exists(),
+                Err(e) => s.invoke_list_failed(e.to_string().into()),
+                Ok(_) => {
+                    finish(state.reload());
+                    Default::default()
+                }
+            }
         }
     });
 

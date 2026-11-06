@@ -299,3 +299,9 @@ msgstr "Abrir carpeta…"
 
 msgid "Backup"
 msgstr "Respaldo"
+
+msgid "Create"
+msgstr "Crear"
+
+msgid "The name can't be empty."
+msgstr "El nombre no puede estar vacío."

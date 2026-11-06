@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkField } from "../ink-field.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+
+// Rebuilt on every show(), so the name and the error always start empty.
+component CreatorBody inherits FocusScope {
+    callback create(string) -> string;
+    callback cancel;
+
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+
+        Text {
+            text: @tr("New list");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        name := InkField {
+            placeholder-text: @tr("List name");
+            init => {
+                self.focus();
+            }
+            accepted(text) => {
+                root.error = root.create(text);
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Create");
+                clicked => {
+                    root.error = root.create(name.text);
+                }
+            }
+        }
+    }
+}
+
+// Creates a list. New list fields go here; closing by clicking outside discards them.
+export component ListCreator inherits PopupWindow {
+    // Returns the error to show; empty means the list was created and the modal closes.
+    callback create(string) -> string;
+
+    close-policy: close-on-click-outside;
+    width: 360px;
+
+    Rectangle {
+        background: Palette.background;
+        border-width: 1px;
+        border-color: Palette.foreground.with-alpha(0.14);
+        border-radius: 6px;
+        CreatorBody {
+            create(name) => {
+                let error = root.create(name);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

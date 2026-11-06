@@ -173,3 +173,42 @@ fn main() {
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use i_slint_backend_testing::ElementHandle;
+
+    #[test]
+    fn new_list_opens_the_creator_and_escape_closes_it() {
+        i_slint_backend_testing::init_no_event_loop();
+        let w = AppWindow::new().unwrap();
+        w.window().set_size(slint::LogicalSize::new(960., 640.));
+        w.show().unwrap();
+        // English labels whatever the machine's language.
+        slint::select_bundled_translation("").unwrap();
+        let plus = ElementHandle::find_by_accessible_label(&w, "New list")
+            .next()
+            .unwrap();
+        // A real mouse click on the button's centre, like the user does.
+        let (p, s) = (plus.absolute_position(), plus.size());
+        let at = slint::LogicalPosition::new(p.x + s.width / 2., p.y + s.height / 2.);
+        use slint::platform::{PointerEventButton as B, WindowEvent as E};
+        let win = w.window();
+        win.dispatch_event(E::PointerMoved { position: at });
+        win.dispatch_event(E::PointerPressed {
+            position: at,
+            button: B::Left,
+        });
+        win.dispatch_event(E::PointerReleased {
+            position: at,
+            button: B::Left,
+        });
+        let field = || ElementHandle::find_by_accessible_label(&w, "List name").next();
+        let size = field().unwrap().size();
+        assert!(size.width > 100. && size.height >= 36., "{size:?}");
+        let esc = slint::platform::Key::Escape.into();
+        win.dispatch_event(E::KeyPressed { text: esc });
+        assert!(field().is_none());
+    }
+}

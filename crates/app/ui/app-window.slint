@@ -6,6 +6,7 @@ import { Theme } from "theme.slint";
 import { Strings } from "strings.slint";
 import { Calendar, MonthView } from "ink-date-popup.slint";
 import { ListEntry } from "list-entry.slint";
+import { ListCreator } from "tasks/list-creator.slint";
 import { Sidebar } from "sidebar.slint";
 import { Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
@@ -45,7 +46,7 @@ export component AppWindow inherits Window {
     callback set-due(int, Date);
     callback clear-due(int);
     callback select-list(int);
-    callback create-list(string);
+    callback create-list(string) -> string;
     callback delete-list(int);
     callback set-list(int, int);
     callback update-task(int, string, string) -> bool;
@@ -103,8 +104,16 @@ export component AppWindow inherits Window {
                 root.settings-open = false;
                 root.select-list(id);
             }
-            create-list(name) => {
-                root.create-list(name);
+            new-list => {
+                list-creator.show();
+            }
+        }
+
+        list-creator := ListCreator {
+            x: (root.width - self.width) / 2;
+            y: 120px;
+            create(name) => {
+                return root.create-list(name);
             }
         }
 

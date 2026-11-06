@@ -2,7 +2,6 @@
 // Copyright (C) 2026 JajoScript
 
 import { ListView, Palette } from "std-widgets.slint";
-import { InkField } from "ink-field.slint";
 import { ListEntry } from "list-entry.slint";
 import { NavEntry } from "nav-entry.slint";
 import { SubtleButton } from "subtle-button.slint";
@@ -19,10 +18,9 @@ export component Sidebar inherits Rectangle {
     in property <[ListEntry]> lists;
     callback select-view(TaskView);
     callback select-list(int);
-    callback create-list(string);
+    // Opens the list creator, which lives in the window so it is centred there.
+    callback new-list;
     callback open-settings;
-
-    property <bool> adding;
 
     background: Palette.alternate-background;
 
@@ -80,28 +78,7 @@ export component Sidebar inherits Rectangle {
                 icon: @image-url("icons/plus.svg");
                 label: @tr("New list");
                 clicked => {
-                    root.adding = true;
-                }
-            }
-        }
-
-        if root.adding: FocusScope {
-            height: name-input.preferred-height;
-            key-pressed(event) => {
-                if event.text == Key.Escape {
-                    root.adding = false;
-                    return accept;
-                }
-                reject
-            }
-            name-input := InkField {
-                placeholder-text: @tr("List name");
-                init => {
-                    self.focus();
-                }
-                accepted(text) => {
-                    root.create-list(text);
-                    root.adding = false;
+                    root.new-list();
                 }
             }
         }
