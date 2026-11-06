@@ -4,6 +4,7 @@
 import { Palette } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 
@@ -77,11 +78,7 @@ export component ListCreator inherits PopupWindow {
     close-policy: close-on-click-outside;
     width: 360px;
 
-    Rectangle {
-        background: Palette.background;
-        border-width: 1px;
-        border-color: Palette.foreground.with-alpha(0.14);
-        border-radius: 6px;
+    PopupSurface {
         CreatorBody {
             create(name) => {
                 let error = root.create(name);

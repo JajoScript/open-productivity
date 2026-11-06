@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JajoScript
 
 import { Date, Palette } from "std-widgets.slint";
+import { PopupSurface } from "popup-surface.slint";
 import { Strings } from "strings.slint";
 import { SubtleButton } from "subtle-button.slint";
 import { Theme } from "theme.slint";
@@ -109,10 +110,7 @@ export component InkDatePopup inherits PopupWindow {
         root.picked(date);
     }
 
-    Rectangle {
-        background: Palette.background;
-        border-width: 1px;
-        border-color: Palette.foreground.with-alpha(0.14);
+    PopupSurface {
         border-radius: 8px;
 
         VerticalLayout {

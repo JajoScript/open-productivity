@@ -3,6 +3,7 @@
 
 import { Palette } from "std-widgets.slint";
 import { ListEntry } from "../list-entry.slint";
+import { PopupSurface } from "../popup-surface.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 
@@ -51,11 +52,7 @@ export component ListButton inherits HorizontalLayout {
         x: parent.width - self.width;
         y: parent.height + 2px;
         width: 200px;
-        Rectangle {
-            background: Palette.background;
-            border-width: 1px;
-            border-color: Palette.foreground.with-alpha(0.14);
-            border-radius: 6px;
+        PopupSurface {
             VerticalLayout {
                 padding: 4px;
                 spacing: 1px;

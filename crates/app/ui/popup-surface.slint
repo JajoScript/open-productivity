@@ -1,0 +1,31 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// The paper sheet of every popup: hairline border, no shadow. Popup content is rebuilt on each
+// show(), so the sheet starts hidden, waits one frame and grows from 97% at its top edge while it fades in.
+export component PopupSurface inherits Rectangle {
+    property <bool> shown;
+
+    background: Palette.background;
+    border-width: 1px;
+    border-color: Palette.foreground.with-alpha(0.14);
+    border-radius: 6px;
+    // A transform, not y: moving the sheet would break the popup's size from its content.
+    transform-origin: { x: self.width / 2, y: 0px };
+    transform-scale: root.shown ? 1 : 0.97;
+    opacity: root.shown ? 1 : 0;
+    animate transform-scale, opacity { duration: Theme.fast; easing: Theme.ease-out; }
+
+    Timer {
+        interval: 16ms;
+        running: !root.shown;
+        triggered => {
+            root.shown = true;
+        }
+    }
+
+    @children
+}
