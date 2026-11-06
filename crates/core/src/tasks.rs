@@ -245,6 +245,59 @@ pub fn week(conn: &Connection, monday: NaiveDate) -> Result<[Vec<Task>; 7], Task
     Ok(days)
 }
 
+/// Kanban column of a task.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Stage {
+    /// Pending, not started.
+    Icebox,
+    InProgress,
+    Done,
+}
+
+/// Moves a task to a Kanban column in one statement. Done keeps an earlier completion time
+/// and the in-progress mark, so unchecking it later returns it to the column it came from.
+pub fn set_stage(conn: &Connection, id: TaskId, stage: Stage) -> Result<(), TaskError> {
+    let sql = match stage {
+        Stage::Icebox => "UPDATE task SET in_progress = 0, done_at = NULL WHERE id = ?1",
+        Stage::InProgress => "UPDATE task SET in_progress = 1, done_at = NULL WHERE id = ?1",
+        Stage::Done => return set_done(conn, id, true),
+    };
+    match conn.execute(sql, [id.0])? {
+        0 => Err(TaskError::NotFound),
+        _ => Ok(()),
+    }
+}
+
+/// How far back the Done column looks.
+pub const KANBAN_DONE_DAYS: i64 = 7;
+
+/// The Icebox, In progress and Done columns. Pending ones by due date (undated last), then
+/// creation; Done holds what was finished in the last `KANBAN_DONE_DAYS`, newest first.
+pub fn kanban(conn: &Connection, now: DateTime<Utc>) -> Result<[Vec<Task>; 3], TaskError> {
+    const PENDING_ORDER: &str = "ORDER BY t.due_date IS NULL, t.due_date, t.created_at, t.id";
+    let since = (now - chrono::TimeDelta::days(KANBAN_DONE_DAYS))
+        .to_rfc3339_opts(SecondsFormat::Millis, true);
+    Ok([
+        query(
+            conn,
+            &format!(
+                "{SELECT_TASKS} WHERE t.done_at IS NULL AND NOT t.in_progress {PENDING_ORDER}"
+            ),
+            (),
+        )?,
+        query(
+            conn,
+            &format!("{SELECT_TASKS} WHERE t.done_at IS NULL AND t.in_progress {PENDING_ORDER}"),
+            (),
+        )?,
+        query(
+            conn,
+            &format!("{SELECT_TASKS} WHERE t.done_at >= ?1 ORDER BY t.done_at DESC, t.id"),
+            [since],
+        )?,
+    ])
+}
+
 const SELECT_TASKS: &str = "SELECT t.id, t.title, t.note, t.done_at IS NOT NULL, t.due_date, \
      t.list_id, l.name FROM task t LEFT JOIN list l ON l.id = t.list_id";
 
@@ -672,6 +725,67 @@ line 3"
                 vec!["sun"],
             ]
         );
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn kanban_titles(conn: &Connection) -> Vec<Vec<String>> {
+        let now = DateTime::parse_from_rfc3339("2026-06-15T12:00:00Z")
+            .unwrap()
+            .with_timezone(&Utc);
+        kanban(conn, now)
+            .unwrap()
+            .into_iter()
+            .map(|c| c.into_iter().map(|t| t.title).collect())
+            .collect()
+    }
+
+    #[test]
+    fn kanban_moves_tasks_between_columns() {
+        let (dir, conn) = setup("kanban");
+        let a = mk(&conn, "a").unwrap();
+        let b = mk(&conn, "b").unwrap();
+        let c = mk(&conn, "c").unwrap();
+        set_due_date(&conn, b, Some(d("2026-06-20"))).unwrap();
+        // Dated before undated in the icebox.
+        assert_eq!(kanban_titles(&conn), [vec!["b", "a", "c"], vec![], vec![]]);
+        set_stage(&conn, a, Stage::InProgress).unwrap();
+        // Finished within the last 7 days.
+        conn.execute(
+            "UPDATE task SET done_at = '2026-06-10T00:00:00.000Z' WHERE id = ?1",
+            [c.0],
+        )
+        .unwrap();
+        assert_eq!(kanban_titles(&conn), [vec!["b"], vec!["a"], vec!["c"]]);
+        // Done then unchecked: back to the column it came from.
+        set_stage(&conn, a, Stage::Done).unwrap();
+        set_done(&conn, a, false).unwrap();
+        assert_eq!(kanban_titles(&conn)[1], ["a"]);
+        set_stage(&conn, a, Stage::Icebox).unwrap();
+        assert_eq!(kanban_titles(&conn)[0], ["b", "a"]);
+        assert!(matches!(
+            set_stage(&conn, TaskId(42), Stage::InProgress),
+            Err(TaskError::NotFound)
+        ));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn kanban_done_column_keeps_only_the_last_7_days() {
+        let (dir, conn) = setup("kanban-old");
+        for (title, done_at) in [
+            ("old", "2026-06-08T11:59:59.999Z"),
+            ("edge", "2026-06-08T12:00:00.000Z"),
+        ] {
+            let id = mk(&conn, title).unwrap();
+            conn.execute(
+                "UPDATE task SET done_at = ?1 WHERE id = ?2",
+                (done_at, id.0),
+            )
+            .unwrap();
+        }
+        assert_eq!(kanban_titles(&conn)[2], ["edge"]);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

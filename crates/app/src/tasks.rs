@@ -14,7 +14,8 @@ use open_productivity_core::tasks::{self, DueLabel, Task, TaskError, TaskId, Vie
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::{
-    AppWindow, Date, DueKind, ListEntry, Strings, TaskRow, TaskView, TasksTab, WeekDay, lists, week,
+    AppWindow, Date, DueKind, KanbanColumn, ListEntry, Strings, TaskRow, TaskView, TasksTab,
+    WeekDay, kanban, lists, week,
 };
 
 pub struct State {
@@ -27,6 +28,7 @@ pub struct State {
     /// Monday of the week the Week tab shows.
     pub monday: Cell<NaiveDate>,
     pub week: Rc<VecModel<WeekDay>>,
+    pub kanban: Rc<VecModel<KanbanColumn>>,
     // Day of the last reload, so the timer only rebuilds rows when it changes.
     pub day: Cell<NaiveDate>,
     pub window: slint::Weak<AppWindow>,
@@ -92,8 +94,10 @@ impl State {
             });
             w.set_today_weekday(today.weekday().num_days_from_monday() as i32);
         }
-        if self.tab.get() == TasksTab::Week {
-            return self.reload_week(today);
+        match self.tab.get() {
+            TasksTab::Week => return self.reload_week(today),
+            TasksTab::Kanban => return self.reload_kanban(today),
+            TasksTab::Today | TasksTab::Lists => {}
         }
         let list = tasks::list(&self.conn, self.view.get(), now).map_err(|e| e.to_string())?;
         let first_done = tasks::first_done(&list);
@@ -121,11 +125,13 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         tab: Cell::new(TasksTab::Today),
         monday: Cell::new(calendar::week_start(Local::now().date_naive())),
         week: Rc::default(),
+        kanban: Rc::default(),
         day: Cell::new(Local::now().date_naive()),
         window: window.as_weak(),
     });
     window.set_tasks(ModelRc::from(state.rows.clone()));
     window.set_week_days(ModelRc::from(state.week.clone()));
+    window.set_kanban_columns(ModelRc::from(state.kanban.clone()));
     window.set_lists(ModelRc::from(state.panel.clone()));
 
     // Shows the outcome in the view; an empty title is silently ignored.
@@ -243,7 +249,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
                 TasksTab::Week => state
                     .monday
                     .set(calendar::week_start(Local::now().date_naive())),
-                TasksTab::Lists => {}
+                TasksTab::Kanban | TasksTab::Lists => {}
             }
             state.tab.set(tab);
             finish(state.reload())
@@ -252,6 +258,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
 
     lists::init(window, &state, &finish);
     week::init(window, &state, &finish);
+    kanban::init(window, &state, &finish);
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_secs(60), move || {

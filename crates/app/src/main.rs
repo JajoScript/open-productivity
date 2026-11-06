@@ -20,6 +20,7 @@ mod calendar;
 mod data;
 mod dialogs;
 mod instances_ui;
+mod kanban;
 mod lists;
 mod settings;
 mod tasks;
@@ -241,6 +242,84 @@ mod tests {
             s.invoke_week_range(30, 11, 6, 12),
             "November 30 – December 6"
         );
+    }
+
+    #[test]
+    fn kanban_tab_shows_the_board_alone() {
+        let w = window();
+        click(&w, "Kanban");
+        assert!(find(&w, "Add task…").is_none());
+        assert!(find(&w, "Next week").is_none());
+        click(&w, "Today");
+        assert!(find(&w, "Add task…").is_some() || find(&w, "Nothing due today.").is_some());
+    }
+
+    #[test]
+    fn dragging_a_card_moves_it_to_another_column() {
+        use open_productivity_core::chrono::Local;
+        use open_productivity_core::tasks::{self as core_tasks, View};
+        use slint::Model;
+
+        let dir = std::env::temp_dir().join(format!("op-app-drag-{}", std::process::id()));
+        let _ = fs::remove_dir_all(&dir);
+        fs::create_dir_all(&dir).unwrap();
+        let conn = db::open(&dir.join("test.db")).unwrap();
+        core_tasks::create(&conn, "drag me", View::All, Local::now().date_naive()).unwrap();
+        let w = window();
+        let _timer = tasks::init(&w, Rc::new(conn));
+        click(&w, "Kanban");
+
+        let in_column = |i: usize| {
+            w.get_kanban_columns()
+                .row_data(i)
+                .unwrap()
+                .tasks
+                .row_count()
+        };
+        assert_eq!((in_column(0), in_column(1)), (1, 0));
+
+        // Press on the card's title, then drag in steps onto the In progress column.
+        let check = find(&w, "drag me").unwrap();
+        let c = check.absolute_position();
+        let from = slint::LogicalPosition::new(c.x + 60., c.y + 16.);
+        let column = find(&w, "In progress").unwrap().absolute_position();
+        let to = slint::LogicalPosition::new(column.x + 40., column.y + 120.);
+        let win = w.window();
+        win.dispatch_event(E::PointerMoved { position: from });
+        win.dispatch_event(E::PointerPressed {
+            position: from,
+            button: B::Left,
+        });
+        let ghost = || ElementHandle::find_by_element_id(&w, "KanbanView::ghost").next();
+        // The floating copy holds the cursor at the point where the card was grabbed.
+        let under_cursor = |p: slint::LogicalPosition| {
+            let g = ghost().expect("no floating copy while dragging");
+            let (gp, gs) = (g.absolute_position(), g.size());
+            assert!(
+                p.x >= gp.x && p.x <= gp.x + gs.width && p.y >= gp.y && p.y <= gp.y + gs.height,
+                "cursor {p:?} outside the copy at {gp:?} {gs:?}"
+            );
+        };
+        for step in 1..=10 {
+            let f = step as f32 / 10.;
+            let position = slint::LogicalPosition::new(
+                from.x + (to.x - from.x) * f,
+                from.y + (to.y - from.y) * f,
+            );
+            win.dispatch_event(E::PointerMoved { position });
+            if step == 5 || step == 10 {
+                under_cursor(position);
+            }
+        }
+        win.dispatch_event(E::PointerReleased {
+            position: to,
+            button: B::Left,
+        });
+
+        assert_eq!((in_column(0), in_column(1)), (0, 1));
+        assert!(ghost().is_none(), "the floating copy outlived the drop");
+        drop(w);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

@@ -10,8 +10,8 @@ import { ListCreator } from "tasks/list-creator.slint";
 import { Module, Rail } from "rail.slint";
 import { Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
-import { DueKind, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { Calendar, Date, DueKind, InstanceRow, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay }
+import { DueKind, KanbanColumn, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
+export { Calendar, Date, DueKind, InstanceRow, KanbanColumn, Stage, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -49,6 +49,10 @@ export component AppWindow inherits Window {
     callback select-tab(TasksTab);
     in property <[WeekDay]> week-days;
     callback week-shift(int);
+    in property <[KanbanColumn]> kanban-columns;
+    callback move-task(int, Stage);
+    pure callback task-payload(int) -> data-transfer;
+    pure callback payload-task(data-transfer) -> int;
     callback create-task(string);
     callback set-done(int, bool);
     callback set-due(int, Date);
@@ -187,6 +191,16 @@ export component AppWindow inherits Window {
                     week-days: root.week-days;
                     week-shift(n) => {
                         root.week-shift(n);
+                    }
+                    kanban-columns: root.kanban-columns;
+                    move-task(id, s) => {
+                        root.move-task(id, s);
+                    }
+                    task-payload(id) => {
+                        return root.task-payload(id);
+                    }
+                    payload-task(data) => {
+                        return root.payload-task(data);
                     }
                     select-list(id) => {
                         root.select-list(id);

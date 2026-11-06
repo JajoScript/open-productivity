@@ -8,10 +8,11 @@ import { Theme } from "../theme.slint";
 import { ListsPanel, ViewCounts } from "lists-panel.slint";
 import { DueKind, TaskColumn, TaskRow, TaskView } from "task-column.slint";
 import { WeekDay, WeekView } from "week-view.slint";
-export { DueKind, TaskRow, TaskView, ViewCounts, WeekDay }
+import { KanbanColumn, KanbanView, Stage } from "kanban-view.slint";
+export { DueKind, KanbanColumn, Stage, TaskRow, TaskView, ViewCounts, WeekDay }
 
-// One per built tab; Kanban and Eisenhower join when their slices ship.
-export enum TasksTab { today, week, lists }
+// One per built tab; Eisenhower joins when its slice ships.
+export enum TasksTab { today, week, lists, kanban }
 
 component Tab inherits Rectangle {
     in property <string> text;
@@ -104,6 +105,10 @@ export component TasksView inherits VerticalLayout {
     callback select-tab(TasksTab);
     in property <[WeekDay]> week-days;
     callback week-shift(int);
+    in property <[KanbanColumn]> kanban-columns;
+    callback move-task(int, Stage);
+    pure callback task-payload(int) -> data-transfer;
+    pure callback payload-task(data-transfer) -> int;
 
     function pick(t: TasksTab) {
         root.tab = t;
@@ -154,6 +159,14 @@ export component TasksView inherits VerticalLayout {
                     root.pick(TasksTab.lists);
                 }
             }
+
+            Tab {
+                text: @tr("Kanban");
+                selected: root.tab == TasksTab.kanban;
+                clicked => {
+                    root.pick(TasksTab.kanban);
+                }
+            }
         }
 
         Rectangle {
@@ -179,7 +192,30 @@ export component TasksView inherits VerticalLayout {
         }
     }
 
-    if root.tab != TasksTab.week: HorizontalLayout {
+    if root.tab == TasksTab.kanban: KanbanView {
+        vertical-stretch: 1;
+        columns: root.kanban-columns;
+        set-done(id, done) => {
+            root.set-done(id, done);
+        }
+        move-task(id, s) => {
+            root.move-task(id, s);
+        }
+        task-payload(id) => {
+            return root.task-payload(id);
+        }
+        payload-task(data) => {
+            return root.payload-task(data);
+        }
+        update-task(id, title, note) => {
+            return root.update-task(id, title, note);
+        }
+        delete-task(id) => {
+            root.delete-task(id);
+        }
+    }
+
+    if root.tab == TasksTab.today || root.tab == TasksTab.lists: HorizontalLayout {
         vertical-stretch: 1;
         if root.tab == TasksTab.lists: ListsPanel {
             width: 264px;

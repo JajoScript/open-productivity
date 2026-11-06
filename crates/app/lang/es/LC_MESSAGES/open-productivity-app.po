@@ -370,3 +370,24 @@ msgstr "Semana siguiente"
 
 msgid "{1} {0} – {3} {2}"
 msgstr "{0} de {1} – {2} de {3}"
+
+msgid "Kanban"
+msgstr "Kanban"
+
+msgid "Icebox"
+msgstr "Icebox"
+
+msgid "In progress"
+msgstr "En curso"
+
+msgid "Completed"
+msgstr "Completadas"
+
+msgid "Move to Icebox"
+msgstr "Mover a Icebox"
+
+msgid "Move to In progress"
+msgstr "Mover a En curso"
+
+msgid "Move to Completed"
+msgstr "Mover a Completadas"
