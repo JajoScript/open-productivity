@@ -98,8 +98,9 @@ export component AppWindow inherits Window {
     }
 
     HorizontalLayout {
-        Rail {
-            module <=> root.module;
+        // The collapsed rail's slot; the rail itself is drawn last, so it opens over the content.
+        Rectangle {
+            width: 56px;
         }
 
         list-creator := ListCreator {
@@ -246,5 +247,12 @@ export component AppWindow inherits Window {
                 }
             }
         }
+    }
+
+    Rail {
+        x: 0px;
+        y: 0px;
+        height: root.height;
+        module <=> root.module;
     }
 }

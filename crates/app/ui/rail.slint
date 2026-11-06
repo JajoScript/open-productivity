@@ -7,13 +7,26 @@ import { Theme } from "theme.slint";
 // One per built module; a module joins the rail when its first slice ships.
 export enum Module { tasks, settings }
 
+// Label beside a rail icon: fades in over the second half of the rail's opening and slides in 8px.
+component RailLabel inherits Text {
+    in property <float> reveal;
+
+    x: 48px - (1 - root.reveal) * 8px;
+    vertical-alignment: center;
+    overflow: elide;
+    opacity: max(0, root.reveal * 2 - 1);
+    accessible-role: none;
+}
+
 component RailButton inherits Rectangle {
     in property <image> icon;
     in property <string> label;
     in property <bool> selected;
+    // 0 collapsed, 1 fully open.
+    in property <float> reveal;
+    out property <bool> focused: focus.has-focus;
     callback clicked;
 
-    width: 40px;
     height: 40px;
     border-radius: 6px;
     background: root.selected ? Theme.selected : touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
@@ -27,12 +40,21 @@ component RailButton inherits Rectangle {
         root.clicked();
     }
 
+    // Pinned to the left, so the icon stays put while the rail opens.
     Image {
+        x: 10px;
         source: root.icon;
         colorize: root.selected ? Palette.foreground : Theme.muted;
         width: 20px;
         height: 20px;
         accessible-role: none;
+    }
+
+    RailLabel {
+        width: parent.width - self.x - 8px;
+        text: root.label;
+        reveal: root.reveal;
+        color: root.selected ? Palette.foreground : Theme.muted;
     }
 
     touch := TouchArea {
@@ -59,56 +81,94 @@ component RailButton inherits Rectangle {
     }
 }
 
-// Icon rail that switches between the app's modules.
+// Icon rail that switches between the app's modules. It opens over the content on hover or
+// keyboard focus to show the module names; the window keeps only the collapsed width for it.
 export component Rail inherits Rectangle {
     in-out property <Module> module;
 
-    width: 56px;
+    property <length> collapsed: 56px;
+    property <length> open: 200px;
+    property <bool> expanded: hover.has-hover || tasks.focused || settings.focused;
+    // Derived from the animated width, so the labels move in step with the panel.
+    property <float> reveal: (root.width - root.collapsed) / (root.open - root.collapsed);
+
+    width: root.collapsed;
     background: Palette.alternate-background;
+    clip: true;
 
-    VerticalLayout {
-        padding: 8px;
-        padding-top: 16px;
-        spacing: 4px;
-
-        Image {
-            source: @image-url("app-icons/fill-black.svg");
-            colorize: Palette.foreground;
-            height: 24px;
-            image-fit: contain;
-            accessible-role: image;
-            accessible-label: "Open Productivity";
-        }
-
-        Rectangle {
-            height: 12px;
-        }
-
-        RailButton {
-            icon: @image-url("icons/list-todo.svg");
-            label: @tr("Tasks");
-            selected: root.module == Module.tasks;
-            clicked => {
-                root.module = Module.tasks;
+    states [
+        opened when root.expanded: {
+            width: root.open;
+            // Hover intent: a pointer passing through does not open it.
+            in {
+                animate width { duration: Theme.enter; delay: 250ms; easing: Theme.ease-out; }
+            }
+            out {
+                animate width { duration: Theme.fast; easing: Theme.ease-out; }
             }
         }
+    ]
 
-        // Takes the spare height, pinning Settings to the bottom.
-        Rectangle {
-            vertical-stretch: 1;
-        }
+    // Wraps the buttons, so it keeps its hover while the pointer is over them.
+    hover := TouchArea {
+        VerticalLayout {
+            padding: 8px;
+            padding-top: 16px;
+            spacing: 4px;
 
-        RailButton {
-            icon: @image-url("icons/settings.svg");
-            label: @tr("Settings");
-            selected: root.module == Module.settings;
-            clicked => {
-                root.module = Module.settings;
+            Rectangle {
+                height: 24px;
+                Image {
+                    x: 0px;
+                    width: 40px;
+                    height: parent.height;
+                    source: @image-url("app-icons/fill-black.svg");
+                    colorize: Palette.foreground;
+                    image-fit: contain;
+                    accessible-role: image;
+                    accessible-label: "Open Productivity";
+                }
+
+                RailLabel {
+                    width: parent.width - self.x;
+                    text: "Open Productivity";
+                    font-weight: 600;
+                    reveal: root.reveal;
+                }
+            }
+
+            Rectangle {
+                height: 12px;
+            }
+
+            tasks := RailButton {
+                icon: @image-url("icons/list-todo.svg");
+                label: @tr("Tasks");
+                reveal: root.reveal;
+                selected: root.module == Module.tasks;
+                clicked => {
+                    root.module = Module.tasks;
+                }
+            }
+
+            // Takes the spare height, pinning Settings to the bottom.
+            Rectangle {
+                vertical-stretch: 1;
+            }
+
+            settings := RailButton {
+                icon: @image-url("icons/settings.svg");
+                label: @tr("Settings");
+                reveal: root.reveal;
+                selected: root.module == Module.settings;
+                clicked => {
+                    root.module = Module.settings;
+                }
             }
         }
     }
 
-    // Hairline between the rail and the module's own panel.
+    // Hairline between the rail and the content; the only edge, as the rail casts no shadow.
     Rectangle {
         x: parent.width - 1px;
         width: 1px;
