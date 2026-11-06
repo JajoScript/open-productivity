@@ -29,6 +29,12 @@ export component TaskCard inherits Rectangle {
     animate background { duration: Theme.fast; easing: Theme.ease-out; }
     // The card stays put and fades while it is being dragged.
     opacity: drag.dragging ? 0.4 : 1;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.task.title;
+    accessible-action-default => {
+        root.opened();
+    }
 
     drag := DragArea {
         allow-move: true;
@@ -37,6 +43,17 @@ export component TaskCard inherits Rectangle {
         touch := TouchArea {
             clicked => {
                 root.opened();
+            }
+        }
+
+        focus := FocusScope {
+            width: 0px; // keyboard only; clicks go to the TouchArea
+            key-pressed(event) => {
+                if event.text == Key.Space || event.text == Key.Return {
+                    root.opened();
+                    return accept;
+                }
+                reject
             }
         }
 
@@ -55,12 +72,18 @@ export component TaskCard inherits Rectangle {
                 vertical-alignment: center;
                 overflow: elide;
                 horizontal-stretch: 1;
-                color: root.task.done ? Palette.foreground.with-alpha(0.45) : root.task.due-kind == DueKind.overdue ? Theme.critical : Palette.foreground;
+                color: root.task.done ? Theme.done : root.task.due-kind == DueKind.overdue ? Theme.critical : Palette.foreground;
                 accessible-role: none;
             }
 
             @children
         }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
     }
 }
 

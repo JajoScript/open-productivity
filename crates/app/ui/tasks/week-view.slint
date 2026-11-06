@@ -29,11 +29,34 @@ component WeekTask inherits Rectangle {
     border-radius: 4px;
     background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
     animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.task.title;
+    accessible-action-default => {
+        root.opened();
+    }
 
     touch := TouchArea {
         clicked => {
             root.opened();
         }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.opened();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
     }
 
     HorizontalLayout {
@@ -50,7 +73,7 @@ component WeekTask inherits Rectangle {
             vertical-alignment: center;
             overflow: elide;
             horizontal-stretch: 1;
-            color: root.task.done ? Palette.foreground.with-alpha(0.45) : root.task.due-kind == DueKind.overdue ? Theme.critical : Palette.foreground;
+            color: root.task.done ? Theme.done : root.task.due-kind == DueKind.overdue ? Theme.critical : Palette.foreground;
             accessible-role: none;
         }
     }

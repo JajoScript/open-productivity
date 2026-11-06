@@ -6,6 +6,7 @@ import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
 import { InkField } from "../ink-field.slint";
 import { InkTextArea } from "../ink-text-area.slint";
+import { PopupSurface } from "../popup-surface.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
@@ -158,10 +159,8 @@ component EditorBody inherits FocusScope {
                     }
                 }
 
-                SubtleButton {
-                    icon: @image-url("../icons/trash-2.svg");
+                InkButton {
                     text: @tr("Delete");
-                    color: Theme.critical;
                     clicked => {
                         root.delete();
                     }
@@ -185,11 +184,7 @@ export component TaskEditor inherits PopupWindow {
     close-policy: close-on-click-outside;
     width: 440px;
 
-    Rectangle {
-        background: Palette.background;
-        border-width: 1px;
-        border-color: Palette.foreground.with-alpha(0.14);
-        border-radius: 6px;
+    PopupSurface {
         EditorBody {
             title: root.title;
             note: root.note;

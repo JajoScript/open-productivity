@@ -1,9 +1,10 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Button, Date, ListView, Palette } from "std-widgets.slint";
+import { Date, ListView, Palette } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
+import { PopupSurface } from "../popup-surface.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { ListEntry } from "../list-entry.slint";
@@ -142,7 +143,7 @@ component TaskLine inherits Rectangle {
                 text: root.task.title;
                 vertical-alignment: center;
                 overflow: elide;
-                color: root.task.done ? Palette.foreground.with-alpha(0.45) : Palette.foreground;
+                color: root.task.done ? Theme.done : Palette.foreground;
                 animate color { duration: Theme.fast; easing: Theme.ease-out; }
                 accessible-role: none;
             }
@@ -269,11 +270,7 @@ export component TaskColumn inherits VerticalLayout {
         x: root.width - 380px;
         y: 56px;
         width: 360px;
-        Rectangle {
-            background: Palette.background;
-            border-width: 1px;
-            border-color: Palette.foreground.with-alpha(0.14);
-            border-radius: 6px;
+        PopupSurface {
             VerticalLayout {
                 padding: 12px;
                 spacing: 12px;
@@ -285,8 +282,9 @@ export component TaskColumn inherits VerticalLayout {
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: end;
-                    Button {
+                    SubtleButton {
                         text: @tr("Cancel");
+                        color: Palette.foreground;
                         clicked => {
                             confirm.close();
                         }

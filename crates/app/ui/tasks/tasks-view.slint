@@ -41,14 +41,6 @@ component Tab inherits Rectangle {
         }
     }
 
-    // Ink underline marks the open tab.
-    Rectangle {
-        y: parent.height - 2px;
-        height: 2px;
-        background: root.selected ? Theme.ink : transparent;
-        animate background { duration: Theme.fast; easing: Theme.ease-out; }
-    }
-
     touch := TouchArea {
         clicked => {
             root.clicked();
@@ -67,7 +59,7 @@ component Tab inherits Rectangle {
     }
 
     if focus.has-focus: Rectangle {
-        border-radius: 4px;
+        border-radius: 6px;
         border-width: 2px;
         border-color: Palette.foreground;
     }
@@ -122,60 +114,73 @@ export component TasksView inherits VerticalLayout {
         padding-left: 24px;
         padding-right: 24px;
         padding-top: 8px;
-        HorizontalLayout {
-            spacing: 16px;
-            Text {
-                text: Strings.long-date(root.today.day, root.today.month, root.today-weekday);
-                font-weight: 700;
-                vertical-alignment: center;
-            }
+        // One ink underline that slides to the open tab, so the eye follows the switch.
+        Rectangle {
+            height: 40px;
+            HorizontalLayout {
+                spacing: 16px;
+                Text {
+                    text: Strings.long-date(root.today.day, root.today.month, root.today-weekday);
+                    font-weight: 700;
+                    vertical-alignment: center;
+                }
 
-            // The open instance, so the user always knows which data they are looking at.
-            Text {
-                text: root.instance-name;
-                color: Theme.muted;
-                overflow: elide;
-                vertical-alignment: center;
-                horizontal-stretch: 1;
-            }
+                // The open instance, so the user always knows which data they are looking at.
+                Text {
+                    text: root.instance-name;
+                    color: Theme.muted;
+                    overflow: elide;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
 
-            Tab {
-                text: @tr("Today");
-                selected: root.tab == TasksTab.today;
-                clicked => {
-                    root.pick(TasksTab.today);
+                today-tab := Tab {
+                    text: @tr("Today");
+                    selected: root.tab == TasksTab.today;
+                    clicked => {
+                        root.pick(TasksTab.today);
+                    }
+                }
+
+                week-tab := Tab {
+                    text: @tr("Week");
+                    selected: root.tab == TasksTab.week;
+                    clicked => {
+                        root.pick(TasksTab.week);
+                    }
+                }
+
+                lists-tab := Tab {
+                    text: @tr("Lists");
+                    selected: root.tab == TasksTab.lists;
+                    clicked => {
+                        root.pick(TasksTab.lists);
+                    }
+                }
+
+                kanban-tab := Tab {
+                    text: @tr("Kanban");
+                    selected: root.tab == TasksTab.kanban;
+                    clicked => {
+                        root.pick(TasksTab.kanban);
+                    }
+                }
+                eisenhower-tab := Tab {
+                    text: @tr("Eisenhower");
+                    selected: root.tab == TasksTab.eisenhower;
+                    clicked => {
+                        root.pick(TasksTab.eisenhower);
+                    }
                 }
             }
 
-            Tab {
-                text: @tr("Week");
-                selected: root.tab == TasksTab.week;
-                clicked => {
-                    root.pick(TasksTab.week);
-                }
-            }
-
-            Tab {
-                text: @tr("Lists");
-                selected: root.tab == TasksTab.lists;
-                clicked => {
-                    root.pick(TasksTab.lists);
-                }
-            }
-
-            Tab {
-                text: @tr("Kanban");
-                selected: root.tab == TasksTab.kanban;
-                clicked => {
-                    root.pick(TasksTab.kanban);
-                }
-            }
-            Tab {
-                text: @tr("Eisenhower");
-                selected: root.tab == TasksTab.eisenhower;
-                clicked => {
-                    root.pick(TasksTab.eisenhower);
-                }
+            Rectangle {
+                x: root.tab == TasksTab.today ? today-tab.x : root.tab == TasksTab.week ? week-tab.x : root.tab == TasksTab.lists ? lists-tab.x : root.tab == TasksTab.kanban ? kanban-tab.x : eisenhower-tab.x;
+                width: root.tab == TasksTab.today ? today-tab.width : root.tab == TasksTab.week ? week-tab.width : root.tab == TasksTab.lists ? lists-tab.width : root.tab == TasksTab.kanban ? kanban-tab.width : eisenhower-tab.width;
+                y: parent.height - 2px;
+                height: 2px;
+                background: Theme.ink;
+                animate x, width { duration: Theme.enter; easing: Theme.ease-out; }
             }
         }
 

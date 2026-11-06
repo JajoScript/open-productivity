@@ -171,12 +171,25 @@ export component ListsPanel inherits VerticalLayout {
         }
     }
 
-    Text {
-        text: @tr("My lists");
-        font-weight: 600;
-        color: Theme.muted;
-        height: 28px;
-        vertical-alignment: bottom;
+    // Heading and its "+", so creating a list sits next to the lists.
+    HorizontalLayout {
+        padding-top: 8px;
+        padding-left: 10px;
+        Text {
+            text: @tr("My lists");
+            font-weight: 600;
+            color: Theme.muted;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/plus.svg");
+            label: @tr("New list");
+            clicked => {
+                root.new-list();
+            }
+        }
     }
 
     ListView {
@@ -188,14 +201,6 @@ export component ListsPanel inherits VerticalLayout {
             clicked => {
                 root.select-list(entry.id);
             }
-        }
-    }
-
-    SubtleButton {
-        icon: @image-url("../icons/plus.svg");
-        text: @tr("New list");
-        clicked => {
-            root.new-list();
         }
     }
 }
