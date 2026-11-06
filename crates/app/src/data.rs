@@ -6,17 +6,16 @@
 use std::rc::Rc;
 
 use open_productivity_core::chrono::Local;
-use open_productivity_core::db;
+use open_productivity_core::db::{self, Connection};
 use rfd::FileDialog;
 use slint::ComponentHandle;
 
-use crate::tasks::State;
 use crate::{AppWindow, Strings};
 
-pub fn init(window: &AppWindow, state: &Rc<State>) {
-    let state = state.clone();
+pub fn init(window: &AppWindow, conn: Rc<Connection>) {
+    let weak = window.as_weak();
     window.on_export_copy(move || {
-        let Some(w) = state.window.upgrade() else {
+        let Some(w) = weak.upgrade() else {
             return;
         };
         w.set_export_status("".into());
@@ -30,7 +29,7 @@ pub fn init(window: &AppWindow, state: &Rc<State>) {
             return;
         };
         let s = w.global::<Strings>();
-        match db::export(&state.conn, &dest) {
+        match db::export(&conn, &dest) {
             Ok(()) => {
                 w.set_export_failed(false);
                 w.set_export_status(s.invoke_export_done(dest.display().to_string().into()));

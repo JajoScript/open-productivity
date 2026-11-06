@@ -15,7 +15,7 @@ use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 use crate::{AppWindow, Date, DueKind, ListEntry, Strings, TaskRow, TaskView, lists};
 
 pub struct State {
-    pub conn: Connection,
+    pub conn: Rc<Connection>,
     rows: Rc<VecModel<TaskRow>>,
     pub sidebar: Rc<VecModel<ListEntry>>,
     pub view: Cell<View>,
@@ -79,7 +79,7 @@ impl State {
 }
 
 /// The returned timer must be kept alive for the periodic reload to run.
-pub fn init(window: &AppWindow, conn: Connection) -> Timer {
+pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
     let state = Rc::new(State {
         conn,
         rows: Rc::default(),
@@ -192,7 +192,6 @@ pub fn init(window: &AppWindow, conn: Connection) -> Timer {
     });
 
     lists::init(window, &state, &finish);
-    crate::data::init(window, &state);
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_secs(60), move || {

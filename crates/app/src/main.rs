@@ -146,7 +146,10 @@ fn main() {
     calendar::init(&window);
     let switching = Rc::new(Cell::new(false));
     instances_ui::init(&window, &app_dir, &instance, &switching);
-    let tasks_timer = tasks::init(&window, conn);
+    // Shared by the modules; the window's callbacks hold the only references.
+    let conn = Rc::new(conn);
+    let tasks_timer = tasks::init(&window, conn.clone());
+    data::init(&window, conn);
 
     let name = instance.file_name().map_or_else(
         || instance.display().to_string(),
@@ -178,22 +181,27 @@ fn main() {
 mod tests {
     use super::*;
     use i_slint_backend_testing::ElementHandle;
+    use slint::platform::{PointerEventButton as B, WindowEvent as E};
 
-    #[test]
-    fn new_list_opens_the_creator_and_escape_closes_it() {
+    fn window() -> AppWindow {
         i_slint_backend_testing::init_no_event_loop();
         let w = AppWindow::new().unwrap();
         w.window().set_size(slint::LogicalSize::new(960., 640.));
         w.show().unwrap();
         // English labels whatever the machine's language.
         slint::select_bundled_translation("").unwrap();
-        let plus = ElementHandle::find_by_accessible_label(&w, "New list")
-            .next()
-            .unwrap();
-        // A real mouse click on the button's centre, like the user does.
-        let (p, s) = (plus.absolute_position(), plus.size());
+        w
+    }
+
+    fn find(w: &AppWindow, label: &str) -> Option<ElementHandle> {
+        ElementHandle::find_by_accessible_label(w, label).next()
+    }
+
+    /// A real mouse click on the element's centre, like the user does.
+    fn click(w: &AppWindow, label: &str) {
+        let e = find(w, label).unwrap_or_else(|| panic!("no element {label:?}"));
+        let (p, s) = (e.absolute_position(), e.size());
         let at = slint::LogicalPosition::new(p.x + s.width / 2., p.y + s.height / 2.);
-        use slint::platform::{PointerEventButton as B, WindowEvent as E};
         let win = w.window();
         win.dispatch_event(E::PointerMoved { position: at });
         win.dispatch_event(E::PointerPressed {
@@ -204,11 +212,25 @@ mod tests {
             position: at,
             button: B::Left,
         });
-        let field = || ElementHandle::find_by_accessible_label(&w, "List name").next();
-        let size = field().unwrap().size();
+    }
+
+    #[test]
+    fn new_list_opens_the_creator_and_escape_closes_it() {
+        let w = window();
+        click(&w, "New list");
+        let size = find(&w, "List name").unwrap().size();
         assert!(size.width > 100. && size.height >= 36., "{size:?}");
         let esc = slint::platform::Key::Escape.into();
-        win.dispatch_event(E::KeyPressed { text: esc });
-        assert!(field().is_none());
+        w.window().dispatch_event(E::KeyPressed { text: esc });
+        assert!(find(&w, "List name").is_none());
+    }
+
+    #[test]
+    fn rail_switches_between_tasks_and_settings() {
+        let w = window();
+        click(&w, "Settings");
+        assert!(find(&w, "New list").is_none());
+        click(&w, "Tasks");
+        assert!(find(&w, "New list").is_some());
     }
 }

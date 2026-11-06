@@ -1,0 +1,117 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "theme.slint";
+
+// One per built module; a module joins the rail when its first slice ships.
+export enum Module { tasks, settings }
+
+component RailButton inherits Rectangle {
+    in property <image> icon;
+    in property <string> label;
+    in property <bool> selected;
+    callback clicked;
+
+    width: 40px;
+    height: 40px;
+    border-radius: 6px;
+    background: root.selected ? Theme.selected : touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    forward-focus: focus;
+    accessible-role: list-item;
+    accessible-label: root.label;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.selected;
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    Image {
+        source: root.icon;
+        colorize: root.selected ? Palette.foreground : Theme.muted;
+        width: 20px;
+        height: 20px;
+        accessible-role: none;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// Icon rail that switches between the app's modules.
+export component Rail inherits Rectangle {
+    in-out property <Module> module;
+
+    width: 56px;
+    background: Palette.alternate-background;
+
+    VerticalLayout {
+        padding: 8px;
+        padding-top: 16px;
+        spacing: 4px;
+
+        Image {
+            source: @image-url("app-icons/fill-black.svg");
+            colorize: Palette.foreground;
+            height: 24px;
+            image-fit: contain;
+            accessible-role: image;
+            accessible-label: "Open Productivity";
+        }
+
+        Rectangle {
+            height: 12px;
+        }
+
+        RailButton {
+            icon: @image-url("icons/list-todo.svg");
+            label: @tr("Tasks");
+            selected: root.module == Module.tasks;
+            clicked => {
+                root.module = Module.tasks;
+            }
+        }
+
+        // Takes the spare height, pinning Settings to the bottom.
+        Rectangle {
+            vertical-stretch: 1;
+        }
+
+        RailButton {
+            icon: @image-url("icons/settings.svg");
+            label: @tr("Settings");
+            selected: root.module == Module.settings;
+            clicked => {
+                root.module = Module.settings;
+            }
+        }
+    }
+
+    // Hairline between the rail and the module's own panel.
+    Rectangle {
+        x: parent.width - 1px;
+        width: 1px;
+        background: Theme.hairline;
+    }
+}

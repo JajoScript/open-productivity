@@ -10,7 +10,6 @@ import { TaskView } from "tasks/tasks-view.slint";
 
 export component Sidebar inherits Rectangle {
     in property <string> instance-name;
-    in property <bool> settings-open;
     in property <TaskView> current-view;
     in property <int> current-list-id;
     in property <int> today-count;
@@ -20,7 +19,6 @@ export component Sidebar inherits Rectangle {
     callback select-list(int);
     // Opens the list creator, which lives in the window so it is centred there.
     callback new-list;
-    callback open-settings;
 
     background: Palette.alternate-background;
 
@@ -45,7 +43,7 @@ export component Sidebar inherits Rectangle {
             icon: @image-url("icons/sun.svg");
             text: @tr("Today");
             count: root.today-count;
-            selected: !root.settings-open && root.current-view == TaskView.today;
+            selected: root.current-view == TaskView.today;
             clicked => {
                 root.select-view(TaskView.today);
             }
@@ -55,7 +53,7 @@ export component Sidebar inherits Rectangle {
             icon: @image-url("icons/list-todo.svg");
             text: @tr("Tasks");
             count: root.all-count;
-            selected: !root.settings-open && root.current-view == TaskView.all;
+            selected: root.current-view == TaskView.all;
             clicked => {
                 root.select-view(TaskView.all);
             }
@@ -88,20 +86,10 @@ export component Sidebar inherits Rectangle {
                 icon: @image-url("icons/list.svg");
                 text: entry.name;
                 count: entry.count;
-                selected: !root.settings-open && root.current-view == TaskView.list && root.current-list-id == entry.id;
+                selected: root.current-view == TaskView.list && root.current-list-id == entry.id;
                 clicked => {
                     root.select-list(entry.id);
                 }
-            }
-        }
-
-        // Pinned to the bottom: the list above takes all the spare height.
-        NavEntry {
-            icon: @image-url("icons/settings.svg");
-            text: @tr("Settings");
-            selected: root.settings-open;
-            clicked => {
-                root.open-settings();
             }
         }
     }
