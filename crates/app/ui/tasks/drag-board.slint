@@ -1,0 +1,150 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+// Draggable task cards and the board they are dragged over, shared by Kanban and Eisenhower.
+
+import { Palette } from "std-widgets.slint";
+import { InkCheck } from "../ink-check.slint";
+import { Theme } from "../theme.slint";
+import { DueKind, TaskRow } from "task-column.slint";
+
+// A task card: checkbox and title (opens the editor). Extra controls go in as children.
+// A click reaches the controls; only a press-and-move starts a drag.
+export component TaskCard inherits Rectangle {
+    in property <TaskRow> task;
+    // What a drop receives; built by the app so foreign drags can be told apart.
+    in property <data-transfer> payload;
+    callback toggled(bool);
+    callback opened;
+    // For the board's floating copy: whether this card is in flight and where it was grabbed.
+    out property <bool> dragging: drag.dragging;
+    out property <length> grab-x: touch.pressed-x;
+    out property <length> grab-y: touch.pressed-y;
+
+    height: 40px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : Palette.background;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    // The card stays put and fades while it is being dragged.
+    opacity: drag.dragging ? 0.4 : 1;
+
+    drag := DragArea {
+        allow-move: true;
+        data: root.payload;
+
+        touch := TouchArea {
+            clicked => {
+                root.opened();
+            }
+        }
+
+        HorizontalLayout {
+            padding-right: 4px;
+            InkCheck {
+                checked: root.task.done;
+                label: root.task.title;
+                toggled(done) => {
+                    root.toggled(done);
+                }
+            }
+
+            Text {
+                text: root.task.title;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+                color: root.task.done ? Palette.foreground.with-alpha(0.45) : root.task.due-kind == DueKind.overdue ? Theme.critical : Palette.foreground;
+                accessible-role: none;
+            }
+
+            @children
+        }
+    }
+}
+
+// A board of drop zones. While a card is dragged, a floating copy of it follows the cursor
+// above the board's children, holding the point where the card was grabbed.
+export component DragBoard inherits Rectangle {
+    // Drag payload of a task, and the task id a payload carries (0 when it is not ours).
+    pure callback task-payload(int) -> data-transfer;
+    pure callback payload-task(data-transfer) -> int;
+
+    property <bool> ghosting;
+    property <TaskRow> ghost-task;
+    property <length> ghost-width;
+    property <length> ghost-x;
+    property <length> ghost-y;
+    property <length> grab-x;
+    property <length> grab-y;
+
+    // A card started or stopped moving: show or hide its floating copy. `at` is the card's
+    // absolute position and `grab` the point it was pressed at, in its own coordinates.
+    public function card-dragging(dragging: bool, task: TaskRow, at: Point, width: length, grab: Point) {
+        if dragging {
+            root.ghost-task = task;
+            root.ghost-width = width;
+            root.grab-x = grab.x;
+            root.grab-y = grab.y;
+            root.ghost-x = at.x - root.absolute-position.x;
+            root.ghost-y = at.y - root.absolute-position.y;
+        }
+        root.ghosting = dragging;
+    }
+
+    // From a drop zone's `can-drop`: `area` is that zone, `pos` the cursor in its coordinates.
+    // Returns whether the drag is one of our cards.
+    public function follow(area: Point, pos: Point, data: data-transfer) -> bool {
+        root.ghost-x = area.x - root.absolute-position.x + pos.x - root.grab-x;
+        root.ghost-y = area.y - root.absolute-position.y + pos.y - root.grab-y;
+        root.payload-task(data) > 0
+    }
+
+    // From a drop zone's `dropped`: hides the copy and returns the dropped task's id.
+    public function land(data: data-transfer) -> int {
+        root.ghosting = false;
+        root.payload-task(data)
+    }
+
+    @children
+
+    // The copy handles no input, so the drop still reaches the zone under the cursor.
+    if root.ghosting: ghost := Rectangle {
+        x: root.ghost-x;
+        y: root.ghost-y;
+        width: root.ghost-width;
+        height: 40px;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: Palette.foreground.with-alpha(0.25);
+        background: Palette.background;
+        opacity: 0.92;
+        accessible-role: none;
+
+        HorizontalLayout {
+            padding-left: 7px;
+            padding-right: 10px;
+            spacing: 14px;
+            alignment: start;
+            Rectangle {
+                width: 18px;
+                Rectangle {
+                    width: 18px;
+                    height: 18px;
+                    border-radius: 5px;
+                    border-width: 1.5px;
+                    border-color: Theme.muted;
+                }
+            }
+
+            Text {
+                text: root.ghost-task.title;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+                accessible-role: none;
+            }
+        }
+    }
+}

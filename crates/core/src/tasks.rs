@@ -23,6 +23,42 @@ pub struct Task {
     pub due: Option<NaiveDate>,
     /// The list id and its name.
     pub list: Option<(ListId, String)>,
+    pub priority: Priority,
+}
+
+/// The Eisenhower marks, set by hand.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Priority {
+    pub urgent: bool,
+    pub important: bool,
+}
+
+impl Priority {
+    /// The four quadrants in the order `eisenhower` returns them: do, schedule, delegate,
+    /// evaluate.
+    pub const QUADRANTS: [Priority; 4] = [
+        Priority {
+            urgent: true,
+            important: true,
+        },
+        Priority {
+            urgent: false,
+            important: true,
+        },
+        Priority {
+            urgent: true,
+            important: false,
+        },
+        Priority {
+            urgent: false,
+            important: false,
+        },
+    ];
+
+    /// Index of this priority in `QUADRANTS`.
+    pub fn quadrant(self) -> usize {
+        usize::from(!self.urgent) + 2 * usize::from(!self.important)
+    }
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -299,7 +335,7 @@ pub fn kanban(conn: &Connection, now: DateTime<Utc>) -> Result<[Vec<Task>; 3], T
 }
 
 const SELECT_TASKS: &str = "SELECT t.id, t.title, t.note, t.done_at IS NOT NULL, t.due_date, \
-     t.list_id, l.name FROM task t LEFT JOIN list l ON l.id = t.list_id";
+     t.list_id, l.name, t.urgent, t.important FROM task t LEFT JOIN list l ON l.id = t.list_id";
 
 /// Runs a `SELECT_TASKS` query and parses the stored due dates.
 fn query(
@@ -320,6 +356,10 @@ fn query(
                 done: r.get(3)?,
                 due: None,
                 list,
+                priority: Priority {
+                    urgent: r.get(7)?,
+                    important: r.get(8)?,
+                },
             },
             r.get::<_, Option<String>>(4)?,
         ))
@@ -376,20 +416,57 @@ pub fn set_list(conn: &Connection, id: TaskId, list: Option<ListId>) -> Result<(
     }
 }
 
-/// The title is trimmed and must not be empty; the note keeps inner newlines but loses
-/// trailing whitespace.
-pub fn update(conn: &Connection, id: TaskId, title: &str, note: &str) -> Result<(), TaskError> {
+/// Saves the editor in one statement. The title is trimmed and must not be empty; the note
+/// keeps inner newlines but loses trailing whitespace.
+pub fn update(
+    conn: &Connection,
+    id: TaskId,
+    title: &str,
+    note: &str,
+    priority: Priority,
+) -> Result<(), TaskError> {
     let title = title.trim();
     if title.is_empty() {
         return Err(TaskError::EmptyTitle);
     }
     match conn.execute(
-        "UPDATE task SET title = ?1, note = ?2 WHERE id = ?3",
-        (title, note.trim_end(), id.0),
+        "UPDATE task SET title = ?1, note = ?2, urgent = ?3, important = ?4 WHERE id = ?5",
+        (
+            title,
+            note.trim_end(),
+            priority.urgent,
+            priority.important,
+            id.0,
+        ),
     )? {
         0 => Err(TaskError::NotFound),
         _ => Ok(()),
     }
+}
+
+/// Moves a task to an Eisenhower quadrant.
+pub fn set_priority(conn: &Connection, id: TaskId, priority: Priority) -> Result<(), TaskError> {
+    match conn.execute(
+        "UPDATE task SET urgent = ?1, important = ?2 WHERE id = ?3",
+        (priority.urgent, priority.important, id.0),
+    )? {
+        0 => Err(TaskError::NotFound),
+        _ => Ok(()),
+    }
+}
+
+/// Pending tasks per quadrant, in `Priority::QUADRANTS` order; each by due date (undated
+/// last), then creation.
+pub fn eisenhower(conn: &Connection) -> Result<[Vec<Task>; 4], TaskError> {
+    let sql = format!(
+        "{SELECT_TASKS} WHERE t.done_at IS NULL \
+         ORDER BY t.due_date IS NULL, t.due_date, t.created_at, t.id"
+    );
+    let mut quadrants: [Vec<Task>; 4] = Default::default();
+    for t in query(conn, &sql, ())? {
+        quadrants[t.priority.quadrant()].push(t);
+    }
+    Ok(quadrants)
 }
 
 pub fn delete(conn: &Connection, id: TaskId) -> Result<(), TaskError> {
@@ -501,6 +578,7 @@ mod tests {
             done,
             due: due.map(d),
             list: None,
+            priority: Priority::default(),
         }
     }
 
@@ -593,17 +671,28 @@ mod tests {
 
 line 3 
 	 ",
+            Priority {
+                urgent: true,
+                important: false,
+            },
         )
         .unwrap();
         let t = &ls(&conn)[0];
         assert_eq!(t.title, "new title");
+        assert_eq!(
+            t.priority,
+            Priority {
+                urgent: true,
+                important: false
+            }
+        );
         assert_eq!(
             t.note,
             "  line 1
 
 line 3"
         );
-        update(&conn, id, "new title", "").unwrap();
+        update(&conn, id, "new title", "", Priority::default()).unwrap();
         assert_eq!(ls(&conn)[0].note, "");
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
@@ -613,11 +702,15 @@ line 3"
     fn update_with_empty_title_changes_nothing() {
         let (dir, conn) = setup("update-empty");
         let id = mk(&conn, "a").unwrap();
-        update(&conn, id, "a", "keep").unwrap();
+        update(&conn, id, "a", "keep", Priority::default()).unwrap();
         assert!(matches!(
             update(
-                &conn, id, " 
-", "other"
+                &conn,
+                id,
+                " 
+",
+                "other",
+                Priority::default()
             ),
             Err(TaskError::EmptyTitle)
         ));
@@ -631,7 +724,7 @@ line 3"
     fn update_and_delete_unknown_id_are_not_found() {
         let (dir, conn) = setup("edit-missing");
         assert!(matches!(
-            update(&conn, TaskId(42), "a", ""),
+            update(&conn, TaskId(42), "a", "", Priority::default()),
             Err(TaskError::NotFound)
         ));
         assert!(matches!(
@@ -786,6 +879,51 @@ line 3"
             .unwrap();
         }
         assert_eq!(kanban_titles(&conn)[2], ["edge"]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn quadrant_indexes_match_the_quadrants() {
+        for (i, q) in Priority::QUADRANTS.iter().enumerate() {
+            assert_eq!(q.quadrant(), i, "{q:?}");
+        }
+    }
+
+    #[test]
+    fn eisenhower_sorts_pending_tasks_into_quadrants() {
+        let (dir, conn) = setup("eisenhower");
+        let p = |urgent, important| Priority { urgent, important };
+        for (title, priority, done) in [
+            ("do", p(true, true), false),
+            ("plan", p(false, true), false),
+            ("delegate", p(true, false), false),
+            ("drop", p(false, false), false),
+            ("done", p(true, true), true),
+        ] {
+            let id = mk(&conn, title).unwrap();
+            set_priority(&conn, id, priority).unwrap();
+            set_done(&conn, id, done).unwrap();
+        }
+        let titles = |conn: &Connection| -> Vec<Vec<String>> {
+            eisenhower(conn)
+                .unwrap()
+                .into_iter()
+                .map(|q| q.into_iter().map(|t| t.title).collect())
+                .collect()
+        };
+        // Done tasks stay out.
+        assert_eq!(
+            titles(&conn),
+            [vec!["do"], vec!["plan"], vec!["delegate"], vec!["drop"]]
+        );
+        let drop_id = ls(&conn).iter().find(|t| t.title == "drop").unwrap().id;
+        set_priority(&conn, drop_id, p(true, true)).unwrap();
+        assert_eq!(titles(&conn)[0], ["do", "drop"]);
+        assert!(matches!(
+            set_priority(&conn, TaskId(42), p(true, true)),
+            Err(TaskError::NotFound)
+        ));
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

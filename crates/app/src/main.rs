@@ -22,6 +22,7 @@ mod dialogs;
 mod instances_ui;
 mod kanban;
 mod lists;
+mod matrix;
 mod settings;
 mod tasks;
 mod week;
@@ -254,21 +255,55 @@ mod tests {
         assert!(find(&w, "Add task…").is_some() || find(&w, "Nothing due today.").is_some());
     }
 
-    #[test]
-    fn dragging_a_card_moves_it_to_another_column() {
+    /// A window wired to a fresh database holding one undated task named `title`.
+    fn window_with_task(name: &str, title: &str) -> (PathBuf, AppWindow, slint::Timer) {
         use open_productivity_core::chrono::Local;
         use open_productivity_core::tasks::{self as core_tasks, View};
-        use slint::Model;
 
-        let dir = std::env::temp_dir().join(format!("op-app-drag-{}", std::process::id()));
+        let dir = std::env::temp_dir().join(format!("op-app-{name}-{}", std::process::id()));
         let _ = fs::remove_dir_all(&dir);
         fs::create_dir_all(&dir).unwrap();
         let conn = db::open(&dir.join("test.db")).unwrap();
-        core_tasks::create(&conn, "drag me", View::All, Local::now().date_naive()).unwrap();
+        core_tasks::create(&conn, title, View::All, Local::now().date_naive()).unwrap();
         let w = window();
-        let _timer = tasks::init(&w, Rc::new(conn));
-        click(&w, "Kanban");
+        let timer = tasks::init(&w, Rc::new(conn));
+        (dir, w, timer)
+    }
 
+    /// Presses on the card whose checkbox is labelled `card`, past its title, then drags it
+    /// in 10 steps to 120px below the element labelled `target`, calling `step` after each.
+    fn drag(w: &AppWindow, card: &str, target: &str, mut step: impl FnMut(slint::LogicalPosition)) {
+        let c = find(w, card).unwrap().absolute_position();
+        let from = slint::LogicalPosition::new(c.x + 60., c.y + 16.);
+        let t = find(w, target).unwrap().absolute_position();
+        let to = slint::LogicalPosition::new(t.x + 40., t.y + 120.);
+        let win = w.window();
+        win.dispatch_event(E::PointerMoved { position: from });
+        win.dispatch_event(E::PointerPressed {
+            position: from,
+            button: B::Left,
+        });
+        for i in 1..=10 {
+            let f = i as f32 / 10.;
+            let position = slint::LogicalPosition::new(
+                from.x + (to.x - from.x) * f,
+                from.y + (to.y - from.y) * f,
+            );
+            win.dispatch_event(E::PointerMoved { position });
+            step(position);
+        }
+        win.dispatch_event(E::PointerReleased {
+            position: to,
+            button: B::Left,
+        });
+    }
+
+    #[test]
+    fn dragging_a_card_moves_it_to_another_column() {
+        use slint::Model;
+
+        let (dir, w, _timer) = window_with_task("drag", "drag me");
+        click(&w, "Kanban");
         let in_column = |i: usize| {
             w.get_kanban_columns()
                 .row_data(i)
@@ -278,46 +313,44 @@ mod tests {
         };
         assert_eq!((in_column(0), in_column(1)), (1, 0));
 
-        // Press on the card's title, then drag in steps onto the In progress column.
-        let check = find(&w, "drag me").unwrap();
-        let c = check.absolute_position();
-        let from = slint::LogicalPosition::new(c.x + 60., c.y + 16.);
-        let column = find(&w, "In progress").unwrap().absolute_position();
-        let to = slint::LogicalPosition::new(column.x + 40., column.y + 120.);
-        let win = w.window();
-        win.dispatch_event(E::PointerMoved { position: from });
-        win.dispatch_event(E::PointerPressed {
-            position: from,
-            button: B::Left,
-        });
-        let ghost = || ElementHandle::find_by_element_id(&w, "KanbanView::ghost").next();
+        let ghost = || ElementHandle::find_by_element_id(&w, "DragBoard::ghost").next();
         // The floating copy holds the cursor at the point where the card was grabbed.
-        let under_cursor = |p: slint::LogicalPosition| {
+        drag(&w, "drag me", "In progress", |p| {
             let g = ghost().expect("no floating copy while dragging");
             let (gp, gs) = (g.absolute_position(), g.size());
             assert!(
                 p.x >= gp.x && p.x <= gp.x + gs.width && p.y >= gp.y && p.y <= gp.y + gs.height,
                 "cursor {p:?} outside the copy at {gp:?} {gs:?}"
             );
-        };
-        for step in 1..=10 {
-            let f = step as f32 / 10.;
-            let position = slint::LogicalPosition::new(
-                from.x + (to.x - from.x) * f,
-                from.y + (to.y - from.y) * f,
-            );
-            win.dispatch_event(E::PointerMoved { position });
-            if step == 5 || step == 10 {
-                under_cursor(position);
-            }
-        }
-        win.dispatch_event(E::PointerReleased {
-            position: to,
-            button: B::Left,
         });
 
         assert_eq!((in_column(0), in_column(1)), (0, 1));
         assert!(ghost().is_none(), "the floating copy outlived the drop");
+        drop(w);
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dragging_a_card_onto_a_quadrant_sets_its_marks() {
+        use slint::Model;
+
+        let (dir, w, _timer) = window_with_task("matrix", "sort me");
+        click(&w, "Eisenhower");
+        let in_quadrant = |i: usize| w.get_quadrants().row_data(i).unwrap().tasks.row_count();
+        // A new task is neither urgent nor important.
+        assert_eq!((in_quadrant(0), in_quadrant(3)), (0, 1));
+
+        drag(&w, "sort me", "Do first", |_| {});
+
+        assert_eq!((in_quadrant(0), in_quadrant(3)), (1, 0));
+        let t = w
+            .get_quadrants()
+            .row_data(0)
+            .unwrap()
+            .tasks
+            .row_data(0)
+            .unwrap();
+        assert!(t.urgent && t.important);
         drop(w);
         let _ = fs::remove_dir_all(&dir);
     }

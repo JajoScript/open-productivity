@@ -391,3 +391,30 @@ msgstr "Mover a En curso"
 
 msgid "Move to Completed"
 msgstr "Mover a Completadas"
+
+msgid "Eisenhower"
+msgstr "Eisenhower"
+
+msgid "Urgent"
+msgstr "Urgente"
+
+msgid "Important"
+msgstr "Importante"
+
+msgid "Not urgent"
+msgstr "No urgente"
+
+msgid "Not important"
+msgstr "No importante"
+
+msgid "Do first"
+msgstr "Hacer ahora"
+
+msgid "Schedule"
+msgstr "Planificar"
+
+msgid "Delegate"
+msgstr "Delegar"
+
+msgid "Evaluate"
+msgstr "Evaluar"

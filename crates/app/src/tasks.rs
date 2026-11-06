@@ -10,12 +10,12 @@ use std::time::Duration;
 use open_productivity_core::calendar;
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
-use open_productivity_core::tasks::{self, DueLabel, Task, TaskError, TaskId, View};
+use open_productivity_core::tasks::{self, DueLabel, Priority, Task, TaskError, TaskId, View};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::{
-    AppWindow, Date, DueKind, KanbanColumn, ListEntry, Strings, TaskRow, TaskView, TasksTab,
-    WeekDay, kanban, lists, week,
+    AppWindow, Date, DueKind, KanbanColumn, ListEntry, Quadrant, Strings, TaskRow, TaskView,
+    TasksTab, WeekDay, kanban, lists, matrix, week,
 };
 
 pub struct State {
@@ -29,6 +29,7 @@ pub struct State {
     pub monday: Cell<NaiveDate>,
     pub week: Rc<VecModel<WeekDay>>,
     pub kanban: Rc<VecModel<KanbanColumn>>,
+    pub matrix: Rc<VecModel<Quadrant>>,
     // Day of the last reload, so the timer only rebuilds rows when it changes.
     pub day: Cell<NaiveDate>,
     pub window: slint::Weak<AppWindow>,
@@ -76,6 +77,8 @@ pub fn task_row(t: Task, today: NaiveDate, first_done: bool) -> Result<TaskRow, 
         due_month: month,
         due_year: year,
         list_name: t.list.map(|(_, name)| name).unwrap_or_default().into(),
+        urgent: t.priority.urgent,
+        important: t.priority.important,
         first_done,
     })
 }
@@ -97,6 +100,7 @@ impl State {
         match self.tab.get() {
             TasksTab::Week => return self.reload_week(today),
             TasksTab::Kanban => return self.reload_kanban(today),
+            TasksTab::Eisenhower => return self.reload_matrix(today),
             TasksTab::Today | TasksTab::Lists => {}
         }
         let list = tasks::list(&self.conn, self.view.get(), now).map_err(|e| e.to_string())?;
@@ -126,12 +130,14 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         monday: Cell::new(calendar::week_start(Local::now().date_naive())),
         week: Rc::default(),
         kanban: Rc::default(),
+        matrix: Rc::default(),
         day: Cell::new(Local::now().date_naive()),
         window: window.as_weak(),
     });
     window.set_tasks(ModelRc::from(state.rows.clone()));
     window.set_week_days(ModelRc::from(state.week.clone()));
     window.set_kanban_columns(ModelRc::from(state.kanban.clone()));
+    window.set_quadrants(ModelRc::from(state.matrix.clone()));
     window.set_lists(ModelRc::from(state.panel.clone()));
 
     // Shows the outcome in the view; an empty title is silently ignored.
@@ -225,12 +231,15 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
 
     window.on_update_task({
         let (state, after) = (state.clone(), after.clone());
-        move |id, title, note| match tasks::update(&state.conn, TaskId(id.into()), &title, &note) {
-            // The editor stays open with the typed text and shows the message itself.
-            Err(TaskError::EmptyTitle) => false,
-            res => {
-                after(res);
-                true
+        move |id, title, note, urgent, important| {
+            let priority = Priority { urgent, important };
+            match tasks::update(&state.conn, TaskId(id.into()), &title, &note, priority) {
+                // The editor stays open with the typed text and shows the message itself.
+                Err(TaskError::EmptyTitle) => false,
+                res => {
+                    after(res);
+                    true
+                }
             }
         }
     });
@@ -249,7 +258,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
                 TasksTab::Week => state
                     .monday
                     .set(calendar::week_start(Local::now().date_naive())),
-                TasksTab::Kanban | TasksTab::Lists => {}
+                TasksTab::Kanban | TasksTab::Eisenhower | TasksTab::Lists => {}
             }
             state.tab.set(tab);
             finish(state.reload())
@@ -259,6 +268,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
     lists::init(window, &state, &finish);
     week::init(window, &state, &finish);
     kanban::init(window, &state, &finish);
+    matrix::init(window, &state, &finish);
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_secs(60), move || {

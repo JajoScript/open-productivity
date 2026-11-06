@@ -1,0 +1,122 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { ListView } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { DragBoard, TaskCard } from "drag-board.slint";
+import { TaskRow } from "task-column.slint";
+import { TaskEditor } from "task-editor.slint";
+
+// One quadrant: its marks and its pending tasks.
+export struct Quadrant {
+    urgent: bool,
+    important: bool,
+    tasks: [TaskRow],
+}
+
+// Eisenhower matrix: important on top, urgent on the left. Dropping a card on a quadrant
+// gives the task that quadrant's marks.
+export component MatrixView inherits DragBoard {
+    // The four quadrants, from core in reading order: do, schedule, delegate, evaluate.
+    in property <[Quadrant]> quadrants;
+    callback set-done(int, bool);
+    callback set-priority(int, bool, bool);
+    callback update-task(int, string, string, bool, bool) -> bool;
+    callback delete-task(int);
+
+    property <TaskRow> editing;
+    property <length> pad: 24px;
+    property <length> gap: 12px;
+    property <length> cell-width: (root.width - 2 * root.pad - root.gap) / 2;
+    property <length> cell-height: (root.height - 20px - root.pad - root.gap) / 2;
+
+    editor := TaskEditor {
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        task-id: root.editing.id;
+        title: root.editing.title;
+        note: root.editing.note;
+        urgent: root.editing.urgent;
+        important: root.editing.important;
+        saved(id, title, note, urgent, important) => {
+            return root.update-task(id, title, note, urgent, important);
+        }
+        deleted(id) => {
+            root.delete-task(id);
+        }
+    }
+
+    // A 2×2 grid laid out by hand: Slint's grid cannot repeat one cell template.
+    for q[i] in root.quadrants: Rectangle {
+        x: root.pad + Math.mod(i, 2) * (root.cell-width + root.gap);
+        y: 20px + Math.floor(i / 2) * (root.cell-height + root.gap);
+        width: root.cell-width;
+        height: root.cell-height;
+        border-radius: 6px;
+        // Lit while a task is dragged over it.
+        background: drop.has-drag ? Theme.selected : Theme.field;
+        animate background { duration: Theme.fast; easing: Theme.ease-out; }
+
+        drop := DropArea {
+            // Only our own task cards; text dragged from other apps is refused.
+            can-drop(event) => {
+                root.follow(self.absolute-position, event.position, event.data) ? DragAction.move : DragAction.none
+            }
+            dropped(event) => {
+                root.set-priority(root.land(event.data), q.urgent, q.important);
+                return event.proposed-action;
+            }
+
+            VerticalLayout {
+                padding: 8px;
+                spacing: 6px;
+                HorizontalLayout {
+                    padding-left: 4px;
+                    spacing: 8px;
+                    height: 28px;
+                    Text {
+                        text: q.urgent && q.important ? @tr("Do first") : q.important ? @tr("Schedule") : q.urgent ? @tr("Delegate") : @tr("Evaluate");
+                        font-weight: 600;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: q.tasks.length;
+                        color: Theme.muted;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: (q.urgent ? @tr("Urgent") : @tr("Not urgent")) + " · " + (q.important ? @tr("Important") : @tr("Not important"));
+                        color: Theme.muted;
+                        font-size: 12px;
+                        vertical-alignment: center;
+                        horizontal-alignment: right;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                    }
+                }
+
+                ListView {
+                    for t in q.tasks: VerticalLayout {
+                        padding-bottom: 6px;
+                        TaskCard {
+                            task: t;
+                            payload: root.task-payload(t.id);
+                            changed dragging => {
+                                root.card-dragging(self.dragging, t, self.absolute-position, self.width, { x: self.grab-x, y: self.grab-y });
+                            }
+                            toggled(done) => {
+                                root.set-done(t.id, done);
+                            }
+                            opened => {
+                                root.editing = t;
+                                editor.show();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

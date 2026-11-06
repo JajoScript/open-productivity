@@ -3,6 +3,7 @@
 
 import { Palette } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
+import { InkCheck } from "../ink-check.slint";
 import { InkField } from "../ink-field.slint";
 import { InkTextArea } from "../ink-text-area.slint";
 import { SubtleButton } from "../subtle-button.slint";
@@ -13,7 +14,10 @@ import { Theme } from "../theme.slint";
 component EditorBody inherits FocusScope {
     in property <string> title;
     in property <string> note;
-    callback save(string, string) -> bool;
+    // Rebuilt on every show, so these start from the task and the checks only change them here.
+    in-out property <bool> urgent;
+    in-out property <bool> important;
+    callback save(string, string, bool, bool) -> bool;
     callback delete;
     callback cancel;
 
@@ -47,7 +51,7 @@ component EditorBody inherits FocusScope {
                     self.focus();
                 }
                 accepted(text) => {
-                    title-empty = !root.save(text, note-field.text);
+                    title-empty = !root.save(text, note-field.text, root.urgent, root.important);
                 }
             }
 
@@ -60,7 +64,44 @@ component EditorBody inherits FocusScope {
                 text: root.note;
                 placeholder-text: @tr("Note");
                 submitted => {
-                    title-empty = !root.save(title-field.text, self.text);
+                    title-empty = !root.save(title-field.text, self.text, root.urgent, root.important);
+                }
+            }
+
+            // Eisenhower marks.
+            HorizontalLayout {
+                spacing: 4px;
+                alignment: start;
+                InkCheck {
+                    checked: root.urgent;
+                    label: @tr("Urgent");
+                    toggled(v) => {
+                        root.urgent = v;
+                    }
+                }
+
+                Text {
+                    text: @tr("Urgent");
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+
+                Rectangle {
+                    width: 12px;
+                }
+
+                InkCheck {
+                    checked: root.important;
+                    label: @tr("Important");
+                    toggled(v) => {
+                        root.important = v;
+                    }
+                }
+
+                Text {
+                    text: @tr("Important");
+                    vertical-alignment: center;
+                    accessible-role: none;
                 }
             }
 
@@ -90,7 +131,7 @@ component EditorBody inherits FocusScope {
                 InkButton {
                     text: @tr("Save");
                     clicked => {
-                        title-empty = !root.save(title-field.text, note-field.text);
+                        title-empty = !root.save(title-field.text, note-field.text, root.urgent, root.important);
                     }
                 }
             }
@@ -135,8 +176,10 @@ export component TaskEditor inherits PopupWindow {
     in property <int> task-id;
     in property <string> title;
     in property <string> note;
+    in property <bool> urgent;
+    in property <bool> important;
     // Returns false when the task was not saved; the editor then stays open.
-    callback saved(int, string, string) -> bool;
+    callback saved(int, string, string, bool, bool) -> bool;
     callback deleted(int);
 
     close-policy: close-on-click-outside;
@@ -150,8 +193,10 @@ export component TaskEditor inherits PopupWindow {
         EditorBody {
             title: root.title;
             note: root.note;
-            save(title, note) => {
-                if root.saved(root.task-id, title, note) {
+            urgent: root.urgent;
+            important: root.important;
+            save(title, note, urgent, important) => {
+                if root.saved(root.task-id, title, note, urgent, important) {
                     root.close();
                     return true;
                 }

@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { ListView, Palette } from "std-widgets.slint";
-import { InkCheck } from "../ink-check.slint";
+import { ListView } from "std-widgets.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
-import { DueKind, TaskRow } from "task-column.slint";
+import { DragBoard, TaskCard } from "drag-board.slint";
+import { TaskRow } from "task-column.slint";
 import { TaskEditor } from "task-editor.slint";
 
 export enum Stage { icebox, in-progress, done }
@@ -15,109 +15,16 @@ export struct KanbanColumn {
     tasks: [TaskRow],
 }
 
-// A task card: checkbox, title (opens the editor) and arrows to the neighbouring columns.
-// It can also be dragged onto another column; the arrows stay for keyboard users.
-component Card inherits Rectangle {
-    in property <TaskRow> task;
-    in property <Stage> stage;
-    // What a drop receives; built by the app so foreign drags can be told apart.
-    in property <data-transfer> payload;
-    callback toggled(bool);
-    callback opened;
-    callback moved(Stage);
-    // For the board's floating copy: whether this card is in flight and where it was grabbed.
-    out property <bool> dragging: drag.dragging;
-    out property <length> grab-x: touch.pressed-x;
-    out property <length> grab-y: touch.pressed-y;
-
-    height: 40px;
-    border-radius: 6px;
-    border-width: 1px;
-    border-color: Theme.hairline;
-    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : Palette.background;
-    animate background { duration: Theme.fast; easing: Theme.ease-out; }
-    // The card stays put and fades while it is being dragged.
-    opacity: drag.dragging ? 0.4 : 1;
-
-    // A click still reaches the children; only a press-and-move starts a drag.
-    drag := DragArea {
-        allow-move: true;
-        data: root.payload;
-
-        touch := TouchArea {
-            clicked => {
-                root.opened();
-            }
-        }
-
-        HorizontalLayout {
-            padding-right: 4px;
-            InkCheck {
-                checked: root.task.done;
-                label: root.task.title;
-                toggled(done) => {
-                    root.toggled(done);
-                }
-            }
-
-            Text {
-                text: root.task.title;
-                vertical-alignment: center;
-                overflow: elide;
-                horizontal-stretch: 1;
-                color: root.task.done ? Palette.foreground.with-alpha(0.45) : root.task.due-kind == DueKind.overdue ? Theme.critical : Palette.foreground;
-                accessible-role: none;
-            }
-
-            if root.stage != Stage.icebox: SubtleButton {
-                icon: @image-url("../icons/chevron-left.svg");
-                label: root.stage == Stage.done ? @tr("Move to In progress") : @tr("Move to Icebox");
-                clicked => {
-                    root.moved(root.stage == Stage.done ? Stage.in-progress : Stage.icebox);
-                }
-            }
-
-            if root.stage != Stage.done: SubtleButton {
-                icon: @image-url("../icons/chevron-right.svg");
-                label: root.stage == Stage.icebox ? @tr("Move to In progress") : @tr("Move to Completed");
-                clicked => {
-                    root.moved(root.stage == Stage.icebox ? Stage.in-progress : Stage.done);
-                }
-            }
-        }
-    }
-}
-
-
-// Icebox, In progress and Completed (last 7 days), side by side.
-// While a card is dragged, a floating copy of it follows the cursor over the board.
-export component KanbanView inherits Rectangle {
+// Icebox, In progress and Completed (last 7 days), side by side. Cards are dragged between
+// columns; their arrows do the same from the keyboard.
+export component KanbanView inherits DragBoard {
     in property <[KanbanColumn]> columns;
     callback set-done(int, bool);
     callback move-task(int, Stage);
-    callback update-task(int, string, string) -> bool;
+    callback update-task(int, string, string, bool, bool) -> bool;
     callback delete-task(int);
-    // Drag payload of a task, and the task id a payload carries (0 when it is not ours).
-    pure callback task-payload(int) -> data-transfer;
-    pure callback payload-task(data-transfer) -> int;
 
     property <TaskRow> editing;
-
-    // The floating copy: which task, its size, and where its top-left corner is on the board.
-    property <bool> ghosting;
-    property <TaskRow> ghost-task;
-    property <length> ghost-width;
-    property <length> ghost-x;
-    property <length> ghost-y;
-    // Where the card was grabbed, so the copy keeps that point under the cursor.
-    property <length> grab-x;
-    property <length> grab-y;
-
-    // Follows the cursor; `area` is the DropArea reporting `pos` in its own coordinates.
-    function follow(area-x: length, area-y: length, pos: Point) {
-        root.ghost-x = area-x - root.absolute-position.x + pos.x - root.grab-x;
-        root.ghost-y = area-y - root.absolute-position.y + pos.y - root.grab-y;
-    }
 
     editor := TaskEditor {
         x: (root.width - self.width) / 2;
@@ -125,8 +32,10 @@ export component KanbanView inherits Rectangle {
         task-id: root.editing.id;
         title: root.editing.title;
         note: root.editing.note;
-        saved(id, title, note) => {
-            return root.update-task(id, title, note);
+        urgent: root.editing.urgent;
+        important: root.editing.important;
+        saved(id, title, note, urgent, important) => {
+            return root.update-task(id, title, note, urgent, important);
         }
         deleted(id) => {
             root.delete-task(id);
@@ -150,12 +59,10 @@ export component KanbanView inherits Rectangle {
             drop := DropArea {
                 // Only our own task cards; text dragged from other apps is refused.
                 can-drop(event) => {
-                    root.follow(self.absolute-position.x, self.absolute-position.y, event.position);
-                    root.payload-task(event.data) > 0 ? DragAction.move : DragAction.none
+                    root.follow(self.absolute-position, event.position, event.data) ? DragAction.move : DragAction.none
                 }
                 dropped(event) => {
-                    root.ghosting = false;
-                    root.move-task(root.payload-task(event.data), col.stage);
+                    root.move-task(root.land(event.data), col.stage);
                     return event.proposed-action;
                 }
 
@@ -183,20 +90,11 @@ export component KanbanView inherits Rectangle {
                     ListView {
                         for t in col.tasks: VerticalLayout {
                             padding-bottom: 6px;
-                            Card {
+                            TaskCard {
                                 task: t;
-                                stage: col.stage;
                                 payload: root.task-payload(t.id);
                                 changed dragging => {
-                                    if self.dragging {
-                                        root.ghost-task = t;
-                                        root.ghost-width = self.width;
-                                        root.grab-x = self.grab-x;
-                                        root.grab-y = self.grab-y;
-                                        root.ghost-x = self.absolute-position.x - root.absolute-position.x;
-                                        root.ghost-y = self.absolute-position.y - root.absolute-position.y;
-                                    }
-                                    root.ghosting = self.dragging;
+                                    root.card-dragging(self.dragging, t, self.absolute-position, self.width, { x: self.grab-x, y: self.grab-y });
                                 }
                                 toggled(done) => {
                                     root.set-done(t.id, done);
@@ -205,53 +103,26 @@ export component KanbanView inherits Rectangle {
                                     root.editing = t;
                                     editor.show();
                                 }
-                                moved(s) => {
-                                    root.move-task(t.id, s);
+
+                                if col.stage != Stage.icebox: SubtleButton {
+                                    icon: @image-url("../icons/chevron-left.svg");
+                                    label: col.stage == Stage.done ? @tr("Move to In progress") : @tr("Move to Icebox");
+                                    clicked => {
+                                        root.move-task(t.id, col.stage == Stage.done ? Stage.in-progress : Stage.icebox);
+                                    }
+                                }
+
+                                if col.stage != Stage.done: SubtleButton {
+                                    icon: @image-url("../icons/chevron-right.svg");
+                                    label: col.stage == Stage.icebox ? @tr("Move to In progress") : @tr("Move to Completed");
+                                    clicked => {
+                                        root.move-task(t.id, col.stage == Stage.icebox ? Stage.in-progress : Stage.done);
+                                    }
                                 }
                             }
                         }
                     }
                 }
-            }
-        }
-    }
-
-    // The floating copy: the card's silhouette, above the columns. It handles no input,
-    // so the drop still reaches the column under the cursor.
-    if root.ghosting: ghost := Rectangle {
-        x: root.ghost-x;
-        y: root.ghost-y;
-        width: root.ghost-width;
-        height: 40px;
-        border-radius: 6px;
-        border-width: 1px;
-        border-color: Palette.foreground.with-alpha(0.25);
-        background: Palette.background;
-        opacity: 0.92;
-        accessible-role: none;
-
-        HorizontalLayout {
-            padding-left: 7px;
-            padding-right: 10px;
-            spacing: 14px;
-            alignment: start;
-            Rectangle {
-                width: 18px;
-                Rectangle {
-                    width: 18px;
-                    height: 18px;
-                    border-radius: 5px;
-                    border-width: 1.5px;
-                    border-color: Theme.muted;
-                }
-            }
-
-            Text {
-                text: root.ghost-task.title;
-                vertical-alignment: center;
-                overflow: elide;
-                horizontal-stretch: 1;
-                accessible-role: none;
             }
         }
     }

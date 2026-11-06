@@ -10,8 +10,8 @@ import { ListCreator } from "tasks/list-creator.slint";
 import { Module, Rail } from "rail.slint";
 import { Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
-import { DueKind, KanbanColumn, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { Calendar, Date, DueKind, InstanceRow, KanbanColumn, Stage, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay }
+import { DueKind, KanbanColumn, Quadrant, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
+export { Calendar, Date, DueKind, InstanceRow, KanbanColumn, Quadrant, Stage, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -53,6 +53,8 @@ export component AppWindow inherits Window {
     callback move-task(int, Stage);
     pure callback task-payload(int) -> data-transfer;
     pure callback payload-task(data-transfer) -> int;
+    in property <[Quadrant]> quadrants;
+    callback set-priority(int, bool, bool);
     callback create-task(string);
     callback set-done(int, bool);
     callback set-due(int, Date);
@@ -61,7 +63,7 @@ export component AppWindow inherits Window {
     callback create-list(string) -> string;
     callback delete-list(int);
     callback set-list(int, int);
-    callback update-task(int, string, string) -> bool;
+    callback update-task(int, string, string, bool, bool) -> bool;
     callback delete-task(int);
 
     title: "Open Productivity — " + instance-name;
@@ -193,6 +195,10 @@ export component AppWindow inherits Window {
                         root.week-shift(n);
                     }
                     kanban-columns: root.kanban-columns;
+                    quadrants: root.quadrants;
+                    set-priority(id, urgent, important) => {
+                        root.set-priority(id, urgent, important);
+                    }
                     move-task(id, s) => {
                         root.move-task(id, s);
                     }
@@ -231,8 +237,8 @@ export component AppWindow inherits Window {
                     delete-list(id) => {
                         root.delete-list(id);
                     }
-                    update-task(id, title, note) => {
-                        return root.update-task(id, title, note);
+                    update-task(id, title, note, urgent, important) => {
+                        return root.update-task(id, title, note, urgent, important);
                     }
                     delete-task(id) => {
                         root.delete-task(id);
