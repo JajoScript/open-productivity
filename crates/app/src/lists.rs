@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-//! Glue between the sidebar and `core::lists`.
+//! Glue between the lists panel and `core::lists`.
 
 use std::rc::Rc;
 
@@ -11,7 +11,7 @@ use open_productivity_core::tasks::{self, View};
 use slint::ComponentHandle;
 
 use crate::tasks::{State, ui_id, ui_view};
-use crate::{AppWindow, ListEntry, Strings};
+use crate::{AppWindow, ListEntry, Strings, ViewCounts};
 
 /// The Slint side has no optional int, so 0 stands for "no list" (SQLite rowids start at 1).
 pub fn list_arg(id: i32) -> Option<ListId> {
@@ -24,7 +24,7 @@ pub fn show_view(state: &State, view: View, finish: &dyn Fn(Result<(), String>))
 }
 
 impl State {
-    pub fn reload_sidebar(&self) -> Result<(), String> {
+    pub fn reload_panel(&self) -> Result<(), String> {
         let all = lists::all(&self.conn).map_err(|e| e.to_string())?;
         let counts =
             tasks::counts(&self.conn, Local::now().fixed_offset()).map_err(|e| e.to_string())?;
@@ -41,10 +41,16 @@ impl State {
                 name: l.name.into(),
             });
         }
-        self.sidebar.set_vec(entries);
+        self.panel.set_vec(entries);
         if let Some(w) = self.window.upgrade() {
-            w.set_today_count(ui_id(counts.today.into())?);
-            w.set_all_count(ui_id(counts.all.into())?);
+            w.set_counts(ViewCounts {
+                today: ui_id(counts.today.into())?,
+                scheduled: ui_id(counts.scheduled.into())?,
+                inbox: ui_id(counts.inbox.into())?,
+                overdue: ui_id(counts.overdue.into())?,
+                all: ui_id(counts.all.into())?,
+            });
+            w.set_can_create(view.can_create());
             w.set_current_list_name(current_name.into());
             w.set_current_list_id(match view {
                 View::List(id) => ui_id(id.0)?,

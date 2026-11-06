@@ -305,3 +305,28 @@ msgstr "Crear"
 
 msgid "The name can't be empty."
 msgstr "El nombre no puede estar vacío."
+
+msgid "Scheduled"
+msgstr "Programadas"
+
+msgid "Inbox"
+msgstr "Inbox"
+
+msgctxt "smart list"
+msgid "Overdue"
+msgstr "Atrasadas"
+
+msgid "All"
+msgstr "Todas"
+
+msgid "My lists"
+msgstr "Mis listas"
+
+msgid "Nothing scheduled."
+msgstr "No hay nada programado."
+
+msgid "The inbox is empty."
+msgstr "El inbox está vacío."
+
+msgid "Nothing overdue."
+msgstr "No hay nada atrasado."

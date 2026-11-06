@@ -8,11 +8,10 @@ import { Calendar, MonthView } from "ink-date-popup.slint";
 import { ListEntry } from "list-entry.slint";
 import { ListCreator } from "tasks/list-creator.slint";
 import { Module, Rail } from "rail.slint";
-import { Sidebar } from "sidebar.slint";
 import { Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
-import { DueKind, TaskRow, TaskView, TasksView } from "tasks/tasks-view.slint";
-export { Calendar, Date, DueKind, InstanceRow, Language, ListEntry, MonthView, Strings, TaskRow, TaskView }
+import { DueKind, TaskRow, TasksTab, TaskView, TasksView, ViewCounts } from "tasks/tasks-view.slint";
+export { Calendar, Date, DueKind, InstanceRow, Language, ListEntry, MonthView, Strings, TaskRow, TaskView, ViewCounts }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -22,8 +21,8 @@ export component AppWindow inherits Window {
     in property <TaskView> current-view;
     in property <int> current-list-id;
     in property <string> current-list-name;
-    in property <int> today-count;
-    in property <int> all-count;
+    in property <bool> can-create;
+    in property <ViewCounts> counts;
     in property <[ListEntry]> lists;
     in property <Language> current-language;
     in property <string> settings-error;
@@ -61,6 +60,7 @@ export component AppWindow inherits Window {
     // then fades in and rises into place.
     property <bool> entering;
     property <Module> module;
+    property <TasksTab> tasks-tab;
     changed module => {
         root.export-status = "";
         root.instances-status = "";
@@ -86,26 +86,6 @@ export component AppWindow inherits Window {
     HorizontalLayout {
         Rail {
             module <=> root.module;
-        }
-
-        // The Tasks module's own panel.
-        if root.module == Module.tasks: Sidebar {
-            width: 220px;
-            instance-name: root.instance-name;
-            current-view: root.current-view;
-            current-list-id: root.current-list-id;
-            today-count: root.today-count;
-            all-count: root.all-count;
-            lists: root.lists;
-            select-view(v) => {
-                root.select-view(v);
-            }
-            select-list(id) => {
-                root.select-list(id);
-            }
-            new-list => {
-                list-creator.show();
-            }
         }
 
         list-creator := ListCreator {
@@ -181,7 +161,20 @@ export component AppWindow inherits Window {
                 if root.module == Module.tasks: TasksView {
                     width: parent.width;
                     height: parent.height;
+                    tab <=> root.tasks-tab;
+                    instance-name: root.instance-name;
                     view: root.current-view;
+                    can-create: root.can-create;
+                    counts: root.counts;
+                    select-view(v) => {
+                        root.select-view(v);
+                    }
+                    select-list(id) => {
+                        root.select-list(id);
+                    }
+                    new-list => {
+                        list-creator.show();
+                    }
                     tasks: root.tasks;
                     error: root.tasks-error;
                     list-id: root.current-list-id;

@@ -17,7 +17,7 @@ use crate::{AppWindow, Date, DueKind, ListEntry, Strings, TaskRow, TaskView, lis
 pub struct State {
     pub conn: Rc<Connection>,
     rows: Rc<VecModel<TaskRow>>,
-    pub sidebar: Rc<VecModel<ListEntry>>,
+    pub panel: Rc<VecModel<ListEntry>>,
     pub view: Cell<View>,
     // Day of the last reload, so the timer only rebuilds rows when it changes.
     day: Cell<NaiveDate>,
@@ -32,6 +32,9 @@ pub fn ui_id(id: i64) -> Result<i32, String> {
 pub fn ui_view(v: View) -> TaskView {
     match v {
         View::Today => TaskView::Today,
+        View::Scheduled => TaskView::Scheduled,
+        View::Inbox => TaskView::Inbox,
+        View::Overdue => TaskView::Overdue,
         View::All => TaskView::All,
         View::List(_) => TaskView::List,
     }
@@ -48,7 +51,7 @@ fn ui_kind(l: Option<DueLabel>) -> DueKind {
 }
 
 impl State {
-    /// Rows of the active view plus the sidebar.
+    /// Rows of the active view plus the lists panel.
     pub fn reload(&self) -> Result<(), String> {
         let now = Local::now().fixed_offset();
         self.day.set(now.date_naive());
@@ -74,7 +77,7 @@ impl State {
             });
         }
         self.rows.set_vec(out);
-        self.reload_sidebar()
+        self.reload_panel()
     }
 }
 
@@ -83,13 +86,13 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
     let state = Rc::new(State {
         conn,
         rows: Rc::default(),
-        sidebar: Rc::default(),
+        panel: Rc::default(),
         view: Cell::new(View::Today),
         day: Cell::new(Local::now().date_naive()),
         window: window.as_weak(),
     });
     window.set_tasks(ModelRc::from(state.rows.clone()));
-    window.set_lists(ModelRc::from(state.sidebar.clone()));
+    window.set_lists(ModelRc::from(state.panel.clone()));
 
     // Shows the outcome in the view; an empty title is silently ignored.
     let finish = Rc::new({
@@ -109,11 +112,17 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
 
     window.on_select_view({
         let (state, finish) = (state.clone(), finish.clone());
-        move |v| match v {
-            TaskView::Today => lists::show_view(&state, View::Today, &*finish),
-            TaskView::All => lists::show_view(&state, View::All, &*finish),
-            // A list is selected by its id with select-list.
-            TaskView::List => {}
+        move |v| {
+            let view = match v {
+                TaskView::Today => View::Today,
+                TaskView::Scheduled => View::Scheduled,
+                TaskView::Inbox => View::Inbox,
+                TaskView::Overdue => View::Overdue,
+                TaskView::All => View::All,
+                // A list is selected by its id with select-list.
+                TaskView::List => return,
+            };
+            lists::show_view(&state, view, &*finish)
         }
     });
 

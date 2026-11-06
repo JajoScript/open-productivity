@@ -26,15 +26,51 @@ pub struct Task {
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub enum View {
+    /// Due today.
     Today,
+    /// Due after today.
+    Scheduled,
+    /// Without a list and without a due date.
+    Inbox,
+    /// Due before today.
+    Overdue,
     All,
     List(ListId),
+}
+
+impl View {
+    /// The only place each view's rule is written: an SQL condition on the task `t` and
+    /// on `p.today`, shared by `list` and `counts` so they never disagree.
+    fn rule(self) -> String {
+        match self {
+            View::Today => "t.due_date = p.today".into(),
+            View::Scheduled => "t.due_date > p.today".into(),
+            View::Inbox => "t.list_id IS NULL AND t.due_date IS NULL".into(),
+            View::Overdue => "t.due_date < p.today".into(),
+            View::All => "1".into(),
+            // An integer, so formatting it into the SQL cannot inject anything.
+            View::List(id) => format!("t.list_id = {}", id.0),
+        }
+    }
+
+    /// Smart views are day-based: they show what is done today, not everything done.
+    fn is_smart(self) -> bool {
+        !matches!(self, View::All | View::List(_))
+    }
+
+    /// A new task can never be overdue, so Overdue has no "new task" field.
+    pub fn can_create(self) -> bool {
+        self != View::Overdue
+    }
 }
 
 /// Pending (not done) tasks per view. Lists without pending tasks are absent from `per_list`.
 #[derive(Debug, Default, PartialEq)]
 pub struct Counts {
     pub today: u32,
+    pub scheduled: u32,
+    pub inbox: u32,
+    pub overdue: u32,
     pub all: u32,
     pub per_list: Vec<(ListId, u32)>,
 }
@@ -59,6 +95,8 @@ pub enum DueLabel {
 #[derive(Debug)]
 pub enum TaskError {
     EmptyTitle,
+    /// The view does not take new tasks (see `View::can_create`).
+    CannotCreateHere,
     NotFound,
     BadDate(String),
     ListNotFound,
@@ -69,6 +107,7 @@ impl fmt::Display for TaskError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             TaskError::EmptyTitle => write!(f, "the title is empty"),
+            TaskError::CannotCreateHere => write!(f, "tasks cannot be created in this view"),
             TaskError::NotFound => write!(f, "task not found"),
             TaskError::BadDate(d) => write!(f, "invalid stored date: {d}"),
             TaskError::ListNotFound => write!(f, "list not found"),
@@ -106,11 +145,23 @@ pub fn create(
     view: View,
     today: NaiveDate,
 ) -> Result<TaskId, TaskError> {
+    if !view.can_create() {
+        return Err(TaskError::CannotCreateHere);
+    }
     let title = title.trim();
     if title.is_empty() {
         return Err(TaskError::EmptyTitle);
     }
-    let due = (view == View::Today).then_some(today);
+    // The new task must show up in the view it was created from.
+    let due = match view {
+        View::Today => Some(today),
+        View::Scheduled => Some(
+            today
+                .succ_opt()
+                .ok_or_else(|| TaskError::BadDate(today.to_string()))?,
+        ),
+        _ => None,
+    };
     let list = match view {
         View::List(id) => Some(id.0),
         _ => None,
@@ -122,9 +173,10 @@ pub fn create(
     Ok(TaskId(conn.last_insert_rowid()))
 }
 
-/// All: pending first (oldest created first), then done (most recently completed first).
-/// Today: pending due today or earlier (by due date, then creation), then done today
-/// (local day of `now`) with a due date today or earlier, most recent first.
+/// Tasks matching the view's rule, pending first, then done (most recently completed first).
+/// All and lists: every task, pending oldest created first.
+/// Smart views (Today, Scheduled, Inbox, Overdue): pending by due date, then creation, and
+/// only the tasks done today (local day of `now`).
 pub fn list(
     conn: &Connection,
     view: View,
@@ -141,9 +193,22 @@ pub fn list(
         .ok_or_else(|| TaskError::BadDate(today.to_string()))?
         .with_timezone(&Utc)
         .to_rfc3339_opts(SecondsFormat::Millis, true);
-    const SELECT: &str = "SELECT t.id, t.title, t.note, t.done_at IS NOT NULL, t.due_date, t.list_id, l.name \
-         FROM task t LEFT JOIN list l ON l.id = t.list_id";
-    const ALL_ORDER: &str = "ORDER BY t.done_at IS NOT NULL, t.done_at DESC, t.created_at, t.id";
+    let (done, order) = if view.is_smart() {
+        (
+            "AND (t.done_at IS NULL OR t.done_at >= p.midnight)",
+            "t.due_date, t.created_at, t.id",
+        )
+    } else {
+        ("", "t.created_at, t.id")
+    };
+    let sql = format!(
+        "WITH p(today, midnight) AS (SELECT ?1, ?2) \
+         SELECT t.id, t.title, t.note, t.done_at IS NOT NULL, t.due_date, t.list_id, l.name \
+         FROM task t LEFT JOIN list l ON l.id = t.list_id CROSS JOIN p \
+         WHERE ({}) {done} \
+         ORDER BY t.done_at IS NOT NULL, t.done_at DESC, {order}",
+        view.rule()
+    );
     let map = |r: &rusqlite::Row| {
         let list = match (r.get::<_, Option<i64>>(5)?, r.get::<_, Option<String>>(6)?) {
             (Some(id), Some(name)) => Some((ListId(id), name)),
@@ -161,24 +226,10 @@ pub fn list(
             r.get::<_, Option<String>>(4)?,
         ))
     };
-    let rows = match view {
-        View::All => conn
-            .prepare(&format!("{SELECT} {ALL_ORDER}"))?
-            .query_map([], map)?
-            .collect::<Result<Vec<_>, _>>()?,
-        View::List(id) => conn
-            .prepare(&format!("{SELECT} WHERE t.list_id = ?1 {ALL_ORDER}"))?
-            .query_map([id.0], map)?
-            .collect::<Result<Vec<_>, _>>()?,
-        View::Today => conn
-            .prepare(&format!(
-                "{SELECT} WHERE t.due_date <= ?1 AND (t.done_at IS NULL OR t.done_at >= ?2) \
-                 ORDER BY t.done_at IS NOT NULL, t.done_at DESC, t.due_date, t.created_at, t.id"
-            ))?
-            .query_map((today.to_string(), midnight), map)?
-            .collect::<Result<Vec<_>, _>>()?,
-    };
-    rows.into_iter()
+    conn.prepare(&sql)?
+        .query_map((today.to_string(), midnight), map)?
+        .collect::<Result<Vec<_>, _>>()?
+        .into_iter()
         .map(|(mut t, due)| {
             t.due = due
                 .map(|d| d.parse().map_err(|_| TaskError::BadDate(d)))
@@ -250,13 +301,27 @@ pub fn delete(conn: &Connection, id: TaskId) -> Result<(), TaskError> {
     }
 }
 
-/// Pending counts for the sidebar; Today uses the same rule as `View::Today`.
+/// Pending counts for the lists panel, with the same rules as `list`.
 pub fn counts(conn: &Connection, now: DateTime<FixedOffset>) -> Result<Counts, TaskError> {
-    let (today, all) = conn.query_row(
-        "SELECT count(due_date <= ?1 OR NULL), count(*) FROM task WHERE done_at IS NULL",
-        [now.date_naive().to_string()],
-        |r| Ok((r.get(0)?, r.get(1)?)),
-    )?;
+    let views = [
+        View::Today,
+        View::Scheduled,
+        View::Inbox,
+        View::Overdue,
+        View::All,
+    ];
+    let columns: Vec<_> = views
+        .iter()
+        .map(|v| format!("count(CASE WHEN {} THEN 1 END)", v.rule()))
+        .collect();
+    let sql = format!(
+        "WITH p(today) AS (SELECT ?1) SELECT {} FROM task t CROSS JOIN p WHERE t.done_at IS NULL",
+        columns.join(", ")
+    );
+    let n = conn.query_row(&sql, [now.date_naive().to_string()], |r| {
+        Ok([r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?])
+    })?;
+    let [today, scheduled, inbox, overdue, all] = n;
     let per_list = conn
         .prepare(
             "SELECT list_id, count(*) FROM task \
@@ -266,6 +331,9 @@ pub fn counts(conn: &Connection, now: DateTime<FixedOffset>) -> Result<Counts, T
         .collect::<Result<_, _>>()?;
     Ok(Counts {
         today,
+        scheduled,
+        inbox,
+        overdue,
         all,
         per_list,
     })
@@ -316,7 +384,11 @@ mod tests {
     }
 
     fn today_titles(conn: &Connection, now: &str) -> Vec<String> {
-        list(conn, View::Today, at(now))
+        view_titles(conn, View::Today, now)
+    }
+
+    fn view_titles(conn: &Connection, view: View, now: &str) -> Vec<String> {
+        list(conn, view, at(now))
             .unwrap()
             .into_iter()
             .map(|t| t.title)
@@ -502,30 +574,95 @@ line 3"
     }
 
     #[test]
-    fn create_sets_due_by_view() {
+    fn create_sets_due_by_view_and_shows_up_there() {
         let (dir, conn) = setup("create-due");
-        create(&conn, "t", View::Today, d("2026-06-15")).unwrap();
-        create(&conn, "a", View::All, d("2026-06-15")).unwrap();
-        let l = ls(&conn);
-        assert_eq!(l[0].due, Some(d("2026-06-15")));
-        assert_eq!(l[1].due, None);
+        let today = d("2026-06-15");
+        for (title, view) in [
+            ("t", View::Today),
+            ("s", View::Scheduled),
+            ("i", View::Inbox),
+            ("a", View::All),
+        ] {
+            create(&conn, title, view, today).unwrap();
+            assert!(view_titles(&conn, view, NOW).contains(&title.to_string()));
+        }
+        let dues: Vec<_> = ls(&conn).into_iter().map(|t| t.due).collect();
+        assert_eq!(dues, [Some(today), Some(d("2026-06-16")), None, None]);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
-    fn today_includes_overdue_and_today_overdue_first() {
-        let (dir, conn) = setup("today");
-        for (title, due) in [
-            ("today", Some("2026-06-15")),
-            ("future", Some("2026-06-16")),
-            ("none", None),
-            ("late", Some("2026-06-10")),
+    fn overdue_takes_no_new_tasks() {
+        let (dir, conn) = setup("create-overdue");
+        let r = create(&conn, "a", View::Overdue, d("2026-06-15"));
+        assert!(matches!(r, Err(TaskError::CannotCreateHere)));
+        assert!(ls(&conn).is_empty());
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn smart_views_split_tasks_by_due_date_and_list() {
+        let (dir, conn) = setup("smart");
+        let work = lists::create(&conn, "Work").unwrap();
+        for (title, due, list) in [
+            ("today", Some("2026-06-15"), None),
+            ("future", Some("2026-06-16"), None),
+            ("none", None, None),
+            ("listed", None, Some(work)),
+            ("late", Some("2026-06-10"), None),
+            ("later", Some("2026-06-12"), Some(work)),
         ] {
             let id = mk(&conn, title).unwrap();
             set_due_date(&conn, id, due.map(d)).unwrap();
+            set_list(&conn, id, list).unwrap();
         }
-        assert_eq!(today_titles(&conn, NOW), ["late", "today"]);
+        let v = |view| view_titles(&conn, view, NOW);
+        assert_eq!(v(View::Today), ["today"]);
+        assert_eq!(v(View::Scheduled), ["future"]);
+        // A task with a list is not in the Inbox, even without a date.
+        assert_eq!(v(View::Inbox), ["none"]);
+        assert_eq!(v(View::Overdue), ["late", "later"]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn counts_match_the_pending_tasks_each_view_lists() {
+        let (dir, conn) = setup("counts-match");
+        let work = lists::create(&conn, "Work").unwrap();
+        for (due, list, done) in [
+            (Some("2026-06-15"), None, false),
+            (Some("2026-06-15"), None, true),
+            (Some("2026-06-20"), Some(work), false),
+            (None, None, false),
+            (None, None, true),
+            (None, Some(work), false),
+            (Some("2026-06-01"), None, false),
+            (Some("2026-06-01"), Some(work), true),
+        ] {
+            let id = mk(&conn, "t").unwrap();
+            set_due_date(&conn, id, due.map(d)).unwrap();
+            set_list(&conn, id, list).unwrap();
+            set_done(&conn, id, done).unwrap();
+        }
+        let c = counts(&conn, at(NOW)).unwrap();
+        for (view, n) in [
+            (View::Today, c.today),
+            (View::Scheduled, c.scheduled),
+            (View::Inbox, c.inbox),
+            (View::Overdue, c.overdue),
+            (View::All, c.all),
+            (View::List(work), c.for_list(work)),
+        ] {
+            let pending = list(&conn, view, at(NOW))
+                .unwrap()
+                .iter()
+                .filter(|t| !t.done)
+                .count();
+            assert_eq!(pending, n as usize, "{view:?}");
+        }
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -555,10 +692,9 @@ line 3"
             )
             .unwrap();
         }
-        assert_eq!(
-            today_titles(&conn, NOW),
-            ["pending", "done-later", "done-today"]
-        );
+        assert_eq!(today_titles(&conn, NOW), ["pending", "done-today"]);
+        // Overdue keeps what was finished today, so checking a task does not hide it.
+        assert_eq!(view_titles(&conn, View::Overdue, NOW), ["done-later"]);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -709,7 +845,10 @@ line 3"
             }
         }
         let c = counts(&conn, at(NOW)).unwrap();
-        assert_eq!((c.today, c.all), (3, 5));
+        assert_eq!(
+            (c.today, c.scheduled, c.inbox, c.overdue, c.all),
+            (2, 1, 1, 1, 5)
+        );
         assert_eq!(c.for_list(work), 2);
         assert_eq!(c.for_list(empty), 0);
         assert_eq!(c.per_list, [(work, 2)]);

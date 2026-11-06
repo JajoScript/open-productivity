@@ -1,0 +1,201 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { ListView, Palette } from "std-widgets.slint";
+import { ListEntry } from "../list-entry.slint";
+import { NavEntry } from "../nav-entry.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { TaskView } from "task-column.slint";
+
+// Pending tasks per smart view, from core's counts.
+export struct ViewCounts {
+    today: int,
+    scheduled: int,
+    inbox: int,
+    overdue: int,
+    all: int,
+}
+
+// One smart list: icon and count on top, name below.
+component SmartCard inherits Rectangle {
+    in property <image> icon;
+    in property <string> text;
+    in property <int> count;
+    in property <brush> count-color: Palette.foreground;
+    in property <bool> selected;
+    callback clicked;
+
+    height: 64px;
+    // Equal shares of the row, whatever the name's length.
+    preferred-width: 0px;
+    horizontal-stretch: 1;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+    background: root.selected ? Theme.selected : touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    forward-focus: focus;
+    accessible-role: list-item;
+    accessible-label: root.text;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.selected;
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    VerticalLayout {
+        padding: 10px;
+        spacing: 4px;
+        HorizontalLayout {
+            Image {
+                source: root.icon;
+                colorize: root.selected ? Palette.foreground : Theme.muted;
+                width: 16px;
+                height: 16px;
+                accessible-role: none;
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            Text {
+                text: root.count;
+                font-size: 16px;
+                font-weight: 700;
+                color: root.count-color;
+                accessible-role: none;
+            }
+        }
+
+        Text {
+            text: root.text;
+            color: Theme.muted;
+            overflow: elide;
+            accessible-role: none;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.clicked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// Smart lists, All, and the user's own lists.
+export component ListsPanel inherits VerticalLayout {
+    in property <TaskView> view;
+    in property <int> list-id;
+    in property <ViewCounts> counts;
+    in property <[ListEntry]> lists;
+    callback select-view(TaskView);
+    callback select-list(int);
+    callback new-list;
+
+    spacing: 8px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        SmartCard {
+            icon: @image-url("../icons/sun.svg");
+            text: @tr("Today");
+            count: root.counts.today;
+            selected: root.view == TaskView.today;
+            clicked => {
+                root.select-view(TaskView.today);
+            }
+        }
+
+        SmartCard {
+            icon: @image-url("../icons/calendar.svg");
+            text: @tr("Scheduled");
+            count: root.counts.scheduled;
+            selected: root.view == TaskView.scheduled;
+            clicked => {
+                root.select-view(TaskView.scheduled);
+            }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 8px;
+        SmartCard {
+            icon: @image-url("../icons/inbox.svg");
+            text: @tr("Inbox");
+            count: root.counts.inbox;
+            selected: root.view == TaskView.inbox;
+            clicked => {
+                root.select-view(TaskView.inbox);
+            }
+        }
+
+        SmartCard {
+            icon: @image-url("../icons/circle-alert.svg");
+            text: @tr("smart list" => "Overdue");
+            count: root.counts.overdue;
+            // Red only while something is actually overdue.
+            count-color: root.counts.overdue > 0 ? Theme.critical : Palette.foreground;
+            selected: root.view == TaskView.overdue;
+            clicked => {
+                root.select-view(TaskView.overdue);
+            }
+        }
+    }
+
+    NavEntry {
+        icon: @image-url("../icons/list-todo.svg");
+        text: @tr("All");
+        count: root.counts.all;
+        selected: root.view == TaskView.all;
+        clicked => {
+            root.select-view(TaskView.all);
+        }
+    }
+
+    Text {
+        text: @tr("My lists");
+        font-weight: 600;
+        color: Theme.muted;
+        height: 28px;
+        vertical-alignment: bottom;
+    }
+
+    ListView {
+        for entry in root.lists: NavEntry {
+            icon: @image-url("../icons/list.svg");
+            text: entry.name;
+            count: entry.count;
+            selected: root.view == TaskView.list && root.list-id == entry.id;
+            clicked => {
+                root.select-list(entry.id);
+            }
+        }
+    }
+
+    SubtleButton {
+        icon: @image-url("../icons/plus.svg");
+        text: @tr("New list");
+        clicked => {
+            root.new-list();
+        }
+    }
+}

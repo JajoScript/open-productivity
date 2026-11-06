@@ -1,0 +1,275 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Button, Date, ListView, Palette } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkField } from "../ink-field.slint";
+import { InkCheck } from "../ink-check.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { ListEntry } from "../list-entry.slint";
+import { DueButton, DueKind } from "due-button.slint";
+import { ListButton } from "list-button.slint";
+import { TaskEditor } from "task-editor.slint";
+export { DueKind }
+
+export enum TaskView { today, scheduled, inbox, overdue, all, list }
+
+export struct TaskRow {
+    id: int,
+    title: string,
+    note: string,
+    done: bool,
+    due-kind: DueKind,
+    due-day: int,
+    due-month: int,
+    due-year: int,
+    list-name: string,
+}
+
+// The tasks of one view: title, new task field and the rows.
+export component TaskColumn inherits VerticalLayout {
+    in property <TaskView> view;
+    // From core (`View::can_create`): whether the view takes new tasks.
+    in property <bool> can-create;
+    in property <[TaskRow]> tasks;
+    in property <string> error;
+    in property <int> list-id;
+    in property <string> list-name;
+    in property <[ListEntry]> lists;
+    callback create-task(string);
+    callback set-done(int, bool);
+    callback set-due(int, Date);
+    callback clear-due(int);
+    callback set-list(int, int);
+    callback delete-list(int);
+    callback update-task(int, string, string) -> bool;
+    callback delete-task(int);
+
+    // The task the editor shows; set before it opens.
+    property <TaskRow> editing;
+
+    function open-editor(row: TaskRow) {
+        root.editing = row;
+        editor.show();
+    }
+
+    padding: 24px;
+    padding-top: 20px;
+    spacing: 12px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            text: root.view == TaskView.today ? @tr("Today") : root.view == TaskView.scheduled ? @tr("Scheduled") : root.view == TaskView.inbox ? @tr("Inbox") : root.view == TaskView.overdue ? @tr("smart list" => "Overdue") : root.view == TaskView.all ? @tr("All") : root.list-name;
+            font-size: 24px;
+            font-weight: 700;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+
+        if root.view == TaskView.list: SubtleButton {
+            icon: @image-url("../icons/trash-2.svg");
+            label: @tr("Delete list");
+            clicked => {
+                confirm.show();
+            }
+        }
+    }
+
+    confirm := PopupWindow {
+        x: root.width - 380px;
+        y: 56px;
+        width: 360px;
+        Rectangle {
+            background: Palette.background;
+            border-width: 1px;
+            border-color: Palette.foreground.with-alpha(0.14);
+            border-radius: 6px;
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: @tr("Delete the list \"{}\"? Its tasks will be kept without a list.", root.list-name);
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    Button {
+                        text: @tr("Cancel");
+                        clicked => {
+                            confirm.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Delete");
+                        clicked => {
+                            confirm.close();
+                            root.delete-list(root.list-id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if root.can-create: HorizontalLayout {
+        spacing: 8px;
+        input := InkField {
+            placeholder-text: @tr("New task");
+            accepted(text) => {
+                root.create-task(text);
+                self.text = "";
+            }
+        }
+
+        InkButton {
+            text: @tr("Add");
+            clicked => {
+                root.create-task(input.text);
+                input.text = "";
+            }
+        }
+    }
+
+    editor := TaskEditor {
+        // Fixed spot under the input row, so it never runs off the bottom for low rows.
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        task-id: root.editing.id;
+        title: root.editing.title;
+        note: root.editing.note;
+        saved(id, title, note) => {
+            return root.update-task(id, title, note);
+        }
+        deleted(id) => {
+            root.delete-task(id);
+        }
+    }
+
+    if root.error != "": Text {
+        text: root.error;
+        color: Theme.critical;
+        wrap: word-wrap;
+    }
+
+    if root.tasks.length == 0: Text {
+        text: root.view == TaskView.today ? @tr("Nothing due today.") : root.view == TaskView.scheduled ? @tr("Nothing scheduled.") : root.view == TaskView.inbox ? @tr("The inbox is empty.") : root.view == TaskView.overdue ? @tr("Nothing overdue.") : root.view == TaskView.all ? @tr("No tasks yet. Add your first one above.") : @tr("This list is empty.");
+        color: Theme.muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        vertical-stretch: 1;
+    }
+
+    if root.tasks.length > 0: ListView {
+        for row in root.tasks: Rectangle {
+            height: 40px;
+            border-radius: 6px;
+            background: row-touch.has-hover ? Theme.hover : transparent;
+            animate background { duration: Theme.fast; easing: Theme.ease-out; }
+
+            // Under the controls, so it only tracks hover for the row highlight.
+            row-touch := TouchArea { }
+
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                spacing: 4px;
+                InkCheck {
+                    checked: row.done;
+                    label: row.title;
+                    toggled(done) => {
+                        root.set-done(row.id, done);
+                    }
+                }
+
+                // Plain text with a wash on hover; opens the editor.
+                Rectangle {
+                    horizontal-stretch: 1;
+                    border-radius: 4px;
+                    background: title-touch.pressed ? Theme.pressed : title-touch.has-hover ? Theme.hover : transparent;
+                    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+                    forward-focus: title-focus;
+                    accessible-role: button;
+                    accessible-label: row.title;
+                    accessible-action-default => {
+                        root.open-editor(row);
+                    }
+
+                    Text {
+                        x: 6px;
+                        width: parent.width - 12px;
+                        height: parent.height;
+                        text: row.title;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        color: row.done ? Palette.foreground.with-alpha(0.45) : Palette.foreground;
+                        animate color { duration: Theme.fast; easing: Theme.ease-out; }
+                        accessible-role: none;
+                    }
+
+                    title-touch := TouchArea {
+                        clicked => {
+                            root.open-editor(row);
+                        }
+                    }
+
+                    title-focus := FocusScope {
+                        width: 0px; // keyboard only; clicks go to the TouchArea
+                        key-pressed(event) => {
+                            if event.text == Key.Space || event.text == Key.Return {
+                                root.open-editor(row);
+                                return accept;
+                            }
+                            reject
+                        }
+                    }
+
+                    if title-focus.has-focus: Rectangle {
+                        border-radius: 5px;
+                        border-width: 2px;
+                        border-color: Palette.foreground;
+                    }
+                }
+
+                // The slot stays reserved so the list column lines up across rows.
+                Rectangle {
+                    width: 16px;
+                    if row.note != "": Image {
+                        source: @image-url("../icons/notebook-text.svg");
+                        colorize: Theme.muted;
+                        width: 16px;
+                        height: 16px;
+                        y: (parent.height - self.height) / 2;
+                        accessible-role: image;
+                        accessible-label: @tr("Has a note");
+                    }
+                }
+
+                ListButton {
+                    name: row.list-name;
+                    lists: root.lists;
+                    picked(list-id) => {
+                        root.set-list(row.id, list-id);
+                    }
+                }
+
+                DueButton {
+                    kind: row.due-kind;
+                    day: row.due-day;
+                    month: row.due-month;
+                    year: row.due-year;
+                    picked(date) => {
+                        root.set-due(row.id, date);
+                    }
+                    cleared => {
+                        root.clear-due(row.id);
+                    }
+                }
+            }
+        }
+    }
+}

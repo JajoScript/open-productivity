@@ -217,6 +217,7 @@ mod tests {
     #[test]
     fn new_list_opens_the_creator_and_escape_closes_it() {
         let w = window();
+        click(&w, "Lists");
         click(&w, "New list");
         let size = find(&w, "List name").unwrap().size();
         assert!(size.width > 100. && size.height >= 36., "{size:?}");
@@ -226,10 +227,25 @@ mod tests {
     }
 
     #[test]
-    fn rail_switches_between_tasks_and_settings() {
+    fn rail_switches_modules_and_the_tasks_tab_survives() {
         let w = window();
-        click(&w, "Settings");
+        // The lists panel only shows in the Lists tab.
         assert!(find(&w, "New list").is_none());
+        click(&w, "Lists");
+        // The smart list cards share the panel's width evenly, whatever their names.
+        let widths: Vec<_> = ["Today", "Scheduled", "Inbox", "Overdue"]
+            .iter()
+            .map(|l| {
+                ElementHandle::find_by_accessible_label(&w, l)
+                    .find(|e| e.size().height == 64.)
+                    .unwrap()
+                    .size()
+                    .width
+            })
+            .collect();
+        assert!(widths.iter().all(|x| *x == widths[0]), "{widths:?}");
+        click(&w, "Settings");
+        assert!(find(&w, "Inbox").is_none());
         click(&w, "Tasks");
         assert!(find(&w, "New list").is_some());
     }
