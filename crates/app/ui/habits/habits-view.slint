@@ -14,6 +14,9 @@ export { DayState }
 export struct HabitRow {
     id: int,
     name: string,
+    streak: int,
+    best: int,
+    month-pct: int,
     weeks: [[DayState]],
 }
 
@@ -150,11 +153,32 @@ export component HabitsView inherits VerticalLayout {
 
             for habit in root.habits: HorizontalLayout {
                 spacing: 8px;
-                Text {
-                    text: habit.name;
+                VerticalLayout {
                     width: 112px;
-                    vertical-alignment: center;
-                    overflow: elide;
+                    alignment: center;
+                    Text {
+                        text: habit.name;
+                        overflow: elide;
+                    }
+
+                    // The month's percentage stays visible; only the streaks elide.
+                    HorizontalLayout {
+                        spacing: 4px;
+                        Text {
+                            text: Strings.habit-streaks(habit.streak, habit.best);
+                            color: Theme.muted;
+                            font-size: 10px;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                        }
+
+                        Text {
+                            text: Strings.percent(habit.month-pct);
+                            color: Theme.muted;
+                            font-size: 10px;
+                            horizontal-stretch: 0;
+                        }
+                    }
                 }
 
                 for week[w] in habit.weeks: HorizontalLayout {

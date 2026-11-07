@@ -103,6 +103,15 @@ export global Strings {
         return @tr("WK {}", n);
     }
 
+    // Streak, best streak and share of the month done, under a habit name.
+    public pure function habit-streaks(streak: int, best: int) -> string {
+        return @tr("Streak {} · Best {}", streak, best);
+    }
+
+    public pure function percent(pct: int) -> string {
+        return @tr("{}%", pct);
+    }
+
     // 0 is Monday.
     public pure function weekday-name(weekday: int) -> string {
         return weekday == 0 ? @tr("Monday") : weekday == 1 ? @tr("Tuesday") : weekday == 2 ? @tr("Wednesday") : weekday == 3 ? @tr("Thursday") : weekday == 4 ? @tr("Friday") : weekday == 5 ? @tr("Saturday") : @tr("Sunday");

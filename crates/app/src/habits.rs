@@ -37,6 +37,9 @@ impl State {
                 Ok(HabitRow {
                     id: ui_id(h.id.0)?,
                     name: h.name.into(),
+                    streak: h.stats.current as i32,
+                    best: h.stats.best as i32,
+                    month_pct: h.stats.month_pct as i32,
                     weeks: blocks(h.days.into_iter().map(day_state).collect()),
                 })
             })

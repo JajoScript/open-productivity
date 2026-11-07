@@ -3,6 +3,7 @@
 
 //! Habits: create them and mark them done per day.
 
+use std::collections::HashSet;
 use std::fmt;
 
 use chrono::{Datelike, Months, NaiveDate, TimeDelta};
@@ -31,6 +32,7 @@ pub struct MonthHabit {
     pub name: String,
     /// One per day of the month, day 1 first.
     pub days: Vec<DayState>,
+    pub stats: HabitStats,
 }
 
 #[derive(Debug, PartialEq)]
@@ -65,6 +67,8 @@ pub enum HabitError {
     FutureMonth,
     /// The month is outside the supported dates.
     OutOfRange,
+    /// A stored date could not be read.
+    BadDate(String),
     Sqlite(rusqlite::Error),
 }
 
@@ -80,6 +84,7 @@ impl fmt::Display for HabitError {
             HabitError::NotScheduled => write!(f, "the habit does not apply on that weekday"),
             HabitError::FutureMonth => write!(f, "that month has not happened yet"),
             HabitError::OutOfRange => write!(f, "the month is out of range"),
+            HabitError::BadDate(d) => write!(f, "invalid stored date: {d}"),
             HabitError::Sqlite(e) => write!(f, "database error: {e}"),
         }
     }
@@ -103,6 +108,11 @@ impl From<rusqlite::Error> for HabitError {
 /// Bit of `weekdays` for the date: bit 0 is Monday.
 fn weekday_bit(date: NaiveDate) -> i64 {
     1 << date.weekday().num_days_from_monday()
+}
+
+/// A stored YYYY-MM-DD date; a corrupt one is an error, never a silent default.
+fn parse_date(s: String) -> Result<NaiveDate, HabitError> {
+    s.parse().map_err(|_| HabitError::BadDate(s))
 }
 
 /// The weekdays a habit applies on; never empty. Bit 0 is Monday.
@@ -174,7 +184,60 @@ pub fn shift_month(
     Ok(target)
 }
 
-/// The month holding `shown`: every active habit with its state per day, in one query.
+/// Streaks and the share of the shown month done.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct HabitStats {
+    /// Consecutive applicable done days up to today; an undone today does not break it.
+    pub current: u32,
+    /// Longest run of consecutive applicable done days.
+    pub best: u32,
+    /// Done share of the shown month's applicable days up to today, floored.
+    pub month_pct: u32,
+}
+
+/// Stats of one habit. Streaks are as of `today`; the percentage is for the month holding
+/// `shown`. Only days on a selected weekday and from `start` count: other marks are ignored.
+fn stats(
+    weekdays: i64,
+    start: NaiveDate,
+    today: NaiveDate,
+    shown: NaiveDate,
+    done: &HashSet<NaiveDate>,
+) -> HabitStats {
+    // (date, done) of every applicable day from the start to today.
+    let seq: Vec<(NaiveDate, bool)> = start
+        .iter_days()
+        .take_while(|d| *d <= today)
+        .filter(|d| weekdays & weekday_bit(*d) != 0)
+        .map(|d| (d, done.contains(&d)))
+        .collect();
+    let (mut best, mut run) = (0, 0);
+    for &(_, ok) in &seq {
+        run = if ok { run + 1 } else { 0 };
+        best = best.max(run);
+    }
+    let mut current = 0;
+    for (i, &(d, ok)) in seq.iter().rev().enumerate() {
+        if ok {
+            current += 1;
+        } else if i > 0 || d != today {
+            break;
+        }
+    }
+    let in_month = seq
+        .iter()
+        .filter(|(d, _)| month_start(*d) == month_start(shown));
+    let total = in_month.clone().count() as u32;
+    let hits = in_month.filter(|(_, ok)| *ok).count() as u32;
+    HabitStats {
+        current,
+        best,
+        month_pct: (hits * 100).checked_div(total).unwrap_or(0),
+    }
+}
+
+/// The month holding `shown`: every active habit with its state per day and its stats, from
+/// one query over all their logs.
 pub fn month(
     conn: &Connection,
     shown: NaiveDate,
@@ -185,46 +248,47 @@ pub fn month(
         .checked_add_months(Months::new(1))
         .ok_or(HabitError::OutOfRange)?;
     let len = (next - first).num_days() as u32;
-    let last = next.pred_opt().ok_or(HabitError::OutOfRange)?;
     let mut stmt = conn.prepare(
-        "SELECT h.id, h.name, h.weekdays, h.start_date,                 CAST(substr(l.date, 9, 2) AS INTEGER)          FROM habit h LEFT JOIN habit_log l               ON l.habit_id = h.id AND l.date BETWEEN ?1 AND ?2          WHERE h.archived = 0          ORDER BY h.id",
+        "SELECT h.id, h.name, h.weekdays, h.start_date, l.date          FROM habit h LEFT JOIN habit_log l ON l.habit_id = h.id          WHERE h.archived = 0 ORDER BY h.id",
     )?;
-    let mut habits: Vec<MonthHabit> = Vec::new();
-    let mut rows = stmt.query((first.to_string(), last.to_string()))?;
+    // (id, name, weekdays, start, done dates) per habit.
+    let mut raw: Vec<(HabitId, String, i64, NaiveDate, HashSet<NaiveDate>)> = Vec::new();
+    let mut rows = stmt.query([])?;
     while let Some(r) = rows.next()? {
         let id = HabitId(r.get(0)?);
-        if habits.last().is_none_or(|h| h.id != id) {
-            let (weekdays, start): (i64, String) = (r.get(2)?, r.get(3)?);
+        if raw.last().is_none_or(|h| h.0 != id) {
+            let start = parse_date(r.get(3)?)?;
+            raw.push((id, r.get(1)?, r.get(2)?, start, HashSet::new()));
+        }
+        if let (Some(date), Some(h)) = (r.get::<_, Option<String>>(4)?, raw.last_mut()) {
+            h.4.insert(parse_date(date)?);
+        }
+    }
+    let habits = raw
+        .into_iter()
+        .map(|(id, name, weekdays, start, done)| {
             let days = (0..len)
                 .map(|i| {
                     let date = first + TimeDelta::days(i.into());
-                    // ISO dates compare correctly as text.
-                    if weekdays & weekday_bit(date) == 0 || date.to_string() < start {
+                    if weekdays & weekday_bit(date) == 0 || date < start {
                         DayState::Skipped
                     } else if date > today {
                         DayState::Future
+                    } else if done.contains(&date) {
+                        DayState::Done
                     } else {
                         DayState::Open
                     }
                 })
                 .collect();
-            habits.push(MonthHabit {
+            MonthHabit {
                 id,
-                name: r.get(1)?,
+                name,
                 days,
-            });
-        }
-        if let (Some(day), Some(h)) = (r.get::<_, Option<u32>>(4)?, habits.last_mut()) {
-            // A mark on a day that does not apply (any more) is ignored.
-            if let Some(d) = h
-                .days
-                .get_mut(day.wrapping_sub(1) as usize)
-                .filter(|d| **d == DayState::Open)
-            {
-                *d = DayState::Done;
+                stats: stats(weekdays, start, today, first, &done),
             }
-        }
-    }
+        })
+        .collect();
     Ok(HabitMonth {
         first,
         days: len,
@@ -305,6 +369,20 @@ mod tests {
             .iter()
             .map(|h| h.days[i])
             .collect()
+    }
+
+    #[test]
+    fn corrupt_stored_date_is_an_error() {
+        let (dir, conn) = setup("baddate");
+        create(&conn, "Read", [true; 7], day(MON), day(MON)).unwrap();
+        conn.execute("UPDATE habit SET start_date = 'nope'", [])
+            .unwrap();
+        assert!(matches!(
+            month(&conn, day(MON), day(MON)),
+            Err(HabitError::BadDate(d)) if d == "nope"
+        ));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Names of the habits that apply on `d` (seen on `d`).
@@ -600,6 +678,99 @@ mod tests {
             Err(HabitError::OutOfRange)
         ));
         assert_eq!(month_start(day("2026-11-30")), day("2026-11-01"));
+    }
+
+    fn st(wd: i64, start: &str, today: &str, shown: &str, done: &[&str]) -> (u32, u32, u32) {
+        let done = done.iter().map(|d| day(d)).collect();
+        let s = stats(wd, day(start), day(today), day(shown), &done);
+        (s.current, s.best, s.month_pct)
+    }
+
+    #[test]
+    fn streaks_count_back_from_today_and_undone_today_does_not_break() {
+        let done = ["2026-11-03", "2026-11-04", "2026-11-05"];
+        let s = |today| st(127, "2026-11-02", today, today, &done);
+        assert_eq!(s("2026-11-05"), (3, 3, 75));
+        // Today (the 6th) not done yet: the run up to yesterday stays.
+        assert_eq!(s("2026-11-06"), (3, 3, 60));
+        // The undone 6th is now an earlier day: it breaks the streak.
+        assert_eq!(s("2026-11-07"), (0, 3, 50));
+    }
+
+    #[test]
+    fn non_applicable_days_neither_cut_nor_add() {
+        // Mon, Wed, Fri done; Tue is marked but does not apply.
+        let wd = 0b001_0101;
+        let done = ["2026-11-02", "2026-11-03", "2026-11-04", "2026-11-06"];
+        assert_eq!(
+            st(wd, "2026-11-02", "2026-11-06", "2026-11-06", &done),
+            (3, 3, 100)
+        );
+        // Today is a Saturday: still a streak of 3.
+        assert_eq!(
+            st(wd, "2026-11-02", "2026-11-07", "2026-11-07", &done),
+            (3, 3, 100)
+        );
+    }
+
+    #[test]
+    fn marks_before_start_and_no_applicable_days_give_zero() {
+        assert_eq!(
+            st(
+                127,
+                "2026-11-05",
+                "2026-11-06",
+                "2026-11-06",
+                &["2026-11-01"]
+            ),
+            (0, 0, 0)
+        );
+        // Only Sundays, started Monday, today Wednesday: nothing applies yet.
+        assert_eq!(
+            st(0b100_0000, "2026-11-02", "2026-11-04", "2026-11-04", &[]),
+            (0, 0, 0)
+        );
+    }
+
+    #[test]
+    fn percentage_is_floored_from_start_and_streaks_ignore_the_shown_month() {
+        // Started mid-month (the 4th), seen on the 6th: 3 applicable days, 1 done.
+        assert_eq!(
+            st(
+                127,
+                "2026-11-04",
+                "2026-11-06",
+                "2026-11-06",
+                &["2026-11-05"]
+            ),
+            (1, 1, 33)
+        );
+        // Shown October (past): the whole month counts; the streak is as of today.
+        let done = ["2026-10-30", "2026-10-31", "2026-11-01"];
+        assert_eq!(
+            st(127, "2026-10-01", "2026-11-01", "2026-10-15", &done),
+            (3, 3, 6)
+        );
+    }
+
+    #[test]
+    fn month_carries_stats_from_all_logs() {
+        let (dir, conn) = setup("stats");
+        let a = create(&conn, "A", [true; 7], day("2026-10-01"), day(MON)).unwrap();
+        create(&conn, "B", [true; 7], day("2026-10-01"), day(MON)).unwrap();
+        for d in ["2026-10-31", "2026-11-01", MON] {
+            set_done(&conn, a, day(d), day(MON), true).unwrap();
+        }
+        let m = month(&conn, day(MON), day(MON)).unwrap();
+        let full = HabitStats {
+            current: 3,
+            best: 3,
+            month_pct: 100,
+        };
+        assert_eq!(m.habits[0].stats, full);
+        assert_eq!(m.habits[1].stats.current, 0);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]

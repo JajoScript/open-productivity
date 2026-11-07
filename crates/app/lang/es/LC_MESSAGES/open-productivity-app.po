@@ -434,6 +434,12 @@ msgstr "Mes anterior"
 msgid "Next month"
 msgstr "Mes siguiente"
 
+msgid "Streak {} · Best {}"
+msgstr "Racha {} · Mejor {}"
+
+msgid "{}%"
+msgstr "{} %"
+
 msgid "WK {}"
 msgstr "SEM {}"
 
