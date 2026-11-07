@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+// The month at a glance: its total done and a Monday-first heat map. The habits view
+// places them beside the grid on a wide window and above it on a narrow one.
+
+import { Palette } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+
+// Shade of one day of the month map; blank only pads the first row.
+export enum HeatLevel { blank, none, future, l0, l1, l2, l3, l4 }
+
+export struct HeatCell {
+    today: bool,
+    level: HeatLevel,
+}
+
+// "Month", the done/applicable total and its progress bar.
+export component MonthTotal inherits VerticalLayout {
+    in property <int> done;
+    in property <int> applicable;
+    in property <int> pct;
+
+    spacing: 4px;
+    alignment: start;
+
+    Text {
+        text: @tr("Month");
+        color: Theme.muted;
+        font-size: 11px;
+        font-weight: 600;
+    }
+
+    Text {
+        text: Strings.week-total(root.done, root.applicable, root.pct);
+        font-weight: 600;
+        overflow: elide;
+    }
+
+    Rectangle {
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.hover;
+        clip: true;
+        Rectangle {
+            x: 0;
+            width: parent.width * root.pct / 100;
+            background: Theme.ink;
+        }
+    }
+}
+
+// Weekday initials over the month in rows of seven, shaded by how much was done each day.
+export component MonthMap inherits VerticalLayout {
+    in property <[[HeatCell]]> heat;
+    in property <length> cell: 22px;
+
+    property <length> gap: 3px;
+
+    spacing: root.gap;
+    alignment: start;
+
+    HorizontalLayout {
+        spacing: root.gap;
+        alignment: start;
+        for letter in Strings.day-letters: Text {
+            width: root.cell;
+            text: letter;
+            color: Theme.muted;
+            font-size: 10px;
+            horizontal-alignment: center;
+        }
+    }
+
+    for row in root.heat: HorizontalLayout {
+        spacing: root.gap;
+        alignment: start;
+        for c in row: Rectangle {
+            width: root.cell;
+            height: root.cell;
+            border-radius: root.cell / 5;
+            background: c.level == HeatLevel.l0 ? Theme.hover
+                : c.level == HeatLevel.l1 ? Palette.foreground.with-alpha(0.25)
+                : c.level == HeatLevel.l2 ? Palette.foreground.with-alpha(0.45)
+                : c.level == HeatLevel.l3 ? Palette.foreground.with-alpha(0.7)
+                : c.level == HeatLevel.l4 ? Theme.ink
+                : c.level == HeatLevel.none ? Theme.field
+                : transparent;
+            // Today is ringed; future days are an outline, like the grid's future cells.
+            border-width: c.today ? 2px : c.level == HeatLevel.future ? 1px : 0px;
+            border-color: c.today ? Palette.foreground : Theme.hairline;
+        }
+    }
+}

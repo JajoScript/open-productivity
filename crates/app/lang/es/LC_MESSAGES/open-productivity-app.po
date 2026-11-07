@@ -521,3 +521,6 @@ msgstr "Restaurar"
 
 msgid "Restore {}"
 msgstr "Restaurar {}"
+
+msgid "Month"
+msgstr "Mes"

@@ -7,8 +7,9 @@ import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { DayState, HabitCell } from "habit-cell.slint";
+import { HeatCell, HeatLevel, MonthMap, MonthTotal } from "month-summary.slint";
 
-export { DayState }
+export { DayState, HeatCell, HeatLevel }
 
 // A habit with its days of the month, in the same blocks of seven as `HabitsView.day-numbers`.
 export struct HabitRow {
@@ -48,6 +49,9 @@ export component HabitsView inherits VerticalLayout {
     // Day of the month per cell, in blocks of seven.
     in property <[[int]]> day-numbers;
     in property <[WeekTotal]> week-totals;
+    in property <WeekTotal> month-total;
+    // The month map in rows of seven, Monday first.
+    in property <[[HeatCell]]> heat;
     in property <string> error;
     in property <int> archived-count;
     callback open-archived();
@@ -147,166 +151,240 @@ export component HabitsView inherits VerticalLayout {
         }
     }
 
-    // 31 days do not fit the default window next to the names: scroll sideways.
-    if root.habits.length > 0: ScrollView {
+    // Sizes follow the window: the day cells grow to fill the width, so the grid never
+    // scrolls sideways, and a wide window moves the month summary to a side panel.
+    property <length> content-w: root.width - 48px;
+    property <bool> wide: root.content-w >= 1100px;
+    property <length> panel-w: max(232px, min(320px, root.content-w * 0.18));
+    // Room for the vertical scrollbar, so it never covers the last day.
+    property <length> grid-w: (root.wide ? root.content-w - root.panel-w - 33px : root.content-w) - 16px;
+    property <length> name-w: max(112px, min(200px, root.grid-w * 0.15));
+    property <int> blocks: root.day-numbers.length;
+    property <int> days: root.blocks == 0 ? 0 : (root.blocks - 1) * 7 + root.day-numbers[root.blocks - 1].length;
+    property <length> cell: root.days == 0 ? 20px : max(18px, min(36px, Math.floor((root.grid-w - root.name-w - root.blocks * 8px - (root.days - root.blocks) * 3px) / root.days / 1px) * 1px));
+    // What the grid really takes once the cells hit their cap, so the panel follows it closely.
+    property <length> used-w: root.name-w + root.blocks * 8px + root.days * root.cell + (root.days - root.blocks) * 3px;
+    property <length> map-cell: root.wide ? Math.floor((root.panel-w - 18px) / 7 / 1px) * 1px : 22px;
+
+    if root.habits.length > 0: scroll := ScrollView {
+        content-width: self.visible-width;
         VerticalLayout {
-            spacing: 6px;
+            width: scroll.visible-width;
+            spacing: 16px;
             alignment: start;
-            HorizontalLayout {
-                spacing: 8px;
-                Rectangle {
-                    width: 112px;
+
+            // Narrow window: the month summary sits above the grid, total beside the map.
+            if !root.wide: HorizontalLayout {
+                spacing: 24px;
+                alignment: start;
+                MonthTotal {
+                    width: 168px;
+                    done: root.month-total.done;
+                    applicable: root.month-total.applicable;
+                    pct: root.month-total.pct;
                 }
 
-                for week[w] in root.day-numbers: VerticalLayout {
-                    spacing: 2px;
-                    Text {
-                        text: Strings.week-label(w + 1);
-                        color: Theme.muted;
-                        font-size: 10px;
-                        font-weight: 600;
-                        overflow: elide;
-                    }
-
-                    HorizontalLayout {
-                        spacing: 3px;
-                        for day in week: Rectangle {
-                            width: 20px;
-                            height: 20px;
-                            border-radius: 5px;
-                            background: day == root.today-day ? Theme.ink : transparent;
-                            Text {
-                                text: day;
-                                font-size: 11px;
-                                font-weight: day == root.today-day ? 700 : 400;
-                                color: day == root.today-day ? Theme.on-ink : Theme.muted;
-                                horizontal-alignment: center;
-                                vertical-alignment: center;
-                            }
-                        }
-                    }
+                MonthMap {
+                    heat: root.heat;
+                    cell: root.map-cell;
                 }
             }
 
-            // Totals per day and per block; the name column is left for the month total.
             HorizontalLayout {
-                spacing: 8px;
-                Rectangle {
-                    width: 112px;
-                }
+                spacing: 16px;
+                alignment: start;
 
-                for week in root.week-totals: VerticalLayout {
-                    spacing: 3px;
+                VerticalLayout {
+                    width: min(root.grid-w, root.used-w);
+                    spacing: 6px;
+                    alignment: start;
+
+                    // Day numbers in blocks of seven, today on an ink plate.
                     HorizontalLayout {
-                        spacing: 3px;
-                        for bar in week.bars: Rectangle {
-                            width: 20px;
-                            height: 56px;
-                            if bar.applies: Rectangle {
-                                x: (parent.width - self.width) / 2;
-                                width: 6px;
-                                border-radius: 3px;
+                        spacing: 8px;
+                        alignment: start;
+                        Rectangle {
+                            width: root.name-w;
+                        }
+
+                        for week[w] in root.day-numbers: VerticalLayout {
+                            spacing: 2px;
+                            Text {
+                                text: Strings.week-label(w + 1);
+                                color: Theme.muted;
+                                font-size: 10px;
+                                font-weight: 600;
+                                overflow: elide;
+                            }
+
+                            HorizontalLayout {
+                                spacing: 3px;
+                                for day in week: Rectangle {
+                                    width: root.cell;
+                                    height: 20px;
+                                    border-radius: 5px;
+                                    background: day == root.today-day ? Theme.ink : transparent;
+                                    Text {
+                                        text: day;
+                                        font-size: 11px;
+                                        font-weight: day == root.today-day ? 700 : 400;
+                                        color: day == root.today-day ? Theme.on-ink : Theme.muted;
+                                        horizontal-alignment: center;
+                                        vertical-alignment: center;
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    // Share done per day as a bar, and per block as "x/y z%" with its progress.
+                    HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+                        Rectangle {
+                            width: root.name-w;
+                        }
+
+                        for week in root.week-totals: VerticalLayout {
+                            spacing: 3px;
+                            HorizontalLayout {
+                                spacing: 3px;
+                                for bar in week.bars: Rectangle {
+                                    width: root.cell;
+                                    height: 64px;
+                                    if bar.applies: Rectangle {
+                                        x: (parent.width - self.width) / 2;
+                                        width: 6px;
+                                        border-radius: 3px;
+                                        background: Theme.hover;
+                                        clip: true;
+                                        Rectangle {
+                                            y: parent.height * (1 - bar.pct / 100);
+                                            height: parent.height * bar.pct / 100;
+                                            background: Theme.ink;
+                                        }
+                                    }
+                                }
+                            }
+
+                            Text {
+                                text: Strings.week-total(week.done, week.applicable, week.pct);
+                                color: Theme.muted;
+                                font-size: 10px;
+                                overflow: elide;
+                            }
+
+                            Rectangle {
+                                height: 3px;
+                                border-radius: 1.5px;
                                 background: Theme.hover;
                                 clip: true;
                                 Rectangle {
-                                    y: parent.height * (1 - bar.pct / 100);
-                                    height: parent.height * bar.pct / 100;
+                                    x: 0;
+                                    width: parent.width * week.pct / 100;
                                     background: Theme.ink;
                                 }
                             }
                         }
                     }
 
-                    Text {
-                        text: Strings.week-total(week.done, week.applicable, week.pct);
-                        color: Theme.muted;
-                        font-size: 10px;
-                        overflow: elide;
-                    }
-
-                    Rectangle {
-                        height: 3px;
-                        border-radius: 1.5px;
-                        background: Theme.hover;
-                        clip: true;
+                    for habit in root.habits: HorizontalLayout {
+                        spacing: 8px;
+                        alignment: start;
+                        // The name and stats block opens the editor.
                         Rectangle {
-                            x: 0;
-                            width: parent.width * week.pct / 100;
-                            background: Theme.ink;
-                        }
-                    }
-                }
-            }
-
-            for habit in root.habits: HorizontalLayout {
-                spacing: 8px;
-                // The name and stats block opens the editor.
-                Rectangle {
-                    width: 112px;
-                    border-radius: 6px;
-                    background: name-touch.has-hover ? Theme.hover : transparent;
-                    animate background { duration: Theme.fast; easing: Theme.ease-out; }
-                    accessible-role: button;
-                    accessible-label: habit.name;
-                    accessible-action-default => {
-                        root.edit-habit(habit);
-                    }
-
-                    VerticalLayout {
-                        alignment: center;
-                        Text {
-                            text: habit.name;
-                            overflow: elide;
-                        }
-
-                        // The month's percentage stays visible; only the streaks elide.
-                        HorizontalLayout {
-                            spacing: 4px;
-                            Text {
-                                text: Strings.habit-streaks(habit.streak, habit.best);
-                                color: Theme.muted;
-                                font-size: 10px;
-                                overflow: elide;
-                                horizontal-stretch: 1;
+                            width: root.name-w;
+                            border-radius: 6px;
+                            background: name-touch.has-hover ? Theme.hover : transparent;
+                            animate background { duration: Theme.fast; easing: Theme.ease-out; }
+                            accessible-role: button;
+                            accessible-label: habit.name;
+                            accessible-action-default => {
+                                root.edit-habit(habit);
                             }
 
-                            Text {
-                                text: Strings.percent(habit.month-pct);
-                                color: Theme.muted;
-                                font-size: 10px;
-                                horizontal-stretch: 0;
+                            VerticalLayout {
+                                alignment: center;
+                                padding-left: 6px;
+                                padding-right: 6px;
+                                Text {
+                                    text: habit.name;
+                                    overflow: elide;
+                                }
+
+                                // The month's percentage stays visible; only the streaks elide.
+                                HorizontalLayout {
+                                    spacing: 4px;
+                                    Text {
+                                        text: Strings.habit-streaks(habit.streak, habit.best);
+                                        color: Theme.muted;
+                                        font-size: 10px;
+                                        overflow: elide;
+                                        horizontal-stretch: 1;
+                                    }
+
+                                    Text {
+                                        text: Strings.percent(habit.month-pct);
+                                        color: Theme.muted;
+                                        font-size: 10px;
+                                        horizontal-stretch: 0;
+                                    }
+                                }
+                            }
+
+                            name-touch := TouchArea {
+                                mouse-cursor: pointer;
+                                clicked => {
+                                    root.edit-habit(habit);
+                                }
+                            }
+                        }
+
+                        for week[w] in habit.weeks: HorizontalLayout {
+                            spacing: 3px;
+                            for state[i] in week: HabitCell {
+                                size: root.cell;
+                                state: state;
+                                label: habit.name + " " + Strings.date(root.day-numbers[w][i], root.month.month, root.month.year);
+                                toggled(done) => {
+                                    root.set-habit-done(habit.id, root.day-numbers[w][i], done);
+                                }
                             }
                         }
                     }
 
-                    name-touch := TouchArea {
-                        mouse-cursor: pointer;
-                        clicked => {
-                            root.edit-habit(habit);
+                    // Right under the last habit, out of the way of the grid.
+                    if root.archived-count > 0: HorizontalLayout {
+                        alignment: start;
+                        padding-top: 8px;
+                        SubtleButton {
+                            text: @tr("Archived ({})", root.archived-count);
+                            clicked => {
+                                root.open-archived();
+                            }
                         }
                     }
                 }
 
-                for week[w] in habit.weeks: HorizontalLayout {
-                    spacing: 3px;
-                    for state[i] in week: HabitCell {
-                        state: state;
-                        label: habit.name + " " + Strings.date(root.day-numbers[w][i], root.month.month, root.month.year);
-                        toggled(done) => {
-                            root.set-habit-done(habit.id, root.day-numbers[w][i], done);
-                        }
-                    }
+                // Wide window: the month summary is a side panel past a hairline.
+                if root.wide: Rectangle {
+                    width: 1px;
+                    background: Theme.hairline;
                 }
-            }
 
-            // Right under the last habit, out of the way of the grid.
-            if root.archived-count > 0: HorizontalLayout {
-                alignment: start;
-                padding-top: 8px;
-                SubtleButton {
-                    text: @tr("Archived ({})", root.archived-count);
-                    clicked => {
-                        root.open-archived();
+                if root.wide: VerticalLayout {
+                    width: root.panel-w;
+                    spacing: 16px;
+                    alignment: start;
+                    MonthTotal {
+                        done: root.month-total.done;
+                        applicable: root.month-total.applicable;
+                        pct: root.month-total.pct;
+                    }
+
+                    MonthMap {
+                        heat: root.heat;
+                        cell: root.map-cell;
                     }
                 }
             }

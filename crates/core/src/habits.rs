@@ -52,6 +52,21 @@ impl Total {
     }
 }
 
+/// How one day of the month heat map is shaded.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Heat {
+    /// No habit applies.
+    None,
+    /// After today.
+    Future,
+    /// Share done: L0 is 0%, L1 1-25, L2 26-50, L3 51-75, L4 76-100.
+    L0,
+    L1,
+    L2,
+    L3,
+    L4,
+}
+
 #[derive(Debug, PartialEq)]
 pub struct HabitMonth {
     /// First day of the month shown.
@@ -68,6 +83,12 @@ pub struct HabitMonth {
     pub day_totals: Vec<Total>,
     /// Per block of seven days (the last may be short).
     pub week_totals: Vec<Total>,
+    /// Sum of `day_totals`.
+    pub month_total: Total,
+    /// Blank cells before day 1 so the heat map starts on Monday.
+    pub lead: u32,
+    /// Heat per day of the month, day 1 first.
+    pub heat: Vec<Heat>,
 }
 
 #[derive(Debug)]
@@ -378,7 +399,30 @@ pub fn month(
             })
         })
         .collect();
+    let month_total = day_totals.iter().fold(Total::default(), |a, t| Total {
+        done: a.done + t.done,
+        applicable: a.applicable + t.applicable,
+    });
+    let heat = day_totals
+        .iter()
+        .enumerate()
+        .map(|(i, t)| {
+            let date = first + TimeDelta::days(i as i64);
+            match t.pct() {
+                None => Heat::None,
+                _ if date > today => Heat::Future,
+                Some(0) => Heat::L0,
+                Some(1..=25) => Heat::L1,
+                Some(26..=50) => Heat::L2,
+                Some(51..=75) => Heat::L3,
+                Some(_) => Heat::L4,
+            }
+        })
+        .collect();
     Ok(HabitMonth {
+        lead: first.weekday().num_days_from_monday(),
+        month_total,
+        heat,
         first,
         days: len,
         today: (month_start(today) == first).then(|| today.day()),
@@ -993,6 +1037,36 @@ mod tests {
         assert_eq!(m.week_totals[4], t(0, 3));
         assert_eq!(t(3, 8).pct(), Some(37));
         assert_eq!(t(0, 0).pct(), None);
+        // Month total is the sum of the days; 2026-11-01 is a Sunday, so six blanks lead.
+        assert_eq!(m.month_total.done, 3);
+        assert_eq!(m.lead, 6);
+        use Heat::{Future, L0, L4};
+        // Day 1: 1/1 done; day 2: 2/2; day 3 (today): 0/1; day 4+: future.
+        assert_eq!(m.heat[..4], [L4, L4, L0, Future]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn heat_buckets_by_share_done() {
+        let (dir, conn) = setup("heat");
+        let today = day("2026-11-30");
+        let ids: Vec<_> = (0..4)
+            .map(|i| create(&conn, &format!("h{i}"), [true; 7], day("2026-11-01"), today).unwrap())
+            .collect();
+        // Done counts per day 1..=5 of 4 habits: 0, 1 (25%), 2 (50%), 3 (75%), 4 (100%).
+        for (d, n) in [(2, 1), (3, 2), (4, 3), (5, 4)] {
+            for id in &ids[..n] {
+                set_done(&conn, *id, day(&format!("2026-11-0{d}")), today, true).unwrap();
+            }
+        }
+        let m = month(&conn, today, today).unwrap();
+        use Heat::{L0, L1, L2, L3, L4};
+        assert_eq!(m.heat[..5], [L0, L1, L2, L3, L4]);
+        // Past month with no habit started: nothing applies.
+        let m = month(&conn, day("2026-10-10"), today).unwrap();
+        assert!(m.heat.iter().all(|h| *h == Heat::None));
+        assert_eq!(m.lead, 3);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

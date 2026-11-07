@@ -9,11 +9,14 @@ use std::time::Duration;
 
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
-use open_productivity_core::habits::{self, DayState as CoreState, HabitError, HabitId};
+use open_productivity_core::habits::{self, DayState as CoreState, HabitError, HabitId, Heat};
 use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::tasks::ui_id;
-use crate::{AppWindow, ArchivedRow, Date, DayBar, DayState, HabitRow, Strings, WeekTotal};
+use crate::{
+    AppWindow, ArchivedRow, Date, DayBar, DayState, HabitRow, HeatCell, HeatLevel, Strings,
+    WeekTotal,
+};
 
 struct State {
     conn: Rc<Connection>,
@@ -85,6 +88,25 @@ impl State {
                 month: m.first.month() as i32,
                 day: 1,
             });
+            let t = m.month_total;
+            w.set_habit_month_total(WeekTotal {
+                done: t.done as i32,
+                applicable: t.applicable as i32,
+                pct: t.pct().unwrap_or(0) as i32,
+                bars: Default::default(),
+            });
+            // Blank cells pad the first row so the map starts on Monday.
+            let cells: Vec<HeatCell> = (0..m.lead)
+                .map(|_| HeatCell {
+                    today: false,
+                    level: HeatLevel::Blank,
+                })
+                .chain(m.heat.iter().enumerate().map(|(i, h)| HeatCell {
+                    today: m.today == Some(i as u32 + 1),
+                    level: heat_level(*h),
+                }))
+                .collect();
+            w.set_habit_heat(blocks(cells));
             w.set_habits_today_day(m.today.map_or(0, |d| d as i32));
             w.set_habits_can_next(m.can_next);
             w.set_archived_habits(ModelRc::new(VecModel::from(archived)));
@@ -158,6 +180,18 @@ fn blocks<T: Clone + 'static>(cells: Vec<T>) -> ModelRc<ModelRc<T>> {
             .map(|c| ModelRc::new(VecModel::from(c.to_vec())))
             .collect::<Vec<_>>(),
     ))
+}
+
+fn heat_level(h: Heat) -> HeatLevel {
+    match h {
+        Heat::None => HeatLevel::None,
+        Heat::Future => HeatLevel::Future,
+        Heat::L0 => HeatLevel::L0,
+        Heat::L1 => HeatLevel::L1,
+        Heat::L2 => HeatLevel::L2,
+        Heat::L3 => HeatLevel::L3,
+        Heat::L4 => HeatLevel::L4,
+    }
 }
 
 fn day_state(s: CoreState) -> DayState {

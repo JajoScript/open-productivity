@@ -21,8 +21,11 @@ export component HabitCell {
     property <bool> markable: root.state == DayState.done || root.state == DayState.open;
     property <bool> done: root.state == DayState.done;
 
-    width: 20px;
-    height: 20px;
+    // Set by the grid from the window width.
+    in property <length> size: 20px;
+
+    width: root.size;
+    height: root.size;
     forward-focus: focus;
     accessible-role: checkbox;
     accessible-enabled: root.markable;
@@ -37,7 +40,7 @@ export component HabitCell {
 
     box := Rectangle {
         visible: root.state != DayState.skipped;
-        border-radius: 5px;
+        border-radius: root.size / 4;
         // Future days are a faint filled square, so only open days carry an outline.
         border-width: root.state == DayState.open ? 1.5px : 0px;
         border-color: touch.has-hover ? Palette.foreground : Theme.muted;
@@ -47,8 +50,8 @@ export component HabitCell {
         if root.done: Image {
             source: @image-url("../icons/check.svg");
             colorize: Theme.on-ink;
-            width: 14px;
-            height: 14px;
+            width: root.size * 0.7;
+            height: root.size * 0.7;
             accessible-role: none;
         }
     }
