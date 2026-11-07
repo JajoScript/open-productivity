@@ -83,6 +83,16 @@ pub fn task_row(t: Task, today: NaiveDate, first_done: bool) -> Result<TaskRow, 
     })
 }
 
+/// Publishes the day the window shows; the Tasks and Habits views read it.
+pub fn show_today(w: &AppWindow, today: NaiveDate) {
+    w.set_today(Date {
+        year: today.year(),
+        month: today.month() as i32,
+        day: today.day() as i32,
+    });
+    w.set_today_weekday(today.weekday().num_days_from_monday() as i32);
+}
+
 impl State {
     /// Only what the open tab shows: the week, or the view's rows plus the lists panel.
     pub fn reload(&self) -> Result<(), String> {
@@ -90,12 +100,7 @@ impl State {
         let today = now.date_naive();
         self.day.set(today);
         if let Some(w) = self.window.upgrade() {
-            w.set_today(Date {
-                year: today.year(),
-                month: today.month() as i32,
-                day: today.day() as i32,
-            });
-            w.set_today_weekday(today.weekday().num_days_from_monday() as i32);
+            show_today(&w, today);
         }
         match self.tab.get() {
             TasksTab::Week => return self.reload_week(today),

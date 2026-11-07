@@ -6,6 +6,7 @@
 pub use chrono;
 pub mod calendar;
 pub mod db;
+pub mod habits;
 pub mod instances;
 pub mod lists;
 pub mod settings;

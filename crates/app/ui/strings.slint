@@ -25,6 +25,12 @@ export global Strings {
         return @tr("Unexpected error: {}", error);
     }
 
+    out property <string> habit-empty-name: @tr("Give the habit a name.");
+
+    public pure function habit-failed(error: string) -> string {
+        return @tr("Could not save the habit: {}", error);
+    }
+
     public pure function task-failed(error: string) -> string {
         return @tr("Could not save the task: {}", error);
     }

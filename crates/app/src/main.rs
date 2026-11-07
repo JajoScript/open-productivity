@@ -19,6 +19,7 @@ mod about;
 mod calendar;
 mod data;
 mod dialogs;
+mod habits;
 mod instances_ui;
 mod kanban;
 mod lists;
@@ -152,6 +153,7 @@ fn main() {
     // Shared by the modules; the window's callbacks hold the only references.
     let conn = Rc::new(conn);
     let tasks_timer = tasks::init(&window, conn.clone());
+    let habits_timer = habits::init(&window, conn.clone());
     data::init(&window, conn);
 
     let name = instance.file_name().map_or_else(
@@ -166,6 +168,7 @@ fn main() {
         // Release the database and the lock before the new process needs them. The window
         // owns the callbacks that hold the connection, so it goes too.
         drop(tasks_timer);
+        drop(habits_timer);
         drop(window);
         drop(lock);
         let spawned =

@@ -7,11 +7,12 @@ import { Strings } from "strings.slint";
 import { Calendar, MonthView } from "ink-date-popup.slint";
 import { ListEntry } from "list-entry.slint";
 import { ListCreator } from "tasks/list-creator.slint";
+import { HabitRow, HabitsView } from "habits/habits-view.slint";
 import { Module, Rail } from "rail.slint";
 import { Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
 import { DueKind, KanbanColumn, Quadrant, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { Calendar, Date, DueKind, InstanceRow, KanbanColumn, Quadrant, Stage, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay }
+export { Calendar, Date, DueKind, HabitRow, InstanceRow, KanbanColumn, Quadrant, Stage, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -65,6 +66,10 @@ export component AppWindow inherits Window {
     callback set-list(int, int);
     callback update-task(int, string, string, bool, bool) -> bool;
     callback delete-task(int);
+    in property <[HabitRow]> habits;
+    in property <string> habits-error;
+    callback create-habit(string);
+    callback set-habit-done(int, bool);
 
     title: "Open Productivity — " + instance-name;
     preferred-width: 960px;
@@ -170,6 +175,21 @@ export component AppWindow inherits Window {
                     }
                     set-language(l) => {
                         root.set-language(l);
+                    }
+                }
+
+                if root.module == Module.habits: HabitsView {
+                    width: parent.width;
+                    height: parent.height;
+                    habits: root.habits;
+                    error: root.habits-error;
+                    today: root.today;
+                    today-weekday: root.today-weekday;
+                    create-habit(name) => {
+                        root.create-habit(name);
+                    }
+                    set-habit-done(id, done) => {
+                        root.set-habit-done(id, done);
                     }
                 }
 

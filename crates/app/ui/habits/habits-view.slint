@@ -1,0 +1,125 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, ListView, Palette } from "std-widgets.slint";
+import { AddRow } from "../add-row.slint";
+import { InkCheck } from "../ink-check.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+
+export struct HabitRow {
+    id: int,
+    name: string,
+    done: bool,
+}
+
+// One habit today: its icon, name and the check for today.
+component HabitLine inherits Rectangle {
+    in property <HabitRow> habit;
+    callback toggled(bool);
+
+    height: 40px;
+    border-radius: 6px;
+    background: touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+
+    // Under the controls, so it only tracks hover for the row highlight.
+    touch := TouchArea { }
+
+    HorizontalLayout {
+        padding-left: 4px;
+        padding-right: 10px;
+        spacing: 4px;
+        InkCheck {
+            checked: root.habit.done;
+            label: root.habit.name;
+            toggled(done) => {
+                root.toggled(done);
+            }
+        }
+
+        Rectangle {
+            width: 20px;
+            Image {
+                source: @image-url("../icons/sprout.svg");
+                colorize: root.habit.done ? Theme.done : Theme.muted;
+                width: 16px;
+                height: 16px;
+                y: (parent.height - self.height) / 2;
+                accessible-role: none;
+            }
+        }
+
+        Text {
+            text: root.habit.name;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+            color: root.habit.done ? Theme.done : Palette.foreground;
+            animate color { duration: Theme.fast; easing: Theme.ease-out; }
+            accessible-role: none;
+        }
+    }
+}
+
+// The habits of today: title, new habit field and the rows.
+export component HabitsView inherits VerticalLayout {
+    in property <[HabitRow]> habits;
+    in property <string> error;
+    in property <Date> today;
+    // 0 is Monday.
+    in property <int> today-weekday;
+    callback create-habit(string);
+    callback set-habit-done(int, bool);
+
+    padding: 24px;
+    padding-top: 20px;
+    spacing: 12px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            text: @tr("Habits");
+            font-size: 24px;
+            font-weight: 700;
+            overflow: elide;
+        }
+
+        Text {
+            text: Strings.long-date(root.today.day, root.today.month, root.today-weekday);
+            color: Theme.muted;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+    }
+
+    AddRow {
+        placeholder: @tr("Add habit…");
+        accepted(text) => {
+            root.create-habit(text);
+        }
+    }
+
+    if root.error != "": Text {
+        text: root.error;
+        color: Theme.critical;
+        wrap: word-wrap;
+    }
+
+    if root.habits.length == 0: Text {
+        text: @tr("No habits for today. Add one above.");
+        color: Theme.muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        vertical-stretch: 1;
+    }
+
+    if root.habits.length > 0: ListView {
+        for habit in root.habits: HabitLine {
+            habit: habit;
+            toggled(done) => {
+                root.set-habit-done(habit.id, done);
+            }
+        }
+    }
+}

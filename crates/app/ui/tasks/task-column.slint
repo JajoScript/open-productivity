@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JajoScript
 
 import { Date, ListView, Palette } from "std-widgets.slint";
+import { AddRow } from "../add-row.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
 import { PopupSurface } from "../popup-surface.slint";
@@ -29,68 +30,6 @@ export struct TaskRow {
     important: bool,
     // From core (`first_done`): this row opens the "Completed" section.
     first-done: bool,
-}
-
-// Row-shaped field for a new task: an empty box where the checkbox goes, no frame.
-component AddRow inherits Rectangle {
-    callback accepted(string);
-
-    height: 40px;
-    border-radius: 6px;
-    background: input.has-focus ? transparent : touch.has-hover ? Theme.hover : transparent;
-    animate background { duration: Theme.fast; easing: Theme.ease-out; }
-
-    touch := TouchArea {
-        mouse-cursor: MouseCursor.text;
-        clicked => {
-            input.focus();
-        }
-    }
-
-    HorizontalLayout {
-        padding-left: 4px;
-        padding-right: 10px;
-        spacing: 4px;
-        Rectangle {
-            width: 32px;
-            Rectangle {
-                width: 18px;
-                height: 18px;
-                border-radius: 5px;
-                border-width: 1.5px;
-                border-color: Theme.hairline;
-            }
-        }
-
-        Rectangle {
-            if input.text == "": Text {
-                x: 6px;
-                width: parent.width - 12px;
-                height: parent.height;
-                text: @tr("Add task…");
-                color: Theme.muted;
-                vertical-alignment: center;
-                overflow: elide;
-                accessible-role: none;
-            }
-
-            input := TextInput {
-                x: 6px;
-                width: parent.width - 12px;
-                height: parent.height;
-                vertical-alignment: center;
-                single-line: true;
-                color: Palette.foreground;
-                selection-background-color: Theme.selection;
-                selection-foreground-color: Palette.foreground;
-                accessible-label: @tr("Add task…");
-                accepted => {
-                    root.accepted(self.text);
-                    self.text = "";
-                }
-            }
-        }
-    }
 }
 
 // One task: checkbox, title (opens the editor), note mark, list and due date.
@@ -303,6 +242,7 @@ export component TaskColumn inherits VerticalLayout {
     }
 
     if root.can-create: AddRow {
+        placeholder: @tr("Add task…");
         accepted(text) => {
             root.create-task(text);
         }
