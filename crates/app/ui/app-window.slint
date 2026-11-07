@@ -7,6 +7,7 @@ import { Strings } from "strings.slint";
 import { Calendar, MonthView } from "ink-date-popup.slint";
 import { ListEntry } from "list-entry.slint";
 import { ListCreator } from "tasks/list-creator.slint";
+import { HabitCreator } from "habits/habit-creator.slint";
 import { HabitRow, HabitsView } from "habits/habits-view.slint";
 import { Module, Rail } from "rail.slint";
 import { Language, SettingsView } from "settings/settings-view.slint";
@@ -68,7 +69,7 @@ export component AppWindow inherits Window {
     callback delete-task(int);
     in property <[HabitRow]> habits;
     in property <string> habits-error;
-    callback create-habit(string);
+    callback create-habit(string, [bool], Date) -> string;
     callback set-habit-done(int, bool);
 
     title: "Open Productivity — " + instance-name;
@@ -106,6 +107,14 @@ export component AppWindow inherits Window {
         // The collapsed rail's slot; the rail itself is drawn last, so it opens over the content.
         Rectangle {
             width: 56px;
+        }
+
+        habit-creator := HabitCreator {
+            x: (root.width - self.width) / 2;
+            y: 120px;
+            create(name, days, start) => {
+                return root.create-habit(name, days, start);
+            }
         }
 
         list-creator := ListCreator {
@@ -185,8 +194,8 @@ export component AppWindow inherits Window {
                     error: root.habits-error;
                     today: root.today;
                     today-weekday: root.today-weekday;
-                    create-habit(name) => {
-                        root.create-habit(name);
+                    new-habit => {
+                        habit-creator.show();
                     }
                     set-habit-done(id, done) => {
                         root.set-habit-done(id, done);

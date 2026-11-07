@@ -22,6 +22,10 @@ pub struct DayHabit {
 #[derive(Debug)]
 pub enum HabitError {
     EmptyName,
+    /// No weekday is selected.
+    NoWeekdays,
+    /// The habit would start after today.
+    FutureStart,
     NotFound,
     /// The day is after today.
     Future,
@@ -36,6 +40,8 @@ impl fmt::Display for HabitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             HabitError::EmptyName => write!(f, "the name is empty"),
+            HabitError::NoWeekdays => write!(f, "no weekday is selected"),
+            HabitError::FutureStart => write!(f, "the habit cannot start in the future"),
             HabitError::NotFound => write!(f, "habit not found"),
             HabitError::Future => write!(f, "that day has not happened yet"),
             HabitError::BeforeStart => write!(f, "the habit had not started on that day"),
@@ -65,15 +71,45 @@ fn weekday_bit(date: NaiveDate) -> i64 {
     1 << date.weekday().num_days_from_monday()
 }
 
-/// Starts today and applies every day of the week.
-pub fn create(conn: &Connection, name: &str, today: NaiveDate) -> Result<HabitId, HabitError> {
+/// The weekdays a habit applies on; never empty. Bit 0 is Monday.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Weekdays(u8);
+
+impl Weekdays {
+    pub const ALL: Weekdays = Weekdays(127);
+
+    /// From the seven flags, Monday first.
+    pub fn from_flags(flags: [bool; 7]) -> Result<Self, HabitError> {
+        let bits = flags
+            .iter()
+            .enumerate()
+            .fold(0u8, |acc, (i, &on)| acc | (u8::from(on) << i));
+        if bits == 0 {
+            return Err(HabitError::NoWeekdays);
+        }
+        Ok(Weekdays(bits))
+    }
+}
+
+/// Creates a habit on the flagged `days` (Monday first), starting on `start` (today or earlier).
+pub fn create(
+    conn: &Connection,
+    name: &str,
+    days: [bool; 7],
+    start: NaiveDate,
+    today: NaiveDate,
+) -> Result<HabitId, HabitError> {
     let name = name.trim();
     if name.is_empty() {
         return Err(HabitError::EmptyName);
     }
+    let weekdays = Weekdays::from_flags(days)?;
+    if start > today {
+        return Err(HabitError::FutureStart);
+    }
     conn.execute(
-        "INSERT INTO habit (name, start_date) VALUES (?1, ?2)",
-        (name, today.to_string()),
+        "INSERT INTO habit (name, weekdays, start_date) VALUES (?1, ?2, ?3)",
+        (name, weekdays.0, start.to_string()),
     )?;
     Ok(HabitId(conn.last_insert_rowid()))
 }
@@ -171,7 +207,7 @@ mod tests {
     #[test]
     fn create_trims_and_starts_today_on_every_weekday() {
         let (dir, conn) = setup("create");
-        let id = create(&conn, "  Read \n", day(MON)).unwrap();
+        let id = create(&conn, "  Read \n", [true; 7], day(MON), day(MON)).unwrap();
         let (weekdays, start): (i64, String) = conn
             .query_row("SELECT weekdays, start_date FROM habit", [], |r| {
                 Ok((r.get(0)?, r.get(1)?))
@@ -194,7 +230,7 @@ mod tests {
     fn empty_name_is_rejected() {
         let (dir, conn) = setup("empty");
         assert!(matches!(
-            create(&conn, " \t", day(MON)),
+            create(&conn, " \t", [true; 7], day(MON), day(MON)),
             Err(HabitError::EmptyName)
         ));
         assert!(names(&conn, MON).is_empty());
@@ -203,11 +239,74 @@ mod tests {
     }
 
     #[test]
+    fn weekdays_from_flags_is_monday_first_and_rejects_empty() {
+        let w = Weekdays::from_flags([true, false, false, false, false, false, true]).unwrap();
+        assert_eq!(w, Weekdays(0b100_0001));
+        assert_eq!(Weekdays::from_flags([true; 7]).unwrap(), Weekdays::ALL);
+        assert!(matches!(
+            Weekdays::from_flags([false; 7]),
+            Err(HabitError::NoWeekdays)
+        ));
+    }
+
+    #[test]
+    fn create_validates_name_then_weekdays_then_start() {
+        let (dir, conn) = setup("validate");
+        let tomorrow = day("2026-11-03");
+        assert!(matches!(
+            create(&conn, " ", [false; 7], tomorrow, day(MON)),
+            Err(HabitError::EmptyName)
+        ));
+        assert!(matches!(
+            create(&conn, "A", [false; 7], tomorrow, day(MON)),
+            Err(HabitError::NoWeekdays)
+        ));
+        assert!(matches!(
+            create(&conn, "A", [true; 7], tomorrow, day(MON)),
+            Err(HabitError::FutureStart)
+        ));
+        assert!(names(&conn, MON).is_empty());
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn selected_weekdays_and_start_decide_when_it_shows() {
+        let (dir, conn) = setup("schedule");
+        // Mon, Wed, Fri, started on Monday the 2nd; created on Tuesday the 3rd.
+        let mwf = [true, false, true, false, true, false, false];
+        create(&conn, "Gym", mwf, day(MON), day("2026-11-03")).unwrap();
+        assert_eq!(names(&conn, MON), ["Gym"]);
+        assert!(names(&conn, "2026-11-03").is_empty());
+        assert_eq!(names(&conn, "2026-11-04"), ["Gym"]);
+        // Started yesterday: shows today, not the day before yesterday.
+        create(
+            &conn,
+            "Walk",
+            [true; 7],
+            day("2026-11-05"),
+            day("2026-11-06"),
+        )
+        .unwrap();
+        assert_eq!(names(&conn, "2026-11-06"), ["Gym", "Walk"]);
+        assert_eq!(names(&conn, "2026-11-04"), ["Gym"]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn for_day_orders_by_creation_and_hides_not_started_and_unscheduled() {
         let (dir, conn) = setup("forday");
-        create(&conn, "B", day(MON)).unwrap();
-        create(&conn, "A", day(MON)).unwrap();
-        create(&conn, "Later", day("2026-11-05")).unwrap();
+        create(&conn, "B", [true; 7], day(MON), day(MON)).unwrap();
+        create(&conn, "A", [true; 7], day(MON), day(MON)).unwrap();
+        create(
+            &conn,
+            "Later",
+            [true; 7],
+            day("2026-11-05"),
+            day("2026-11-05"),
+        )
+        .unwrap();
         // Only Monday and Tuesday.
         conn.execute(
             "INSERT INTO habit (name, weekdays, start_date) VALUES ('Mon-Tue', 3, ?1)",
@@ -226,7 +325,7 @@ mod tests {
     #[test]
     fn archived_habits_are_hidden() {
         let (dir, conn) = setup("archived");
-        create(&conn, "Gone", day(MON)).unwrap();
+        create(&conn, "Gone", [true; 7], day(MON), day(MON)).unwrap();
         conn.execute("UPDATE habit SET archived = 1", []).unwrap();
         assert!(names(&conn, MON).is_empty());
         drop(conn);
@@ -236,7 +335,7 @@ mod tests {
     #[test]
     fn set_done_marks_and_unmarks_and_is_idempotent() {
         let (dir, conn) = setup("toggle");
-        let id = create(&conn, "Read", day(MON)).unwrap();
+        let id = create(&conn, "Read", [true; 7], day(MON), day(MON)).unwrap();
         let done = |c: &Connection| for_day(c, day(MON)).unwrap()[0].done;
         set_done(&conn, id, day(MON), day(MON), true).unwrap();
         set_done(&conn, id, day(MON), day(MON), true).unwrap();
@@ -253,7 +352,7 @@ mod tests {
     #[test]
     fn set_done_rejects_future_before_start_and_unscheduled_days() {
         let (dir, conn) = setup("rules");
-        let id = create(&conn, "Read", day(MON)).unwrap();
+        let id = create(&conn, "Read", [true; 7], day(MON), day(MON)).unwrap();
         let tue = day("2026-11-03");
         assert!(matches!(
             set_done(&conn, id, tue, day(MON), true),

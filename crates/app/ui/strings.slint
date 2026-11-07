@@ -26,6 +26,11 @@ export global Strings {
     }
 
     out property <string> habit-empty-name: @tr("Give the habit a name.");
+    out property <string> habit-no-days: @tr("Pick at least one day.");
+    out property <string> habit-future-start: @tr("The start date can't be in the future.");
+
+    // Monday-first initials of the weekday toggles; the context keeps equal English letters apart.
+    out property <[string]> day-letters: [@tr("Monday initial" => "M"), @tr("Tuesday initial" => "T"), @tr("Wednesday initial" => "W"), @tr("Thursday initial" => "T"), @tr("Friday initial" => "F"), @tr("Saturday initial" => "S"), @tr("Sunday initial" => "S")];
 
     public pure function habit-failed(error: string) -> string {
         return @tr("Could not save the habit: {}", error);
@@ -94,7 +99,7 @@ export global Strings {
     }
 
     // 0 is Monday.
-    pure function weekday-name(weekday: int) -> string {
+    public pure function weekday-name(weekday: int) -> string {
         return weekday == 0 ? @tr("Monday") : weekday == 1 ? @tr("Tuesday") : weekday == 2 ? @tr("Wednesday") : weekday == 3 ? @tr("Thursday") : weekday == 4 ? @tr("Friday") : weekday == 5 ? @tr("Saturday") : @tr("Sunday");
     }
 

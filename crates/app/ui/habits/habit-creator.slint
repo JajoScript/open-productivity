@@ -1,0 +1,206 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { Calendar, InkDatePopup } from "../ink-date-popup.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+
+// One weekday toggle: a letter in a square, labelled with the full day name.
+component DayToggle inherits Rectangle {
+    in property <string> letter;
+    in property <string> label;
+    in property <bool> on;
+    callback toggled;
+
+    width: 36px;
+    height: 36px;
+    border-radius: 6px;
+    border-width: root.on ? 0px : 1px;
+    border-color: Theme.hairline;
+    background: root.on ? Theme.ink : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    forward-focus: focus;
+    accessible-role: checkbox;
+    accessible-label: root.label;
+    accessible-checkable: true;
+    accessible-checked: root.on;
+    accessible-action-default => {
+        root.toggled();
+    }
+
+    Text {
+        text: root.letter;
+        // Off reads as empty: muted, regular weight; on is an ink plate.
+        color: root.on ? Theme.on-ink : Theme.muted;
+        font-weight: root.on ? 700 : 400;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.toggled();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.toggled();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    // Keyboard focus ring.
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// Rebuilt on every show(), so days, date and error always start fresh.
+component CreatorBody inherits FocusScope {
+    callback create(string, [bool], Date) -> string;
+    callback cancel;
+
+    property <string> error;
+    // Monday first; all off, so the user picks them on purpose.
+    property <[bool]> days: [false, false, false, false, false, false, false];
+    property <Date> start-date: Calendar.today();
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.create(name.text, root.days, root.start-date);
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+
+        Text {
+            text: @tr("New habit");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        name := InkField {
+            placeholder-text: @tr("Habit name");
+            init => {
+                self.focus();
+            }
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        Text {
+            text: @tr("Repeat on");
+            color: Theme.muted;
+        }
+
+        HorizontalLayout {
+            spacing: 4px;
+            for letter[i] in Strings.day-letters: DayToggle {
+                letter: letter;
+                label: Strings.weekday-name(i);
+                on: root.days[i];
+                toggled => {
+                    root.days[i] = !root.days[i];
+                }
+            }
+        }
+
+        Text {
+            text: @tr("Starts on");
+            color: Theme.muted;
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            picker := InkDatePopup {
+                y: 36px;
+                day: root.start-date.day;
+                month: root.start-date.month;
+                year: root.start-date.year;
+                picked(date) => {
+                    root.start-date = date;
+                }
+            }
+
+            SubtleButton {
+                text: Strings.date(root.start-date.day, root.start-date.month, root.start-date.year);
+                icon: @image-url("../icons/calendar.svg");
+                color: Palette.foreground;
+                clicked => {
+                    picker.show();
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Create");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+}
+
+// Creates a habit; closing by clicking outside discards it.
+export component HabitCreator inherits PopupWindow {
+    // Returns the error to show; empty means the habit was created and the modal closes.
+    callback create(string, [bool], Date) -> string;
+
+    close-policy: close-on-click-outside;
+    width: 360px;
+
+    PopupSurface {
+        CreatorBody {
+            create(name, days, start) => {
+                let error = root.create(name, days, start);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

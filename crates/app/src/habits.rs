@@ -10,10 +10,10 @@ use std::time::Duration;
 use open_productivity_core::chrono::{Local, NaiveDate};
 use open_productivity_core::db::Connection;
 use open_productivity_core::habits::{self, HabitError, HabitId};
-use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::tasks::{show_today, ui_id};
-use crate::{AppWindow, HabitRow, Strings};
+use crate::{AppWindow, Date, HabitRow, Strings};
 
 struct State {
     conn: Rc<Connection>,
@@ -80,14 +80,35 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
 
     window.on_create_habit({
         let state = state.clone();
-        move |name| match habits::create(&state.conn, &name, Local::now().date_naive()) {
-            Err(HabitError::EmptyName) => {
-                let msg = state.window.upgrade().map_or_else(String::new, |w| {
-                    w.global::<Strings>().get_habit_empty_name().into()
-                });
-                state.show_error(msg);
+        // Returns the message for the creator; empty closes it.
+        move |name, days, start: Date| {
+            let Some(w) = state.window.upgrade() else {
+                return Default::default();
+            };
+            let s = w.global::<Strings>();
+            let today = Local::now().date_naive();
+            let flags: Vec<bool> = days.iter().collect();
+            let Ok(flags) = <[bool; 7]>::try_from(flags) else {
+                return s.invoke_habit_failed("weekdays".into());
+            };
+            // A date the picker cannot produce is an error, never "start today".
+            let Some(start) =
+                NaiveDate::from_ymd_opt(start.year, start.month as u32, start.day as u32)
+            else {
+                return s.invoke_habit_failed(
+                    format!("{}-{}-{}", start.year, start.month, start.day).into(),
+                );
+            };
+            match habits::create(&state.conn, &name, flags, start, today) {
+                Err(HabitError::EmptyName) => s.get_habit_empty_name(),
+                Err(HabitError::NoWeekdays) => s.get_habit_no_days(),
+                Err(HabitError::FutureStart) => s.get_habit_future_start(),
+                Err(e) => s.invoke_habit_failed(e.to_string().into()),
+                Ok(_) => {
+                    state.after(Ok(()));
+                    Default::default()
+                }
             }
-            res => state.after(res.map(|_| ())),
         }
     });
 

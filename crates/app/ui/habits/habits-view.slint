@@ -2,7 +2,7 @@
 // Copyright (C) 2026 JajoScript
 
 import { Date, ListView, Palette } from "std-widgets.slint";
-import { AddRow } from "../add-row.slint";
+import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
 import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
@@ -62,14 +62,14 @@ component HabitLine inherits Rectangle {
     }
 }
 
-// The habits of today: title, new habit field and the rows.
+// The habits of today: title, the button that opens the creator, and the rows.
 export component HabitsView inherits VerticalLayout {
     in property <[HabitRow]> habits;
     in property <string> error;
     in property <Date> today;
     // 0 is Monday.
     in property <int> today-weekday;
-    callback create-habit(string);
+    callback new-habit();
     callback set-habit-done(int, bool);
 
     padding: 24px;
@@ -91,12 +91,12 @@ export component HabitsView inherits VerticalLayout {
             vertical-alignment: center;
             horizontal-stretch: 1;
         }
-    }
 
-    AddRow {
-        placeholder: @tr("Add habit…");
-        accepted(text) => {
-            root.create-habit(text);
+        InkButton {
+            text: @tr("Add habit");
+            clicked => {
+                root.new-habit();
+            }
         }
     }
 

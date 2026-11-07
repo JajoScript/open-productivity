@@ -422,8 +422,8 @@ msgstr "Evaluar"
 msgid "Habits"
 msgstr "Hábitos"
 
-msgid "Add habit…"
-msgstr "Añadir hábito…"
+msgid "Add habit"
+msgstr "Añadir hábito"
 
 msgid "No habits for today. Add one above."
 msgstr "No hay hábitos para hoy. Añade uno arriba."
@@ -433,3 +433,49 @@ msgstr "Ponle un nombre al hábito."
 
 msgid "Could not save the habit: {}"
 msgstr "No se pudo guardar el hábito: {}"
+
+msgid "Pick at least one day."
+msgstr "Elige al menos un día."
+
+msgid "The start date can't be in the future."
+msgstr "La fecha de inicio no puede ser futura."
+
+msgid "New habit"
+msgstr "Nuevo hábito"
+
+msgid "Habit name"
+msgstr "Nombre del hábito"
+
+msgid "Repeat on"
+msgstr "Se repite"
+
+msgid "Starts on"
+msgstr "Empieza el"
+
+msgctxt "Monday initial"
+msgid "M"
+msgstr "L"
+
+msgctxt "Tuesday initial"
+msgid "T"
+msgstr "M"
+
+msgctxt "Wednesday initial"
+msgid "W"
+msgstr "X"
+
+msgctxt "Thursday initial"
+msgid "T"
+msgstr "J"
+
+msgctxt "Friday initial"
+msgid "F"
+msgstr "V"
+
+msgctxt "Saturday initial"
+msgid "S"
+msgstr "S"
+
+msgctxt "Sunday initial"
+msgid "S"
+msgstr "D"
