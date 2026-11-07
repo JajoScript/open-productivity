@@ -425,8 +425,17 @@ msgstr "Hábitos"
 msgid "Add habit"
 msgstr "Añadir hábito"
 
-msgid "No habits for today. Add one above."
-msgstr "No hay hábitos para hoy. Añade uno arriba."
+msgid "No habits yet. Add one above."
+msgstr "Aún no hay hábitos. Añade uno arriba."
+
+msgid "Previous month"
+msgstr "Mes anterior"
+
+msgid "Next month"
+msgstr "Mes siguiente"
+
+msgid "WK {}"
+msgstr "SEM {}"
 
 msgid "Give the habit a name."
 msgstr "Ponle un nombre al hábito."

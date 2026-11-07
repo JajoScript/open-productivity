@@ -98,6 +98,11 @@ export global Strings {
         return @tr("{1} {0} – {3} {2}", start-day, month-name(start-month), end-day, month-name(end-month));
     }
 
+    // Block of seven days in the habits grid.
+    public pure function week-label(n: int) -> string {
+        return @tr("WK {}", n);
+    }
+
     // 0 is Monday.
     public pure function weekday-name(weekday: int) -> string {
         return weekday == 0 ? @tr("Monday") : weekday == 1 ? @tr("Tuesday") : weekday == 2 ? @tr("Wednesday") : weekday == 3 ? @tr("Thursday") : weekday == 4 ? @tr("Friday") : weekday == 5 ? @tr("Saturday") : @tr("Sunday");

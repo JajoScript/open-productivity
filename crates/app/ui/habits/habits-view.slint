@@ -1,94 +1,87 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Date, ListView, Palette } from "std-widgets.slint";
+import { Date, Palette, ScrollView } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
-import { InkCheck } from "../ink-check.slint";
 import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
+import { DayState, HabitCell } from "habit-cell.slint";
 
+export { DayState }
+
+// A habit with its days of the month, in the same blocks of seven as `HabitsView.day-numbers`.
 export struct HabitRow {
     id: int,
     name: string,
-    done: bool,
+    weeks: [[DayState]],
 }
 
-// One habit today: its icon, name and the check for today.
-component HabitLine inherits Rectangle {
-    in property <HabitRow> habit;
-    callback toggled(bool);
-
-    height: 40px;
-    border-radius: 6px;
-    background: touch.has-hover ? Theme.hover : transparent;
-    animate background { duration: Theme.fast; easing: Theme.ease-out; }
-
-    // Under the controls, so it only tracks hover for the row highlight.
-    touch := TouchArea { }
-
-    HorizontalLayout {
-        padding-left: 4px;
-        padding-right: 10px;
-        spacing: 4px;
-        InkCheck {
-            checked: root.habit.done;
-            label: root.habit.name;
-            toggled(done) => {
-                root.toggled(done);
-            }
-        }
-
-        Rectangle {
-            width: 20px;
-            Image {
-                source: @image-url("../icons/sprout.svg");
-                colorize: root.habit.done ? Theme.done : Theme.muted;
-                width: 16px;
-                height: 16px;
-                y: (parent.height - self.height) / 2;
-                accessible-role: none;
-            }
-        }
-
-        Text {
-            text: root.habit.name;
-            vertical-alignment: center;
-            overflow: elide;
-            horizontal-stretch: 1;
-            color: root.habit.done ? Theme.done : Palette.foreground;
-            animate color { duration: Theme.fast; easing: Theme.ease-out; }
-            accessible-role: none;
-        }
-    }
-}
-
-// The habits of today: title, the button that opens the creator, and the rows.
+// The month of habits: title and month navigation, the button that opens the creator, and the grid.
 export component HabitsView inherits VerticalLayout {
     in property <[HabitRow]> habits;
+    // Day of the month per cell, in blocks of seven.
+    in property <[[int]]> day-numbers;
     in property <string> error;
-    in property <Date> today;
-    // 0 is Monday.
-    in property <int> today-weekday;
+    // The month shown; only its month and year matter.
+    in property <Date> month;
+    // Day of the month that is today; 0 when another month is shown.
+    in property <int> today-day;
+    in property <bool> can-next;
     callback new-habit();
-    callback set-habit-done(int, bool);
+    // -1 / +1 moves a month; 0 goes back to the current one.
+    callback shift(int);
+    callback set-habit-done(int, int, bool);
 
     padding: 24px;
     padding-top: 20px;
     spacing: 12px;
 
     HorizontalLayout {
-        spacing: 8px;
+        spacing: 4px;
         Text {
             text: @tr("Habits");
             font-size: 24px;
             font-weight: 700;
+            vertical-alignment: center;
             overflow: elide;
         }
 
+        SubtleButton {
+            icon: @image-url("../icons/chevron-left.svg");
+            label: @tr("Previous month");
+            clicked => {
+                root.shift(-1);
+            }
+        }
+
         Text {
-            text: Strings.long-date(root.today.day, root.today.month, root.today-weekday);
-            color: Theme.muted;
+            text: Strings.month-year(root.month.month, root.month.year);
             vertical-alignment: center;
+            horizontal-alignment: center;
+            min-width: 120px;
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/chevron-right.svg");
+            label: @tr("Next month");
+            opacity: root.can-next ? 1 : 0.35;
+            clicked => {
+                if root.can-next {
+                    root.shift(1);
+                }
+            }
+        }
+
+        SubtleButton {
+            text: @tr("Today");
+            color: Palette.foreground;
+            clicked => {
+                root.shift(0);
+            }
+        }
+
+        Rectangle {
             horizontal-stretch: 1;
         }
 
@@ -107,18 +100,73 @@ export component HabitsView inherits VerticalLayout {
     }
 
     if root.habits.length == 0: Text {
-        text: @tr("No habits for today. Add one above.");
+        text: @tr("No habits yet. Add one above.");
         color: Theme.muted;
         horizontal-alignment: center;
         vertical-alignment: center;
         vertical-stretch: 1;
     }
 
-    if root.habits.length > 0: ListView {
-        for habit in root.habits: HabitLine {
-            habit: habit;
-            toggled(done) => {
-                root.set-habit-done(habit.id, done);
+    // 31 days do not fit the default window next to the names: scroll sideways.
+    if root.habits.length > 0: ScrollView {
+        VerticalLayout {
+            spacing: 6px;
+            alignment: start;
+            HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    width: 112px;
+                }
+
+                for week[w] in root.day-numbers: VerticalLayout {
+                    spacing: 2px;
+                    Text {
+                        text: Strings.week-label(w + 1);
+                        color: Theme.muted;
+                        font-size: 10px;
+                        font-weight: 600;
+                        overflow: elide;
+                    }
+
+                    HorizontalLayout {
+                        spacing: 3px;
+                        for day in week: Rectangle {
+                            width: 20px;
+                            height: 20px;
+                            border-radius: 5px;
+                            background: day == root.today-day ? Theme.ink : transparent;
+                            Text {
+                                text: day;
+                                font-size: 11px;
+                                font-weight: day == root.today-day ? 700 : 400;
+                                color: day == root.today-day ? Theme.on-ink : Theme.muted;
+                                horizontal-alignment: center;
+                                vertical-alignment: center;
+                            }
+                        }
+                    }
+                }
+            }
+
+            for habit in root.habits: HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: habit.name;
+                    width: 112px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                for week[w] in habit.weeks: HorizontalLayout {
+                    spacing: 3px;
+                    for state[i] in week: HabitCell {
+                        state: state;
+                        label: habit.name + " " + Strings.date(root.day-numbers[w][i], root.month.month, root.month.year);
+                        toggled(done) => {
+                            root.set-habit-done(habit.id, root.day-numbers[w][i], done);
+                        }
+                    }
+                }
             }
         }
     }

@@ -1,0 +1,87 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// What a habit shows on one day; decided by core.
+export enum DayState {
+    done,
+    open,
+    skipped,
+    future,
+}
+
+// One day of one habit: ink square with a check when done, outline to mark, a dot when it does not apply.
+export component HabitCell {
+    in property <DayState> state;
+    in property <string> label;
+    callback toggled(bool);
+
+    property <bool> markable: root.state == DayState.done || root.state == DayState.open;
+    property <bool> done: root.state == DayState.done;
+
+    width: 20px;
+    height: 20px;
+    forward-focus: focus;
+    accessible-role: checkbox;
+    accessible-enabled: root.markable;
+    accessible-label: root.label;
+    accessible-checkable: root.markable;
+    accessible-checked: root.done;
+    accessible-action-default => {
+        if root.markable {
+            root.toggled(!root.done);
+        }
+    }
+
+    box := Rectangle {
+        visible: root.state != DayState.skipped;
+        border-radius: 5px;
+        // Future days are a faint filled square, so only open days carry an outline.
+        border-width: root.state == DayState.open ? 1.5px : 0px;
+        border-color: touch.has-hover ? Palette.foreground : Theme.muted;
+        background: root.done ? Theme.ink : root.state == DayState.future ? Theme.hairline : touch.has-hover ? Theme.hover : transparent;
+        animate background, border-color { duration: Theme.fast; easing: Theme.ease-out; }
+
+        if root.done: Image {
+            source: @image-url("../icons/check.svg");
+            colorize: Theme.on-ink;
+            width: 14px;
+            height: 14px;
+            accessible-role: none;
+        }
+    }
+
+    if root.state == DayState.skipped: Rectangle {
+        width: 4px;
+        height: 4px;
+        border-radius: 2px;
+        background: Theme.hairline;
+    }
+
+    touch := TouchArea {
+        enabled: root.markable;
+        clicked => {
+            root.toggled(!root.done);
+        }
+    }
+
+    focus := FocusScope {
+        enabled: root.markable;
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space {
+                root.toggled(!root.done);
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: 7px;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}

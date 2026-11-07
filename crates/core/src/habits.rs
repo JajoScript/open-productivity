@@ -5,18 +5,46 @@
 
 use std::fmt;
 
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, Months, NaiveDate, TimeDelta};
 use rusqlite::{Connection, OptionalExtension};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct HabitId(pub i64);
 
-/// A habit as it appears on one day.
+/// What one habit shows on one day of a month.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum DayState {
+    /// Applies, was done.
+    Done,
+    /// Applies, not done, up to today: can be marked.
+    Open,
+    /// Does not apply: weekday not selected or before the start. A mark stored there is ignored.
+    Skipped,
+    /// Applies but after today: cannot be marked.
+    Future,
+}
+
+/// A habit and its state on every day of a month.
 #[derive(Debug, PartialEq)]
-pub struct DayHabit {
+pub struct MonthHabit {
     pub id: HabitId,
     pub name: String,
-    pub done: bool,
+    /// One per day of the month, day 1 first.
+    pub days: Vec<DayState>,
+}
+
+#[derive(Debug, PartialEq)]
+pub struct HabitMonth {
+    /// First day of the month shown.
+    pub first: NaiveDate,
+    /// Number of days in the month.
+    pub days: u32,
+    /// Day of the month that is today, when today falls in it.
+    pub today: Option<u32>,
+    /// Whether a later month can be shown (never past the current one).
+    pub can_next: bool,
+    /// Active habits, oldest first.
+    pub habits: Vec<MonthHabit>,
 }
 
 #[derive(Debug)]
@@ -33,6 +61,10 @@ pub enum HabitError {
     BeforeStart,
     /// The habit is not scheduled on that weekday.
     NotScheduled,
+    /// The month is after the current one.
+    FutureMonth,
+    /// The month is outside the supported dates.
+    OutOfRange,
     Sqlite(rusqlite::Error),
 }
 
@@ -46,6 +78,8 @@ impl fmt::Display for HabitError {
             HabitError::Future => write!(f, "that day has not happened yet"),
             HabitError::BeforeStart => write!(f, "the habit had not started on that day"),
             HabitError::NotScheduled => write!(f, "the habit does not apply on that weekday"),
+            HabitError::FutureMonth => write!(f, "that month has not happened yet"),
+            HabitError::OutOfRange => write!(f, "the month is out of range"),
             HabitError::Sqlite(e) => write!(f, "database error: {e}"),
         }
     }
@@ -114,24 +148,90 @@ pub fn create(
     Ok(HabitId(conn.last_insert_rowid()))
 }
 
-/// The active habits that apply on `date`, oldest first.
-pub fn for_day(conn: &Connection, date: NaiveDate) -> Result<Vec<DayHabit>, HabitError> {
+/// First day of the month that holds `date`.
+pub fn month_start(date: NaiveDate) -> NaiveDate {
+    date.with_day(1).expect("day 1 exists in every month")
+}
+
+/// The month `delta` months from the one holding `shown`, as its first day. Never past the
+/// month of `today`.
+pub fn shift_month(
+    shown: NaiveDate,
+    delta: i32,
+    today: NaiveDate,
+) -> Result<NaiveDate, HabitError> {
+    let first = month_start(shown);
+    let step = Months::new(delta.unsigned_abs());
+    let target = if delta >= 0 {
+        first.checked_add_months(step)
+    } else {
+        first.checked_sub_months(step)
+    }
+    .ok_or(HabitError::OutOfRange)?;
+    if target > month_start(today) {
+        return Err(HabitError::FutureMonth);
+    }
+    Ok(target)
+}
+
+/// The month holding `shown`: every active habit with its state per day, in one query.
+pub fn month(
+    conn: &Connection,
+    shown: NaiveDate,
+    today: NaiveDate,
+) -> Result<HabitMonth, HabitError> {
+    let first = month_start(shown);
+    let next = first
+        .checked_add_months(Months::new(1))
+        .ok_or(HabitError::OutOfRange)?;
+    let len = (next - first).num_days() as u32;
+    let last = next.pred_opt().ok_or(HabitError::OutOfRange)?;
     let mut stmt = conn.prepare(
-        "SELECT h.id, h.name, l.habit_id IS NOT NULL \
-         FROM habit h LEFT JOIN habit_log l ON l.habit_id = h.id AND l.date = ?1 \
-         WHERE h.archived = 0 AND h.weekdays & ?2 != 0 AND h.start_date <= ?1 \
-         ORDER BY h.id",
+        "SELECT h.id, h.name, h.weekdays, h.start_date,                 CAST(substr(l.date, 9, 2) AS INTEGER)          FROM habit h LEFT JOIN habit_log l               ON l.habit_id = h.id AND l.date BETWEEN ?1 AND ?2          WHERE h.archived = 0          ORDER BY h.id",
     )?;
-    let habits = stmt
-        .query_map((date.to_string(), weekday_bit(date)), |r| {
-            Ok(DayHabit {
-                id: HabitId(r.get(0)?),
+    let mut habits: Vec<MonthHabit> = Vec::new();
+    let mut rows = stmt.query((first.to_string(), last.to_string()))?;
+    while let Some(r) = rows.next()? {
+        let id = HabitId(r.get(0)?);
+        if habits.last().is_none_or(|h| h.id != id) {
+            let (weekdays, start): (i64, String) = (r.get(2)?, r.get(3)?);
+            let days = (0..len)
+                .map(|i| {
+                    let date = first + TimeDelta::days(i.into());
+                    // ISO dates compare correctly as text.
+                    if weekdays & weekday_bit(date) == 0 || date.to_string() < start {
+                        DayState::Skipped
+                    } else if date > today {
+                        DayState::Future
+                    } else {
+                        DayState::Open
+                    }
+                })
+                .collect();
+            habits.push(MonthHabit {
+                id,
                 name: r.get(1)?,
-                done: r.get(2)?,
-            })
-        })?
-        .collect::<Result<_, _>>()?;
-    Ok(habits)
+                days,
+            });
+        }
+        if let (Some(day), Some(h)) = (r.get::<_, Option<u32>>(4)?, habits.last_mut()) {
+            // A mark on a day that does not apply (any more) is ignored.
+            if let Some(d) = h
+                .days
+                .get_mut(day.wrapping_sub(1) as usize)
+                .filter(|d| **d == DayState::Open)
+            {
+                *d = DayState::Done;
+            }
+        }
+    }
+    Ok(HabitMonth {
+        first,
+        days: len,
+        today: (month_start(today) == first).then(|| today.day()),
+        can_next: next <= today,
+        habits,
+    })
 }
 
 /// Marks or unmarks `date`; only days the habit applies on, up to `today`.
@@ -196,10 +296,24 @@ mod tests {
     // 2026-11-02 is a Monday.
     const MON: &str = "2026-11-02";
 
-    fn names(conn: &Connection, d: &str) -> Vec<String> {
-        for_day(conn, day(d))
+    /// State of every habit on `d`, seen on `today`.
+    fn states(conn: &Connection, d: &str, today: &str) -> Vec<DayState> {
+        let i = day(d).day0() as usize;
+        month(conn, day(d), day(today))
             .unwrap()
+            .habits
+            .iter()
+            .map(|h| h.days[i])
+            .collect()
+    }
+
+    /// Names of the habits that apply on `d` (seen on `d`).
+    fn names(conn: &Connection, d: &str) -> Vec<String> {
+        let m = month(conn, day(d), day(d)).unwrap();
+        let i = day(d).day0() as usize;
+        m.habits
             .into_iter()
+            .filter(|h| h.days[i] != DayState::Skipped)
             .map(|h| h.name)
             .collect()
     }
@@ -214,14 +328,8 @@ mod tests {
             })
             .unwrap();
         assert_eq!((weekdays, start.as_str()), (127, MON));
-        assert_eq!(
-            for_day(&conn, day("2026-11-08")).unwrap(),
-            [DayHabit {
-                id,
-                name: "Read".into(),
-                done: false
-            }]
-        );
+        let m = month(&conn, day(MON), day(MON)).unwrap();
+        assert_eq!((m.habits[0].id, m.habits[0].name.as_str()), (id, "Read"));
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }
@@ -295,8 +403,8 @@ mod tests {
     }
 
     #[test]
-    fn for_day_orders_by_creation_and_hides_not_started_and_unscheduled() {
-        let (dir, conn) = setup("forday");
+    fn month_orders_by_creation_and_hides_not_started_and_unscheduled() {
+        let (dir, conn) = setup("order");
         create(&conn, "B", [true; 7], day(MON), day(MON)).unwrap();
         create(&conn, "A", [true; 7], day(MON), day(MON)).unwrap();
         create(
@@ -336,12 +444,12 @@ mod tests {
     fn set_done_marks_and_unmarks_and_is_idempotent() {
         let (dir, conn) = setup("toggle");
         let id = create(&conn, "Read", [true; 7], day(MON), day(MON)).unwrap();
-        let done = |c: &Connection| for_day(c, day(MON)).unwrap()[0].done;
+        let done = |c: &Connection| states(c, MON, MON)[0] == DayState::Done;
         set_done(&conn, id, day(MON), day(MON), true).unwrap();
         set_done(&conn, id, day(MON), day(MON), true).unwrap();
         assert!(done(&conn));
         // Another day stays untouched.
-        assert!(!for_day(&conn, day("2026-11-03")).unwrap()[0].done);
+        assert_eq!(states(&conn, "2026-11-03", "2026-11-03"), [DayState::Open]);
         set_done(&conn, id, day(MON), day(MON), false).unwrap();
         set_done(&conn, id, day(MON), day(MON), false).unwrap();
         assert!(!done(&conn));
@@ -382,6 +490,124 @@ mod tests {
             set_done(&conn, HabitId(99), day(MON), day(MON), true),
             Err(HabitError::NotFound)
         ));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn month_classifies_every_day() {
+        let (dir, conn) = setup("month");
+        // Mon, Wed, Fri, started Wed the 4th; today is Fri the 6th.
+        let mwf = [true, false, true, false, true, false, false];
+        let id = create(&conn, "Gym", mwf, day("2026-11-04"), day("2026-11-04")).unwrap();
+        set_done(&conn, id, day("2026-11-04"), day("2026-11-06"), true).unwrap();
+        let today = day("2026-11-06");
+        let m = month(&conn, day("2026-11-17"), today).unwrap();
+        assert_eq!((m.first, m.days), (day("2026-11-01"), 30));
+        let d = &m.habits[0].days;
+        assert_eq!(d.len(), 30);
+        use DayState::*;
+        // Sun/Tue/Thu/Sat not scheduled, Mon 2nd before the start, Wed done, Fri open,
+        // Mon 9th scheduled but in the future.
+        assert_eq!(
+            d[..9],
+            [
+                Skipped, Skipped, Skipped, Done, Skipped, Open, Skipped, Skipped, Future
+            ]
+        );
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn stored_mark_on_a_day_that_does_not_apply_is_ignored() {
+        let (dir, conn) = setup("ignored");
+        let id = create(&conn, "Read", [true; 7], day(MON), day(MON)).unwrap();
+        set_done(&conn, id, day(MON), day(MON), true).unwrap();
+        // Schedule changes later: Monday no longer applies, the old mark must not show.
+        conn.execute("UPDATE habit SET weekdays = 2", []).unwrap();
+        assert_eq!(states(&conn, MON, MON), [DayState::Skipped]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn month_shows_only_its_own_marks_and_active_habits() {
+        let (dir, conn) = setup("scope");
+        let a = create(&conn, "A", [true; 7], day("2026-10-01"), day(MON)).unwrap();
+        create(&conn, "B", [true; 7], day("2026-10-01"), day(MON)).unwrap();
+        create(&conn, "Gone", [true; 7], day("2026-10-01"), day(MON)).unwrap();
+        conn.execute("UPDATE habit SET archived = 1 WHERE name = 'Gone'", [])
+            .unwrap();
+        set_done(&conn, a, day("2026-10-31"), day(MON), true).unwrap();
+        set_done(&conn, a, day("2026-11-02"), day(MON), true).unwrap();
+        let nov = month(&conn, day(MON), day(MON)).unwrap();
+        let oct = month(&conn, day("2026-10-15"), day(MON)).unwrap();
+        assert_eq!(nov.habits.len(), 2);
+        let done = |m: &HabitMonth, h: usize| {
+            m.habits[h]
+                .days
+                .iter()
+                .filter(|d| **d == DayState::Done)
+                .count()
+        };
+        assert_eq!((done(&nov, 0), done(&nov, 1)), (1, 0));
+        assert_eq!((done(&oct, 0), done(&oct, 1)), (1, 0));
+        assert_eq!(oct.habits[0].days.len(), 31);
+        assert_eq!(oct.habits[0].days[30], DayState::Done);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn month_reports_today_and_whether_next_is_allowed() {
+        let (dir, conn) = setup("nav");
+        let m = month(&conn, day(MON), day(MON)).unwrap();
+        assert_eq!((m.today, m.can_next), (Some(2), false));
+        let m = month(&conn, day("2026-10-20"), day(MON)).unwrap();
+        assert_eq!((m.today, m.can_next), (None, true));
+        assert!(
+            month(&conn, day("2026-10-20"), day(MON))
+                .unwrap()
+                .habits
+                .is_empty()
+        );
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn shift_month_crosses_years_and_stops_at_the_current_month() {
+        let today = day("2026-11-07");
+        assert_eq!(
+            shift_month(day("2026-11-01"), -1, today).unwrap(),
+            day("2026-10-01")
+        );
+        assert_eq!(
+            shift_month(day("2026-01-20"), -1, today).unwrap(),
+            day("2025-12-01")
+        );
+        assert_eq!(
+            shift_month(day("2026-10-01"), 1, today).unwrap(),
+            day("2026-11-01")
+        );
+        assert!(matches!(
+            shift_month(day("2026-11-01"), 1, today),
+            Err(HabitError::FutureMonth)
+        ));
+        assert!(matches!(
+            shift_month(NaiveDate::MIN, -1, today),
+            Err(HabitError::OutOfRange)
+        ));
+        assert_eq!(month_start(day("2026-11-30")), day("2026-11-01"));
+    }
+
+    #[test]
+    fn set_done_works_on_any_past_applicable_day() {
+        let (dir, conn) = setup("past");
+        let id = create(&conn, "Read", [true; 7], day("2026-10-01"), day(MON)).unwrap();
+        set_done(&conn, id, day("2026-10-05"), day(MON), true).unwrap();
+        assert_eq!(states(&conn, "2026-10-05", MON), [DayState::Done]);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

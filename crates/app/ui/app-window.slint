@@ -8,12 +8,12 @@ import { Calendar, MonthView } from "ink-date-popup.slint";
 import { ListEntry } from "list-entry.slint";
 import { ListCreator } from "tasks/list-creator.slint";
 import { HabitCreator } from "habits/habit-creator.slint";
-import { HabitRow, HabitsView } from "habits/habits-view.slint";
+import { DayState, HabitRow, HabitsView } from "habits/habits-view.slint";
 import { Module, Rail } from "rail.slint";
 import { Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
 import { DueKind, KanbanColumn, Quadrant, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { Calendar, Date, DueKind, HabitRow, InstanceRow, KanbanColumn, Quadrant, Stage, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay }
+export { Calendar, Date, DayState, DueKind, HabitRow, InstanceRow, KanbanColumn, Quadrant, Stage, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -68,9 +68,14 @@ export component AppWindow inherits Window {
     callback update-task(int, string, string, bool, bool) -> bool;
     callback delete-task(int);
     in property <[HabitRow]> habits;
+    in property <[[int]]> habit-day-numbers;
     in property <string> habits-error;
+    in property <Date> habits-month;
+    in property <int> habits-today-day;
+    in property <bool> habits-can-next;
+    callback habits-shift(int);
     callback create-habit(string, [bool], Date) -> string;
-    callback set-habit-done(int, bool);
+    callback set-habit-done(int, int, bool);
 
     title: "Open Productivity — " + instance-name;
     preferred-width: 960px;
@@ -191,14 +196,19 @@ export component AppWindow inherits Window {
                     width: parent.width;
                     height: parent.height;
                     habits: root.habits;
+                    day-numbers: root.habit-day-numbers;
                     error: root.habits-error;
-                    today: root.today;
-                    today-weekday: root.today-weekday;
+                    month: root.habits-month;
+                    today-day: root.habits-today-day;
+                    can-next: root.habits-can-next;
                     new-habit => {
                         habit-creator.show();
                     }
-                    set-habit-done(id, done) => {
-                        root.set-habit-done(id, done);
+                    shift(n) => {
+                        root.habits-shift(n);
+                    }
+                    set-habit-done(id, day, done) => {
+                        root.set-habit-done(id, day, done);
                     }
                 }
 

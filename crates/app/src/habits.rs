@@ -7,19 +7,21 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use open_productivity_core::chrono::{Local, NaiveDate};
+use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
-use open_productivity_core::habits::{self, HabitError, HabitId};
+use open_productivity_core::habits::{self, DayState as CoreState, HabitError, HabitId};
 use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 
-use crate::tasks::{show_today, ui_id};
-use crate::{AppWindow, Date, HabitRow, Strings};
+use crate::tasks::ui_id;
+use crate::{AppWindow, Date, DayState, HabitRow, Strings};
 
 struct State {
     conn: Rc<Connection>,
     rows: Rc<VecModel<HabitRow>>,
     // Day of the last reload, so the timer only rebuilds rows when it changes.
     day: Cell<NaiveDate>,
+    // First day of the month shown.
+    shown: Cell<NaiveDate>,
     window: slint::Weak<AppWindow>,
 }
 
@@ -27,20 +29,28 @@ impl State {
     fn reload(&self) -> Result<(), String> {
         let today = Local::now().date_naive();
         self.day.set(today);
-        if let Some(w) = self.window.upgrade() {
-            show_today(&w, today);
-        }
-        let rows = habits::for_day(&self.conn, today)
-            .map_err(|e| e.to_string())?
+        let m = habits::month(&self.conn, self.shown.get(), today).map_err(|e| e.to_string())?;
+        let rows = m
+            .habits
             .into_iter()
             .map(|h| {
                 Ok(HabitRow {
                     id: ui_id(h.id.0)?,
                     name: h.name.into(),
-                    done: h.done,
+                    weeks: blocks(h.days.into_iter().map(day_state).collect()),
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
+        if let Some(w) = self.window.upgrade() {
+            w.set_habits_month(Date {
+                year: m.first.year(),
+                month: m.first.month() as i32,
+                day: 1,
+            });
+            w.set_habits_today_day(m.today.map_or(0, |d| d as i32));
+            w.set_habits_can_next(m.can_next);
+            w.set_habit_day_numbers(blocks((1..=m.days as i32).collect()));
+        }
         self.rows.set_vec(rows);
         Ok(())
     }
@@ -67,12 +77,32 @@ impl State {
     }
 }
 
+/// Splits the days into blocks of seven for the grid.
+fn blocks<T: Clone + 'static>(cells: Vec<T>) -> ModelRc<ModelRc<T>> {
+    ModelRc::new(VecModel::from(
+        cells
+            .chunks(7)
+            .map(|c| ModelRc::new(VecModel::from(c.to_vec())))
+            .collect::<Vec<_>>(),
+    ))
+}
+
+fn day_state(s: CoreState) -> DayState {
+    match s {
+        CoreState::Done => DayState::Done,
+        CoreState::Open => DayState::Open,
+        CoreState::Skipped => DayState::Skipped,
+        CoreState::Future => DayState::Future,
+    }
+}
+
 /// The returned timer must be kept alive for the midnight reload to run.
 pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
     let state = Rc::new(State {
         conn,
         rows: Rc::default(),
         day: Cell::new(Local::now().date_naive()),
+        shown: Cell::new(habits::month_start(Local::now().date_naive())),
         window: window.as_weak(),
     });
     window.set_habits(ModelRc::from(state.rows.clone()));
@@ -114,15 +144,34 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
 
     window.on_set_habit_done({
         let state = state.clone();
-        move |id, done| {
+        move |id, day, done| {
             let today = Local::now().date_naive();
-            state.after(habits::set_done(
-                &state.conn,
-                HabitId(id.into()),
-                today,
-                today,
-                done,
-            ))
+            let shown = state.shown.get();
+            let res = match NaiveDate::from_ymd_opt(shown.year(), shown.month(), day as u32) {
+                Some(date) => habits::set_done(&state.conn, HabitId(id.into()), date, today, done),
+                None => Err(HabitError::OutOfRange),
+            };
+            state.after(res)
+        }
+    });
+
+    // 0 goes back to the current month; otherwise moves that many months.
+    window.on_habits_shift({
+        let state = state.clone();
+        move |months| {
+            let today = Local::now().date_naive();
+            let target = if months == 0 {
+                Ok(habits::month_start(today))
+            } else {
+                habits::shift_month(state.shown.get(), months, today)
+            };
+            match target {
+                Ok(first) => {
+                    state.shown.set(first);
+                    state.after(Ok(()));
+                }
+                Err(e) => state.after(Err(e)),
+            }
         }
     });
 
