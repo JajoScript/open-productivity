@@ -440,6 +440,9 @@ msgstr "Racha {} · Mejor {}"
 msgid "{}%"
 msgstr "{} %"
 
+msgid "{}/{} {}%"
+msgstr "{}/{} {}%"
+
 msgid "WK {}"
 msgstr "SEM {}"
 

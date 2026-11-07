@@ -9,12 +9,12 @@ import { ListEntry } from "list-entry.slint";
 import { ListCreator } from "tasks/list-creator.slint";
 import { HabitCreator } from "habits/habit-creator.slint";
 import { ArchivedHabits } from "habits/archived-habits.slint";
-import { ArchivedRow, DayState, HabitRow, HabitsView } from "habits/habits-view.slint";
+import { ArchivedRow, DayBar, DayState, HabitRow, HabitsView, WeekTotal } from "habits/habits-view.slint";
 import { Module, Rail } from "rail.slint";
 import { Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
 import { DueKind, KanbanColumn, Quadrant, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { ArchivedRow, Calendar, Date, DayState, DueKind, HabitRow, InstanceRow, KanbanColumn, Quadrant, Stage, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay }
+export { ArchivedRow, Calendar, DayBar, Date, DayState, DueKind, HabitRow, InstanceRow, KanbanColumn, Quadrant, Stage, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -70,6 +70,7 @@ export component AppWindow inherits Window {
     callback delete-task(int);
     in property <[HabitRow]> habits;
     in property <[[int]]> habit-day-numbers;
+    in property <[WeekTotal]> habit-week-totals;
     in property <string> habits-error;
     in property <Date> habits-month;
     in property <int> habits-today-day;
@@ -228,6 +229,7 @@ export component AppWindow inherits Window {
                     height: parent.height;
                     habits: root.habits;
                     day-numbers: root.habit-day-numbers;
+                    week-totals: root.habit-week-totals;
                     error: root.habits-error;
                     month: root.habits-month;
                     today-day: root.habits-today-day;

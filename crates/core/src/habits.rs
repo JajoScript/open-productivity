@@ -38,6 +38,20 @@ pub struct MonthHabit {
     pub start: NaiveDate,
 }
 
+/// Marks done out of days that apply, summed over habits.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Total {
+    pub done: u32,
+    pub applicable: u32,
+}
+
+impl Total {
+    /// Done share floored; `None` when nothing applies.
+    pub fn pct(self) -> Option<u32> {
+        (self.done * 100).checked_div(self.applicable)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct HabitMonth {
     /// First day of the month shown.
@@ -50,6 +64,10 @@ pub struct HabitMonth {
     pub can_next: bool,
     /// Active habits, oldest first.
     pub habits: Vec<MonthHabit>,
+    /// Per day of the month over the active habits. Future days apply; skipped ones do not.
+    pub day_totals: Vec<Total>,
+    /// Per block of seven days (the last may be short).
+    pub week_totals: Vec<Total>,
 }
 
 #[derive(Debug)]
@@ -323,7 +341,7 @@ pub fn month(
             h.4.insert(parse_date(date)?);
         }
     }
-    let habits = raw
+    let habits: Vec<MonthHabit> = raw
         .into_iter()
         .map(|(id, name, weekdays, start, done)| {
             let days = (0..len)
@@ -350,13 +368,46 @@ pub fn month(
             }
         })
         .collect();
+    let day_totals = day_totals(&habits, len as usize);
+    let week_totals = day_totals
+        .chunks(7)
+        .map(|c| {
+            c.iter().fold(Total::default(), |a, t| Total {
+                done: a.done + t.done,
+                applicable: a.applicable + t.applicable,
+            })
+        })
+        .collect();
     Ok(HabitMonth {
         first,
         days: len,
         today: (month_start(today) == first).then(|| today.day()),
         can_next: next <= today,
         habits,
+        day_totals,
+        week_totals,
     })
+}
+
+/// Per day: habits done and habits that apply (a done mark only counts on an applicable day).
+fn day_totals(habits: &[MonthHabit], len: usize) -> Vec<Total> {
+    (0..len)
+        .map(|i| {
+            habits
+                .iter()
+                .fold(Total::default(), |a, h| match h.days[i] {
+                    DayState::Skipped => a,
+                    DayState::Done => Total {
+                        done: a.done + 1,
+                        applicable: a.applicable + 1,
+                    },
+                    _ => Total {
+                        applicable: a.applicable + 1,
+                        ..a
+                    },
+                })
+        })
+        .collect()
 }
 
 /// Marks or unmarks `date`; only days the habit applies on, up to `today`.
@@ -909,6 +960,39 @@ mod tests {
         let id = create(&conn, "Read", [true; 7], day("2026-10-01"), day(MON)).unwrap();
         set_done(&conn, id, day("2026-10-05"), day(MON), true).unwrap();
         assert_eq!(states(&conn, "2026-10-05", MON), [DayState::Done]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn totals_per_day_and_week_count_future_and_ignore_skipped() {
+        let (dir, conn) = setup("totals");
+        let today = day("2026-11-03");
+        // A: every day since the 1st; B: Mondays only (the 2nd, 9th, ...), started the 2nd.
+        let a = create(&conn, "A", [true; 7], day("2026-11-01"), today).unwrap();
+        let mon = [true, false, false, false, false, false, false];
+        let b = create(&conn, "B", mon, day(MON), today).unwrap();
+        set_done(&conn, a, day("2026-11-01"), today, true).unwrap();
+        set_done(&conn, a, day(MON), today, true).unwrap();
+        set_done(&conn, b, day(MON), today, true).unwrap();
+        // A stray mark on a Tuesday B does not apply on.
+        conn.execute(
+            "INSERT INTO habit_log (habit_id, date) VALUES (?1, '2026-11-03')",
+            [b.0],
+        )
+        .unwrap();
+        let m = month(&conn, today, today).unwrap();
+        let t = |done, applicable| Total { done, applicable };
+        // Day 1: A only. Day 2: both done. Day 3: B skipped, A open. Day 9 (future Monday): both.
+        assert_eq!(m.day_totals[..3], [t(1, 1), t(2, 2), t(0, 1)]);
+        assert_eq!(m.day_totals[8], t(0, 2));
+        assert_eq!(m.day_totals.len(), 30);
+        // Block 1: 7 A days + one B day; block 5 has days 29-30 (A twice, B on Monday the 30th).
+        assert_eq!(m.week_totals.len(), 5);
+        assert_eq!(m.week_totals[0], t(3, 8));
+        assert_eq!(m.week_totals[4], t(0, 3));
+        assert_eq!(t(3, 8).pct(), Some(37));
+        assert_eq!(t(0, 0).pct(), None);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

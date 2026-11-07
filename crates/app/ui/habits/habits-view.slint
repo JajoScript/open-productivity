@@ -23,6 +23,20 @@ export struct HabitRow {
     weeks: [[DayState]],
 }
 
+// One day of the totals band: whether any habit applies and the share done (0-100).
+export struct DayBar {
+    applies: bool,
+    pct: int,
+}
+
+// Totals of one block of seven days, in the same blocks as `HabitsView.day-numbers`.
+export struct WeekTotal {
+    done: int,
+    applicable: int,
+    pct: int,
+    bars: [DayBar],
+}
+
 export struct ArchivedRow {
     id: int,
     name: string,
@@ -33,6 +47,7 @@ export component HabitsView inherits VerticalLayout {
     in property <[HabitRow]> habits;
     // Day of the month per cell, in blocks of seven.
     in property <[[int]]> day-numbers;
+    in property <[WeekTotal]> week-totals;
     in property <string> error;
     in property <int> archived-count;
     callback open-archived();
@@ -168,6 +183,56 @@ export component HabitsView inherits VerticalLayout {
                                 horizontal-alignment: center;
                                 vertical-alignment: center;
                             }
+                        }
+                    }
+                }
+            }
+
+            // Totals per day and per block; the name column is left for the month total.
+            HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    width: 112px;
+                }
+
+                for week in root.week-totals: VerticalLayout {
+                    spacing: 3px;
+                    HorizontalLayout {
+                        spacing: 3px;
+                        for bar in week.bars: Rectangle {
+                            width: 20px;
+                            height: 56px;
+                            if bar.applies: Rectangle {
+                                x: (parent.width - self.width) / 2;
+                                width: 6px;
+                                border-radius: 3px;
+                                background: Theme.hover;
+                                clip: true;
+                                Rectangle {
+                                    y: parent.height * (1 - bar.pct / 100);
+                                    height: parent.height * bar.pct / 100;
+                                    background: Theme.ink;
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: Strings.week-total(week.done, week.applicable, week.pct);
+                        color: Theme.muted;
+                        font-size: 10px;
+                        overflow: elide;
+                    }
+
+                    Rectangle {
+                        height: 3px;
+                        border-radius: 1.5px;
+                        background: Theme.hover;
+                        clip: true;
+                        Rectangle {
+                            x: 0;
+                            width: parent.width * week.pct / 100;
+                            background: Theme.ink;
                         }
                     }
                 }

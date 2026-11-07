@@ -13,7 +13,7 @@ use open_productivity_core::habits::{self, DayState as CoreState, HabitError, Ha
 use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::tasks::ui_id;
-use crate::{AppWindow, ArchivedRow, Date, DayState, HabitRow, Strings};
+use crate::{AppWindow, ArchivedRow, Date, DayBar, DayState, HabitRow, Strings, WeekTotal};
 
 struct State {
     conn: Rc<Connection>,
@@ -60,7 +60,26 @@ impl State {
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
+        let totals: Vec<WeekTotal> = m
+            .day_totals
+            .chunks(7)
+            .zip(&m.week_totals)
+            .map(|(days, t)| WeekTotal {
+                done: t.done as i32,
+                applicable: t.applicable as i32,
+                pct: t.pct().unwrap_or(0) as i32,
+                bars: ModelRc::new(VecModel::from(
+                    days.iter()
+                        .map(|d| DayBar {
+                            applies: d.applicable > 0,
+                            pct: d.pct().unwrap_or(0) as i32,
+                        })
+                        .collect::<Vec<_>>(),
+                )),
+            })
+            .collect();
         if let Some(w) = self.window.upgrade() {
+            w.set_habit_week_totals(ModelRc::new(VecModel::from(totals)));
             w.set_habits_month(Date {
                 year: m.first.year(),
                 month: m.first.month() as i32,
