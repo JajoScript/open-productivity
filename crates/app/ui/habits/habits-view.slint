@@ -23,12 +23,19 @@ export struct HabitRow {
     weeks: [[DayState]],
 }
 
+export struct ArchivedRow {
+    id: int,
+    name: string,
+}
+
 // The month of habits: title and month navigation, the button that opens the creator, and the grid.
 export component HabitsView inherits VerticalLayout {
     in property <[HabitRow]> habits;
     // Day of the month per cell, in blocks of seven.
     in property <[[int]]> day-numbers;
     in property <string> error;
+    in property <int> archived-count;
+    callback open-archived();
     // The month shown; only its month and year matter.
     in property <Date> month;
     // Day of the month that is today; 0 when another month is shown.
@@ -112,6 +119,17 @@ export component HabitsView inherits VerticalLayout {
         horizontal-alignment: center;
         vertical-alignment: center;
         vertical-stretch: 1;
+    }
+
+    // With no active habits the grid is gone, so the link sits under the empty state.
+    if root.habits.length == 0 && root.archived-count > 0: HorizontalLayout {
+        alignment: center;
+        SubtleButton {
+            text: @tr("Archived ({})", root.archived-count);
+            clicked => {
+                root.open-archived();
+            }
+        }
     }
 
     // 31 days do not fit the default window next to the names: scroll sideways.
@@ -212,6 +230,18 @@ export component HabitsView inherits VerticalLayout {
                         toggled(done) => {
                             root.set-habit-done(habit.id, root.day-numbers[w][i], done);
                         }
+                    }
+                }
+            }
+
+            // Right under the last habit, out of the way of the grid.
+            if root.archived-count > 0: HorizontalLayout {
+                alignment: start;
+                padding-top: 8px;
+                SubtleButton {
+                    text: @tr("Archived ({})", root.archived-count);
+                    clicked => {
+                        root.open-archived();
                     }
                 }
             }

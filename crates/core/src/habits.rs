@@ -199,6 +199,24 @@ pub fn archive(conn: &Connection, id: HabitId) -> Result<(), HabitError> {
     Ok(())
 }
 
+/// Brings an archived habit back to the grid; its logs were kept, so marks and streaks return.
+pub fn restore(conn: &Connection, id: HabitId) -> Result<(), HabitError> {
+    let changed = conn.execute("UPDATE habit SET archived = 0 WHERE id = ?1", [id.0])?;
+    if changed == 0 {
+        return Err(HabitError::NotFound);
+    }
+    Ok(())
+}
+
+/// Archived habits as (id, name), by name ignoring case, then id.
+pub fn archived(conn: &Connection) -> Result<Vec<(HabitId, String)>, HabitError> {
+    let mut stmt = conn.prepare(
+        "SELECT id, name FROM habit WHERE archived = 1 ORDER BY name COLLATE NOCASE, id",
+    )?;
+    let rows = stmt.query_map([], |r| Ok((HabitId(r.get(0)?), r.get(1)?)))?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
 /// First day of the month that holds `date`.
 pub fn month_start(date: NaiveDate) -> NaiveDate {
     date.with_day(1).expect("day 1 exists in every month")
@@ -891,6 +909,30 @@ mod tests {
         let id = create(&conn, "Read", [true; 7], day("2026-10-01"), day(MON)).unwrap();
         set_done(&conn, id, day("2026-10-05"), day(MON), true).unwrap();
         assert_eq!(states(&conn, "2026-10-05", MON), [DayState::Done]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn restore_brings_back_marks_and_streaks() {
+        let (dir, conn) = setup("restore");
+        let b = create(&conn, "b", [true; 7], day(MON), day(MON)).unwrap();
+        let a = create(&conn, "A", [true; 7], day(MON), day(MON)).unwrap();
+        set_done(&conn, a, day(MON), day(MON), true).unwrap();
+        archive(&conn, b).unwrap();
+        archive(&conn, a).unwrap();
+        let list = archived(&conn).unwrap();
+        assert_eq!(list, [(a, "A".to_string()), (b, "b".to_string())]);
+        restore(&conn, a).unwrap();
+        assert_eq!(archived(&conn).unwrap(), [(b, "b".to_string())]);
+        let m = month(&conn, day(MON), day(MON)).unwrap();
+        assert_eq!(m.habits.len(), 1);
+        assert_eq!(m.habits[0].stats.current, 1);
+        assert!(m.habits[0].days.contains(&DayState::Done));
+        assert!(matches!(
+            restore(&conn, HabitId(99)),
+            Err(HabitError::NotFound)
+        ));
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

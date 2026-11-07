@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { PopupSurface } from "../popup-surface.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { ArchivedRow } from "habits-view.slint";
+
+// Archived habits with a Restore button each. Closes itself when the last one is restored.
+export component ArchivedHabits inherits PopupWindow {
+    in property <[ArchivedRow]> habits;
+    callback restore(int);
+
+    close-policy: close-on-click-outside;
+    width: 360px;
+
+    PopupSurface {
+        VerticalLayout {
+            padding: 16px;
+            spacing: 8px;
+            Text {
+                text: @tr("Archived habits");
+                font-size: 16px;
+                font-weight: 700;
+            }
+
+            for habit in root.habits: HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: habit.name;
+                    overflow: elide;
+                    vertical-alignment: center;
+                    horizontal-stretch: 1;
+                }
+
+                SubtleButton {
+                    text: @tr("Restore");
+                    label: @tr("Restore {}", habit.name);
+                    color: Theme.ink;
+                    clicked => {
+                        root.restore(habit.id);
+                        if root.habits.length == 0 {
+                            root.close();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

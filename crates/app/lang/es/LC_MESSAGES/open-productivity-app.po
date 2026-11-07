@@ -506,3 +506,15 @@ msgstr "¿Archivar \"{}\"? Sale de la cuadrícula, pero se conserva su historial
 
 msgid "Archive"
 msgstr "Archivar"
+
+msgid "Archived ({})"
+msgstr "Archivados ({})"
+
+msgid "Archived habits"
+msgstr "Hábitos archivados"
+
+msgid "Restore"
+msgstr "Restaurar"
+
+msgid "Restore {}"
+msgstr "Restaurar {}"

@@ -13,7 +13,7 @@ use open_productivity_core::habits::{self, DayState as CoreState, HabitError, Ha
 use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::tasks::ui_id;
-use crate::{AppWindow, Date, DayState, HabitRow, Strings};
+use crate::{AppWindow, ArchivedRow, Date, DayState, HabitRow, Strings};
 
 struct State {
     conn: Rc<Connection>,
@@ -30,6 +30,16 @@ impl State {
         let today = Local::now().date_naive();
         self.day.set(today);
         let m = habits::month(&self.conn, self.shown.get(), today).map_err(|e| e.to_string())?;
+        let archived = habits::archived(&self.conn)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|(id, name)| {
+                Ok(ArchivedRow {
+                    id: ui_id(id.0)?,
+                    name: name.into(),
+                })
+            })
+            .collect::<Result<Vec<_>, String>>()?;
         let rows = m
             .habits
             .into_iter()
@@ -58,6 +68,7 @@ impl State {
             });
             w.set_habits_today_day(m.today.map_or(0, |d| d as i32));
             w.set_habits_can_next(m.can_next);
+            w.set_archived_habits(ModelRc::new(VecModel::from(archived)));
             w.set_habit_day_numbers(blocks((1..=m.days as i32).collect()));
         }
         self.rows.set_vec(rows);
@@ -173,6 +184,11 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
     window.on_archive_habit({
         let state = state.clone();
         move |id| state.after(habits::archive(&state.conn, HabitId(id.into())))
+    });
+
+    window.on_restore_habit({
+        let state = state.clone();
+        move |id| state.after(habits::restore(&state.conn, HabitId(id.into())))
     });
 
     window.on_set_habit_done({
