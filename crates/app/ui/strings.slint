@@ -108,6 +108,11 @@ export global Strings {
         return @tr("Streak {} · Best {}", streak, best);
     }
 
+    // Header of the habits section in Today of Tasks.
+    public pure function habits-today(done: int, total: int) -> string {
+        return @tr("HABITS · {}/{}", done, total);
+    }
+
     // Habits done out of those that applied in a block of seven days, and the share.
     public pure function week-total(done: int, applicable: int, pct: int) -> string {
         return @tr("{}/{} {}%", done, applicable, pct);

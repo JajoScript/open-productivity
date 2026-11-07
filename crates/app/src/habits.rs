@@ -14,9 +14,29 @@ use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::tasks::ui_id;
 use crate::{
-    AppWindow, ArchivedRow, Date, DayBar, DayState, HabitRow, HeatCell, HeatLevel, Strings,
-    WeekTotal,
+    AppWindow, ArchivedRow, Date, DayBar, DayHabit, DayState, HabitRow, HeatCell, HeatLevel,
+    Strings, WeekTotal,
 };
+
+/// Publishes the habits that apply today for the Today tab of Tasks.
+pub fn load_today(w: &AppWindow, conn: &Connection) -> Result<(), String> {
+    let today = Local::now().date_naive();
+    let list = habits::today(conn, today).map_err(|e| e.to_string())?;
+    let done = ui_id(habits::done_count(&list) as i64)?;
+    let rows = list
+        .into_iter()
+        .map(|h| {
+            Ok(DayHabit {
+                id: ui_id(h.id.0)?,
+                name: h.name.into(),
+                done: h.done,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    w.set_habits_done(done);
+    w.set_day_habits(ModelRc::new(VecModel::from(rows)));
+    Ok(())
+}
 
 struct State {
     conn: Rc<Connection>,
@@ -33,6 +53,9 @@ impl State {
         let today = Local::now().date_naive();
         self.day.set(today);
         let m = habits::month(&self.conn, self.shown.get(), today).map_err(|e| e.to_string())?;
+        if let Some(w) = self.window.upgrade() {
+            load_today(&w, &self.conn)?;
+        }
         let archived = habits::archived(&self.conn)
             .map_err(|e| e.to_string())?
             .into_iter()
@@ -254,6 +277,21 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
                 None => Err(HabitError::OutOfRange),
             };
             state.after(res)
+        }
+    });
+
+    // From the Today tab of Tasks; `after` reloads the month and the Today section.
+    window.on_set_day_habit_done({
+        let state = state.clone();
+        move |id, done| {
+            let today = Local::now().date_naive();
+            state.after(habits::set_done(
+                &state.conn,
+                HabitId(id.into()),
+                today,
+                today,
+                done,
+            ))
         }
     });
 

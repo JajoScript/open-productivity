@@ -7,6 +7,7 @@ import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { SubtleButton } from "../subtle-button.slint";
+import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
 import { ListEntry } from "../list-entry.slint";
 import { DueButton, DueKind } from "due-button.slint";
@@ -30,6 +31,13 @@ export struct TaskRow {
     important: bool,
     // From core (`first_done`): this row opens the "Completed" section.
     first-done: bool,
+}
+
+// A habit that applies today.
+export struct DayHabit {
+    id: int,
+    name: string,
+    done: bool,
 }
 
 // One task: checkbox, title (opens the editor), note mark, list and due date.
@@ -167,6 +175,10 @@ export component TaskColumn inherits VerticalLayout {
     callback delete-list(int);
     callback update-task(int, string, string, bool, bool) -> bool;
     callback delete-task(int);
+    // Today's habits; only the Today tab passes any.
+    in property <[DayHabit]> day-habits;
+    in property <int> habits-done;
+    callback set-habit-done(int, bool);
 
     // The task the editor shows; set before it opens.
     property <TaskRow> editing;
@@ -245,6 +257,49 @@ export component TaskColumn inherits VerticalLayout {
         placeholder: @tr("Add task…");
         accepted(text) => {
             root.create-task(text);
+        }
+    }
+
+    if root.day-habits.length > 0: VerticalLayout {
+        spacing: 2px;
+        Text {
+            text: Strings.habits-today(root.habits-done, root.day-habits.length);
+            font-size: 12px;
+            font-weight: 600;
+            color: Theme.muted;
+        }
+
+        for habit in root.day-habits: Rectangle {
+            height: 40px;
+            border-radius: 6px;
+            HorizontalLayout {
+                padding-left: 4px;
+                padding-right: 4px;
+                spacing: 4px;
+                InkCheck {
+                    checked: habit.done;
+                    label: habit.name;
+                    toggled(done) => {
+                        root.set-habit-done(habit.id, done);
+                    }
+                }
+
+                // Same 6px inset as a task title, so both columns of text line up.
+                Rectangle {
+                    horizontal-stretch: 1;
+                    Text {
+                        x: 6px;
+                        width: parent.width - 12px;
+                        height: parent.height;
+                        text: habit.name;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        color: habit.done ? Theme.done : Palette.foreground;
+                        animate color { duration: Theme.fast; easing: Theme.ease-out; }
+                        accessible-role: none;
+                    }
+                }
+            }
         }
     }
 

@@ -15,7 +15,7 @@ use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::{
     AppWindow, Date, DueKind, KanbanColumn, ListEntry, Quadrant, Strings, TaskRow, TaskView,
-    TasksTab, WeekDay, kanban, lists, matrix, week,
+    TasksTab, WeekDay, habits, kanban, lists, matrix, week,
 };
 
 pub struct State {
@@ -119,6 +119,9 @@ impl State {
         self.rows.set_vec(rows);
         if let Some(w) = self.window.upgrade() {
             w.set_done_count(done_count);
+            if self.tab.get() == TasksTab::Today {
+                habits::load_today(&w, &self.conn)?;
+            }
         }
         self.reload_panel()
     }

@@ -13,8 +13,8 @@ import { ArchivedRow, DayBar, DayState, HabitRow, HabitsView, HeatCell, HeatLeve
 import { Module, Rail } from "rail.slint";
 import { Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
-import { DueKind, KanbanColumn, Quadrant, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { ArchivedRow, Calendar, DayBar, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
+import { DayHabit, DueKind, KanbanColumn, Quadrant, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
+export { ArchivedRow, Calendar, DayBar, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -84,6 +84,9 @@ export component AppWindow inherits Window {
     in property <[ArchivedRow]> archived-habits;
     callback restore-habit(int);
     callback set-habit-done(int, int, bool);
+    in property <[DayHabit]> day-habits;
+    in property <int> habits-done;
+    callback set-day-habit-done(int, bool);
 
     title: "Open Productivity — " + instance-name;
     preferred-width: 960px;
@@ -282,6 +285,11 @@ export component AppWindow inherits Window {
                     }
                     select-tab(t) => {
                         root.select-tab(t);
+                    }
+                    day-habits: root.day-habits;
+                    habits-done: root.habits-done;
+                    set-habit-done(id, done) => {
+                        root.set-day-habit-done(id, done);
                     }
                     week-days: root.week-days;
                     week-shift(n) => {

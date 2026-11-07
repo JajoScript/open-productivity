@@ -454,6 +454,36 @@ fn day_totals(habits: &[MonthHabit], len: usize) -> Vec<Total> {
         .collect()
 }
 
+/// A habit that applies today and whether today is marked.
+#[derive(Debug, PartialEq)]
+pub struct DayHabit {
+    pub id: HabitId,
+    pub name: String,
+    pub done: bool,
+}
+
+/// How many of `habits` are marked.
+pub fn done_count(habits: &[DayHabit]) -> usize {
+    habits.iter().filter(|h| h.done).count()
+}
+
+/// The active habits that apply on `today` (weekday selected, already started), oldest first.
+pub fn today(conn: &Connection, today: NaiveDate) -> Result<Vec<DayHabit>, HabitError> {
+    let mut stmt = conn.prepare(
+        "SELECT h.id, h.name, EXISTS (SELECT 1 FROM habit_log l WHERE l.habit_id = h.id AND l.date = ?1)
+         FROM habit h WHERE h.archived = 0 AND h.weekdays & ?2 != 0 AND h.start_date <= ?1
+         ORDER BY h.id",
+    )?;
+    let rows = stmt.query_map((today.to_string(), weekday_bit(today)), |r| {
+        Ok(DayHabit {
+            id: HabitId(r.get(0)?),
+            name: r.get(1)?,
+            done: r.get(2)?,
+        })
+    })?;
+    Ok(rows.collect::<Result<_, _>>()?)
+}
+
 /// Marks or unmarks `date`; only days the habit applies on, up to `today`.
 pub fn set_done(
     conn: &Connection,
@@ -713,6 +743,39 @@ mod tests {
             .query_row("SELECT count(*) FROM habit_log", [], |r| r.get(0))
             .unwrap();
         assert_eq!(logged, 0);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn today_lists_applicable_active_habits_with_their_mark() {
+        let (dir, conn) = setup("today");
+        let mon = [true, false, false, false, false, false, false];
+        let tue = [false, true, false, false, false, false, false];
+        let a = create(&conn, "A", [true; 7], day(MON), day(MON)).unwrap();
+        let b = create(&conn, "B", [true; 7], day(MON), day(MON)).unwrap();
+        create(&conn, "Tue only", tue, day(MON), day(MON)).unwrap();
+        let m = create(&conn, "Mondays", mon, day(MON), day(MON)).unwrap();
+        let old = create(&conn, "Old", [true; 7], day("2026-10-01"), day(MON)).unwrap();
+        archive(&conn, old).unwrap();
+        // Starts after the day asked about.
+        let later = day("2026-11-03");
+        create(&conn, "Later", [true; 7], later, later).unwrap();
+        set_done(&conn, b, day(MON), day(MON), true).unwrap();
+        let got: Vec<_> = today(&conn, day(MON))
+            .unwrap()
+            .into_iter()
+            .map(|h| (h.id, h.name, h.done))
+            .collect();
+        assert_eq!(
+            got,
+            [
+                (a, "A".to_string(), false),
+                (b, "B".to_string(), true),
+                (m, "Mondays".to_string(), false)
+            ]
+        );
+        assert_eq!(done_count(&today(&conn, day(MON)).unwrap()), 1);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

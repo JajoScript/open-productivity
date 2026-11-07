@@ -434,6 +434,9 @@ msgstr "Mes anterior"
 msgid "Next month"
 msgstr "Mes siguiente"
 
+msgid "HABITS · {}/{}"
+msgstr "HÁBITOS · {}/{}"
+
 msgid "Streak {} · Best {}"
 msgstr "Racha {} · Mejor {}"
 
