@@ -75,6 +75,8 @@ export component AppWindow inherits Window {
     in property <bool> habits-can-next;
     callback habits-shift(int);
     callback create-habit(string, [bool], Date) -> string;
+    callback update-habit(int, string, [bool], Date) -> string;
+    callback archive-habit(int);
     callback set-habit-done(int, int, bool);
 
     title: "Open Productivity — " + instance-name;
@@ -86,6 +88,12 @@ export component AppWindow inherits Window {
     property <bool> entering;
     property <Module> module;
     property <TasksTab> tasks-tab;
+    // What the habit modal opens with: a new habit, or the one being edited.
+    property <bool> habit-editing;
+    property <int> habit-edit-id;
+    property <string> habit-edit-name;
+    property <[bool]> habit-edit-days;
+    property <Date> habit-edit-start;
     changed module => {
         root.export-status = "";
         root.instances-status = "";
@@ -115,10 +123,21 @@ export component AppWindow inherits Window {
         }
 
         habit-creator := HabitCreator {
+            editing: root.habit-editing;
+            habit-id: root.habit-edit-id;
+            habit-name: root.habit-edit-name;
+            days: root.habit-edit-days;
+            start-date: root.habit-edit-start;
             x: (root.width - self.width) / 2;
             y: 120px;
             create(name, days, start) => {
                 return root.create-habit(name, days, start);
+            }
+            update(id, name, days, start) => {
+                return root.update-habit(id, name, days, start);
+            }
+            archive(id) => {
+                root.archive-habit(id);
             }
         }
 
@@ -202,6 +221,18 @@ export component AppWindow inherits Window {
                     today-day: root.habits-today-day;
                     can-next: root.habits-can-next;
                     new-habit => {
+                        root.habit-editing = false;
+                        root.habit-edit-name = "";
+                        root.habit-edit-days = [false, false, false, false, false, false, false];
+                        root.habit-edit-start = Calendar.today();
+                        habit-creator.show();
+                    }
+                    edit-habit(habit) => {
+                        root.habit-editing = true;
+                        root.habit-edit-id = habit.id;
+                        root.habit-edit-name = habit.name;
+                        root.habit-edit-days = habit.weekdays;
+                        root.habit-edit-start = habit.start;
                         habit-creator.show();
                     }
                     shift(n) => {

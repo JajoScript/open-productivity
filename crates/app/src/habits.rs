@@ -40,6 +40,12 @@ impl State {
                     streak: h.stats.current as i32,
                     best: h.stats.best as i32,
                     month_pct: h.stats.month_pct as i32,
+                    weekdays: ModelRc::new(VecModel::from(h.weekdays.to_vec())),
+                    start: Date {
+                        year: h.start.year(),
+                        month: h.start.month() as i32,
+                        day: h.start.day() as i32,
+                    },
                     weeks: blocks(h.days.into_iter().map(day_state).collect()),
                 })
             })
@@ -71,6 +77,40 @@ impl State {
             _ => String::new(),
         };
         self.show_error(msg);
+    }
+
+    /// Runs a create or update from the modal's raw days and date; returns the message for it.
+    fn save(
+        &self,
+        days: ModelRc<bool>,
+        start: Date,
+        op: impl FnOnce(&Connection, [bool; 7], NaiveDate, NaiveDate) -> Result<(), HabitError>,
+    ) -> slint::SharedString {
+        let Some(w) = self.window.upgrade() else {
+            return Default::default();
+        };
+        let s = w.global::<Strings>();
+        let flags: Vec<bool> = days.iter().collect();
+        let Ok(flags) = <[bool; 7]>::try_from(flags) else {
+            return s.invoke_habit_failed("weekdays".into());
+        };
+        // A date the picker cannot produce is an error, never "start today".
+        let Some(start) = NaiveDate::from_ymd_opt(start.year, start.month as u32, start.day as u32)
+        else {
+            return s.invoke_habit_failed(
+                format!("{}-{}-{}", start.year, start.month, start.day).into(),
+            );
+        };
+        match op(&self.conn, flags, start, Local::now().date_naive()) {
+            Err(HabitError::EmptyName) => s.get_habit_empty_name(),
+            Err(HabitError::NoWeekdays) => s.get_habit_no_days(),
+            Err(HabitError::FutureStart) => s.get_habit_future_start(),
+            Err(e) => s.invoke_habit_failed(e.to_string().into()),
+            Ok(()) => {
+                self.after(Ok(()));
+                Default::default()
+            }
+        }
     }
 
     /// Reloads even on failure so the view shows what is really stored.
@@ -111,38 +151,28 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
     window.set_habits(ModelRc::from(state.rows.clone()));
     state.finish(state.reload());
 
+    // Both return the message for the modal; empty means it worked and the modal closes.
     window.on_create_habit({
         let state = state.clone();
-        // Returns the message for the creator; empty closes it.
-        move |name, days, start: Date| {
-            let Some(w) = state.window.upgrade() else {
-                return Default::default();
-            };
-            let s = w.global::<Strings>();
-            let today = Local::now().date_naive();
-            let flags: Vec<bool> = days.iter().collect();
-            let Ok(flags) = <[bool; 7]>::try_from(flags) else {
-                return s.invoke_habit_failed("weekdays".into());
-            };
-            // A date the picker cannot produce is an error, never "start today".
-            let Some(start) =
-                NaiveDate::from_ymd_opt(start.year, start.month as u32, start.day as u32)
-            else {
-                return s.invoke_habit_failed(
-                    format!("{}-{}-{}", start.year, start.month, start.day).into(),
-                );
-            };
-            match habits::create(&state.conn, &name, flags, start, today) {
-                Err(HabitError::EmptyName) => s.get_habit_empty_name(),
-                Err(HabitError::NoWeekdays) => s.get_habit_no_days(),
-                Err(HabitError::FutureStart) => s.get_habit_future_start(),
-                Err(e) => s.invoke_habit_failed(e.to_string().into()),
-                Ok(_) => {
-                    state.after(Ok(()));
-                    Default::default()
-                }
-            }
+        move |name, days, start| {
+            state.save(days, start, |c, d, s, t| {
+                habits::create(c, &name, d, s, t).map(|_| ())
+            })
         }
+    });
+
+    window.on_update_habit({
+        let state = state.clone();
+        move |id, name, days, start| {
+            state.save(days, start, |c, d, s, t| {
+                habits::update(c, HabitId(id.into()), &name, d, s, t)
+            })
+        }
+    });
+
+    window.on_archive_habit({
+        let state = state.clone();
+        move |id| state.after(habits::archive(&state.conn, HabitId(id.into())))
     });
 
     window.on_set_habit_done({

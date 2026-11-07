@@ -33,6 +33,9 @@ pub struct MonthHabit {
     /// One per day of the month, day 1 first.
     pub days: Vec<DayState>,
     pub stats: HabitStats,
+    /// The weekdays it applies on, Monday first (to prefill the editor).
+    pub weekdays: [bool; 7],
+    pub start: NaiveDate,
 }
 
 #[derive(Debug, PartialEq)]
@@ -156,6 +159,44 @@ pub fn create(
         (name, weekdays.0, start.to_string()),
     )?;
     Ok(HabitId(conn.last_insert_rowid()))
+}
+
+/// Changes name, weekdays and start of a habit, with the rules of `create`. Retroactive: the
+/// logs stay as they are and days and stats recompute, so marks on days that no longer apply are
+/// ignored until they apply again.
+pub fn update(
+    conn: &Connection,
+    id: HabitId,
+    name: &str,
+    days: [bool; 7],
+    start: NaiveDate,
+    today: NaiveDate,
+) -> Result<(), HabitError> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Err(HabitError::EmptyName);
+    }
+    let weekdays = Weekdays::from_flags(days)?;
+    if start > today {
+        return Err(HabitError::FutureStart);
+    }
+    let changed = conn.execute(
+        "UPDATE habit SET name = ?2, weekdays = ?3, start_date = ?4 WHERE id = ?1",
+        (id.0, name, weekdays.0, start.to_string()),
+    )?;
+    if changed == 0 {
+        return Err(HabitError::NotFound);
+    }
+    Ok(())
+}
+
+/// Hides a habit from the grid; its logs are kept.
+pub fn archive(conn: &Connection, id: HabitId) -> Result<(), HabitError> {
+    let changed = conn.execute("UPDATE habit SET archived = 1 WHERE id = ?1", [id.0])?;
+    if changed == 0 {
+        return Err(HabitError::NotFound);
+    }
+    Ok(())
 }
 
 /// First day of the month that holds `date`.
@@ -286,6 +327,8 @@ pub fn month(
                 name,
                 days,
                 stats: stats(weekdays, start, today, first, &done),
+                weekdays: std::array::from_fn(|i| weekdays & (1 << i) != 0),
+                start,
             }
         })
         .collect();
@@ -769,6 +812,75 @@ mod tests {
         };
         assert_eq!(m.habits[0].stats, full);
         assert_eq!(m.habits[1].stats.current, 0);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn update_validates_like_create_and_needs_an_existing_habit() {
+        let (dir, conn) = setup("update-rules");
+        let id = create(&conn, "A", [true; 7], day(MON), day(MON)).unwrap();
+        let up = |n, d, s, i| update(&conn, i, n, d, day(s), day(MON));
+        let tue = "2026-11-03";
+        assert!(matches!(
+            up(" ", [false; 7], tue, id),
+            Err(HabitError::EmptyName)
+        ));
+        assert!(matches!(
+            up("B", [false; 7], tue, id),
+            Err(HabitError::NoWeekdays)
+        ));
+        assert!(matches!(
+            up("B", [true; 7], tue, id),
+            Err(HabitError::FutureStart)
+        ));
+        assert!(matches!(
+            up("B", [true; 7], MON, HabitId(99)),
+            Err(HabitError::NotFound)
+        ));
+        assert_eq!(names(&conn, MON), ["A"]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn update_is_retroactive_and_keeps_marks() {
+        let (dir, conn) = setup("update-retro");
+        let id = create(&conn, "A", [true; 7], day(MON), day(MON)).unwrap();
+        set_done(&conn, id, day(MON), day(MON), true).unwrap();
+        // Tuesday only: Monday's mark is ignored, not deleted.
+        let tue_only = [false, true, false, false, false, false, false];
+        update(&conn, id, " B ", tue_only, day(MON), day(MON)).unwrap();
+        assert_eq!(states(&conn, MON, MON), [DayState::Skipped]);
+        let m = month(&conn, day(MON), day(MON)).unwrap();
+        let h = &m.habits[0];
+        assert_eq!(
+            (h.name.as_str(), h.weekdays, h.start),
+            ("B", tue_only, day(MON))
+        );
+        update(&conn, id, "B", [true; 7], day("2026-11-01"), day(MON)).unwrap();
+        assert_eq!(states(&conn, MON, MON), [DayState::Done]);
+        // The new start applies to the past too.
+        assert_eq!(states(&conn, "2026-11-01", MON), [DayState::Open]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn archive_hides_keeps_logs_and_needs_an_existing_habit() {
+        let (dir, conn) = setup("archive");
+        let id = create(&conn, "A", [true; 7], day(MON), day(MON)).unwrap();
+        set_done(&conn, id, day(MON), day(MON), true).unwrap();
+        archive(&conn, id).unwrap();
+        assert!(names(&conn, MON).is_empty());
+        let logged: i64 = conn
+            .query_row("SELECT count(*) FROM habit_log", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(logged, 1);
+        assert!(matches!(
+            archive(&conn, HabitId(99)),
+            Err(HabitError::NotFound)
+        ));
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

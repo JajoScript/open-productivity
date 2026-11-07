@@ -17,6 +17,9 @@ export struct HabitRow {
     streak: int,
     best: int,
     month-pct: int,
+    // Monday first, and the day it starts: the editor's initial values.
+    weekdays: [bool],
+    start: Date,
     weeks: [[DayState]],
 }
 
@@ -32,6 +35,7 @@ export component HabitsView inherits VerticalLayout {
     in property <int> today-day;
     in property <bool> can-next;
     callback new-habit();
+    callback edit-habit(HabitRow);
     // -1 / +1 moves a month; 0 goes back to the current one.
     callback shift(int);
     callback set-habit-done(int, int, bool);
@@ -153,30 +157,49 @@ export component HabitsView inherits VerticalLayout {
 
             for habit in root.habits: HorizontalLayout {
                 spacing: 8px;
-                VerticalLayout {
+                // The name and stats block opens the editor.
+                Rectangle {
                     width: 112px;
-                    alignment: center;
-                    Text {
-                        text: habit.name;
-                        overflow: elide;
+                    border-radius: 6px;
+                    background: name-touch.has-hover ? Theme.hover : transparent;
+                    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+                    accessible-role: button;
+                    accessible-label: habit.name;
+                    accessible-action-default => {
+                        root.edit-habit(habit);
                     }
 
-                    // The month's percentage stays visible; only the streaks elide.
-                    HorizontalLayout {
-                        spacing: 4px;
+                    VerticalLayout {
+                        alignment: center;
                         Text {
-                            text: Strings.habit-streaks(habit.streak, habit.best);
-                            color: Theme.muted;
-                            font-size: 10px;
+                            text: habit.name;
                             overflow: elide;
-                            horizontal-stretch: 1;
                         }
 
-                        Text {
-                            text: Strings.percent(habit.month-pct);
-                            color: Theme.muted;
-                            font-size: 10px;
-                            horizontal-stretch: 0;
+                        // The month's percentage stays visible; only the streaks elide.
+                        HorizontalLayout {
+                            spacing: 4px;
+                            Text {
+                                text: Strings.habit-streaks(habit.streak, habit.best);
+                                color: Theme.muted;
+                                font-size: 10px;
+                                overflow: elide;
+                                horizontal-stretch: 1;
+                            }
+
+                            Text {
+                                text: Strings.percent(habit.month-pct);
+                                color: Theme.muted;
+                                font-size: 10px;
+                                horizontal-stretch: 0;
+                            }
+                        }
+                    }
+
+                    name-touch := TouchArea {
+                        mouse-cursor: pointer;
+                        clicked => {
+                            root.edit-habit(habit);
                         }
                     }
                 }

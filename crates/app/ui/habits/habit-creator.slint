@@ -68,15 +68,20 @@ component DayToggle inherits Rectangle {
     }
 }
 
-// Rebuilt on every show(), so days, date and error always start fresh.
+// Rebuilt on every show(), so the fields, the error and the confirmation always start fresh.
 component CreatorBody inherits FocusScope {
-    callback create(string, [bool], Date) -> string;
+    in property <bool> editing;
+    // Like the days and the date, the modal gives the initial name and the user edits it here.
+    in-out property <string> habit-name;
+    // Monday first. The modal gives the initial days and date; the user changes them here.
+    in-out property <[bool]> days;
+    in-out property <Date> start-date;
+    callback save(string, [bool], Date) -> string;
+    callback archive;
     callback cancel;
 
     property <string> error;
-    // Monday first; all off, so the user picks them on purpose.
-    property <[bool]> days: [false, false, false, false, false, false, false];
-    property <Date> start-date: Calendar.today();
+    property <bool> confirming;
 
     capture-key-pressed(event) => {
         if event.text == Key.Escape {
@@ -87,52 +92,60 @@ component CreatorBody inherits FocusScope {
     }
 
     function submit() {
-        root.error = root.create(name.text, root.days, root.start-date);
+        root.error = root.save(root.habit-name, root.days, root.start-date);
     }
 
     VerticalLayout {
         padding: 16px;
-        spacing: 12px;
+        // The collapsed date row would still add spacing around it while confirming.
+        spacing: root.confirming ? 0px : 12px;
 
-        Text {
-            text: @tr("New habit");
-            font-size: 14px;
-            font-weight: 700;
-        }
-
-        name := InkField {
-            placeholder-text: @tr("Habit name");
-            init => {
-                self.focus();
+        if !root.confirming: VerticalLayout {
+            spacing: 12px;
+            Text {
+                text: root.editing ? @tr("Edit habit") : @tr("New habit");
+                font-size: 14px;
+                font-weight: 700;
             }
-            accepted(text) => {
-                root.submit();
-            }
-        }
 
-        Text {
-            text: @tr("Repeat on");
-            color: Theme.muted;
-        }
-
-        HorizontalLayout {
-            spacing: 4px;
-            for letter[i] in Strings.day-letters: DayToggle {
-                letter: letter;
-                label: Strings.weekday-name(i);
-                on: root.days[i];
-                toggled => {
-                    root.days[i] = !root.days[i];
+            InkField {
+                text <=> root.habit-name;
+                placeholder-text: @tr("Habit name");
+                init => {
+                    self.focus();
+                }
+                accepted(text) => {
+                    root.submit();
                 }
             }
-        }
 
-        Text {
-            text: @tr("Starts on");
-            color: Theme.muted;
+            Text {
+                text: @tr("Repeat on");
+                color: Theme.muted;
+            }
+
+            HorizontalLayout {
+                spacing: 4px;
+                for letter[i] in Strings.day-letters: DayToggle {
+                    letter: letter;
+                    label: Strings.weekday-name(i);
+                    on: root.days[i];
+                    toggled => {
+                        root.days[i] = !root.days[i];
+                    }
+                }
+            }
+
+            Text {
+                text: @tr("Starts on");
+                color: Theme.muted;
+            }
         }
 
         HorizontalLayout {
+            visible: !root.confirming;
+            // Always present, so the date popup can live here (a popup cannot be conditional).
+            height: root.confirming ? 0px : 36px;
             alignment: start;
             picker := InkDatePopup {
                 y: 36px;
@@ -154,49 +167,112 @@ component CreatorBody inherits FocusScope {
             }
         }
 
-        if root.error != "": Text {
-            text: root.error;
-            color: Theme.critical;
-            wrap: word-wrap;
-        }
-
-        HorizontalLayout {
-            spacing: 8px;
-            alignment: end;
-            SubtleButton {
-                text: @tr("Cancel");
-                color: Palette.foreground;
-                clicked => {
-                    root.cancel();
-                }
+        if !root.confirming: VerticalLayout {
+            spacing: 12px;
+            if root.error != "": Text {
+                text: root.error;
+                color: Theme.critical;
+                wrap: word-wrap;
             }
 
-            InkButton {
-                text: @tr("Create");
-                clicked => {
-                    root.submit();
+            HorizontalLayout {
+                spacing: 8px;
+                if root.editing: SubtleButton {
+                    icon: @image-url("../icons/archive.svg");
+                    text: @tr("Archive habit");
+                    color: Theme.critical;
+                    clicked => {
+                        root.confirming = true;
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                SubtleButton {
+                    text: @tr("Cancel");
+                    color: Palette.foreground;
+                    clicked => {
+                        root.cancel();
+                    }
+                }
+
+                InkButton {
+                    text: root.editing ? @tr("Save") : @tr("Create");
+                    clicked => {
+                        root.submit();
+                    }
+                }
+            }
+        }
+
+        if root.confirming: VerticalLayout {
+            spacing: 12px;
+            Text {
+                text: @tr("Archive \"{}\"? It leaves the grid, but its history is kept.", root.habit-name);
+                wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: end;
+                SubtleButton {
+                    text: @tr("Cancel");
+                    color: Palette.foreground;
+                    init => {
+                        self.focus();
+                    }
+                    clicked => {
+                        root.cancel();
+                    }
+                }
+
+                InkButton {
+                    text: @tr("Archive");
+                    clicked => {
+                        root.archive();
+                    }
                 }
             }
         }
     }
 }
 
-// Creates a habit; closing by clicking outside discards it.
+// Creates a habit or edits one, depending on how it is opened. Closing by clicking outside
+// discards the changes.
 export component HabitCreator inherits PopupWindow {
-    // Returns the error to show; empty means the habit was created and the modal closes.
+    // Return the error to show; empty means it worked and the modal closes.
     callback create(string, [bool], Date) -> string;
+    callback update(int, string, [bool], Date) -> string;
+    callback archive(int);
+
+    // Set by the opener before show(): a new habit has days all off, so the user picks them.
+    in property <bool> editing;
+    in property <int> habit-id;
+    in property <string> habit-name;
+    in property <[bool]> days;
+    in property <Date> start-date;
 
     close-policy: close-on-click-outside;
     width: 360px;
 
     PopupSurface {
         CreatorBody {
-            create(name, days, start) => {
-                let error = root.create(name, days, start);
+            editing: root.editing;
+            habit-name: root.habit-name;
+            days: root.days;
+            start-date: root.start-date;
+            save(name, days, start) => {
+                let error = root.editing ? root.update(root.habit-id, name, days, start) : root.create(name, days, start);
                 if error == "" {
                     root.close();
                 }
                 return error;
+            }
+            archive => {
+                root.close();
+                root.archive(root.habit-id);
             }
             cancel => {
                 root.close();

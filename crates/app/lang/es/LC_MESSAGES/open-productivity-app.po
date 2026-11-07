@@ -494,3 +494,15 @@ msgstr "S"
 msgctxt "Sunday initial"
 msgid "S"
 msgstr "D"
+
+msgid "Edit habit"
+msgstr "Editar hábito"
+
+msgid "Archive habit"
+msgstr "Archivar hábito"
+
+msgid "Archive \"{}\"? It leaves the grid, but its history is kept."
+msgstr "¿Archivar \"{}\"? Sale de la cuadrícula, pero se conserva su historial."
+
+msgid "Archive"
+msgstr "Archivar"
