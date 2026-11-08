@@ -277,44 +277,49 @@ export component TasksView inherits VerticalLayout {
             }
         }
 
-        TaskColumn {
-            view: root.view;
-            can-create: root.can-create;
-            pending-count: root.pending-count;
-            done-count: root.done-count;
-            tasks: root.tasks;
-            error: root.error;
-            list-id: root.list-id;
-            list-name: root.list-name;
-            lists: root.lists;
-            create-task(title) => {
-                return root.create-task(title);
-            }
-            set-done(id, done) => {
-                root.set-done(id, done);
-            }
-            set-due(id, date) => {
-                root.set-due(id, date);
-            }
-            clear-due(id) => {
-                root.clear-due(id);
-            }
-            set-list(id, list-id) => {
-                root.set-list(id, list-id);
-            }
-            delete-list(id) => {
-                root.delete-list(id);
-            }
-            update-task(id, title, note, urgent, important) => {
-                return root.update-task(id, title, note, urgent, important);
-            }
-            delete-task(id) => {
-                root.delete-task(id);
-            }
-            day-habits: root.tab == TasksTab.today ? root.day-habits : [];
-            habits-done: root.habits-done;
-            set-habit-done(id, done) => {
-                root.set-habit-done(id, done);
+        // Caps the reading width, so a row's title and its date stay within one sweep of the eye.
+        Rectangle {
+            TaskColumn {
+                width: min(parent.width, 868px);
+                x: (parent.width - self.width) / 2;
+                view: root.view;
+                can-create: root.can-create;
+                pending-count: root.pending-count;
+                done-count: root.done-count;
+                tasks: root.tasks;
+                error: root.error;
+                list-id: root.list-id;
+                list-name: root.list-name;
+                lists: root.lists;
+                create-task(title) => {
+                    return root.create-task(title);
+                }
+                set-done(id, done) => {
+                    root.set-done(id, done);
+                }
+                set-due(id, date) => {
+                    root.set-due(id, date);
+                }
+                clear-due(id) => {
+                    root.clear-due(id);
+                }
+                set-list(id, list-id) => {
+                    root.set-list(id, list-id);
+                }
+                delete-list(id) => {
+                    root.delete-list(id);
+                }
+                update-task(id, title, note, urgent, important) => {
+                    return root.update-task(id, title, note, urgent, important);
+                }
+                delete-task(id) => {
+                    root.delete-task(id);
+                }
+                day-habits: root.tab == TasksTab.today ? root.day-habits : [];
+                habits-done: root.habits-done;
+                set-habit-done(id, done) => {
+                    root.set-habit-done(id, done);
+                }
             }
         }
     }

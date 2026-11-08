@@ -15,6 +15,12 @@ export component DueButton inherits HorizontalLayout {
     in property <int> day;
     in property <int> month;
     in property <int> year;
+    // The row is hovered: hidden controls show.
+    in property <bool> reveal;
+    // The view already says this date, so the label waits for the row's hover.
+    in property <bool> implied;
+    // The task is completed.
+    in property <bool> dimmed;
     callback picked(Date);
     callback cleared;
 
@@ -39,7 +45,9 @@ export component DueButton inherits HorizontalLayout {
         width: 132px;
         text: root.kind == DueKind.none ? @tr("Add date") : root.kind == DueKind.overdue ? @tr("Overdue") : root.kind == DueKind.today ? @tr("Today") : root.kind == DueKind.tomorrow ? @tr("Tomorrow") : Strings.date(root.day, root.month, root.year);
         icon: @image-url("../icons/calendar.svg");
-        color: root.kind == DueKind.overdue ? Theme.critical : root.kind == DueKind.today ? Palette.foreground : Theme.muted;
+        color: root.dimmed ? Theme.done : root.kind == DueKind.overdue ? Theme.critical : root.kind == DueKind.today ? Palette.foreground : Theme.muted;
+        opacity: !root.implied || root.reveal || self.focused ? 1 : 0;
+        animate opacity { duration: Theme.fast; easing: Theme.ease-out; }
         clicked => {
             picker.show();
         }
@@ -51,6 +59,8 @@ export component DueButton inherits HorizontalLayout {
         if root.kind != DueKind.none: SubtleButton {
             icon: @image-url("../icons/x.svg");
             label: @tr("Remove date");
+            opacity: root.reveal || self.focused ? 1 : 0;
+            animate opacity { duration: Theme.fast; easing: Theme.ease-out; }
             clicked => {
                 root.cleared();
             }

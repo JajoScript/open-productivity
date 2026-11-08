@@ -41,6 +41,8 @@ component MenuItem inherits Rectangle {
 export component ListButton inherits HorizontalLayout {
     in property <string> name;
     in property <[ListEntry]> lists;
+    // The task is completed.
+    in property <bool> dimmed;
     callback picked(int);
 
     // Fixed column so the list labels line up across rows.
@@ -76,7 +78,7 @@ export component ListButton inherits HorizontalLayout {
     SubtleButton {
         text: root.name == "" ? @tr("No list") : root.name;
         icon: @image-url("../icons/list.svg");
-        color: root.name == "" ? Theme.muted : Palette.foreground;
+        color: root.dimmed ? Theme.done : root.name == "" ? Theme.muted : Palette.foreground;
         clicked => {
             popup.show();
         }

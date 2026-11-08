@@ -11,6 +11,7 @@ export component SubtleButton {
     in property <brush> color: Theme.muted;
     // Required when there is no text, so screen readers can name the button.
     in property <string> label: root.text;
+    out property <bool> focused: focus.has-focus;
     callback clicked;
 
     min-width: 28px;
