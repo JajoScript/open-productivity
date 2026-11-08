@@ -11,6 +11,8 @@ import { HabitCreator } from "habits/habit-creator.slint";
 import { ArchivedHabits } from "habits/archived-habits.slint";
 import { ArchivedRow, DayState, HabitRow, HabitsView, HeatCell, HeatLevel, WeekTotal } from "habits/habits-view.slint";
 import { Module, Rail } from "rail.slint";
+import { QuickCreate } from "quick-create.slint";
+import { TaskCreator } from "tasks/task-creator.slint";
 import { ColorMode, Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
 import { DayHabit, DueKind, KanbanColumn, Quadrant, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
@@ -61,6 +63,8 @@ export component AppWindow inherits Window {
     in property <[Quadrant]> quadrants;
     callback set-priority(int, bool, bool);
     callback create-task(string) -> string;
+    // From the floating button: always files into the Inbox, whatever view is open.
+    callback quick-create-task(string) -> string;
     callback set-done(int, bool);
     callback set-due(int, Date);
     callback clear-due(int);
@@ -370,5 +374,26 @@ export component AppWindow inherits Window {
         height: root.height;
         module <=> root.module;
         instance-name: root.instance-name;
+    }
+
+    quick-task-creator := TaskCreator {
+        x: (root.width - self.width) / 2;
+        y: 120px;
+        create(title) => {
+            let error = root.quick-create-task(title);
+            if error == "" {
+                quick.notify();
+            }
+            return error;
+        }
+    }
+
+    quick := QuickCreate {
+        visible: root.module != Module.settings;
+        x: root.width - self.width - 24px;
+        y: root.height - self.height - 24px;
+        new-task => {
+            quick-task-creator.show();
+        }
     }
 }

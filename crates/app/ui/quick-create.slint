@@ -1,0 +1,175 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { PopupSurface } from "popup-surface.slint";
+import { Theme } from "theme.slint";
+
+// One row of the create menu. Adding an option is one more MenuRow in the menu below.
+component MenuRow inherits Rectangle {
+    in property <string> text;
+    callback activated;
+
+    height: 36px;
+    border-radius: 4px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover || focus.has-focus ? Theme.hover : transparent;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.text;
+    accessible-action-default => {
+        root.activated();
+    }
+
+    Text {
+        x: 12px;
+        width: parent.width - 24px;
+        text: root.text;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.activated();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.activated();
+                return accept;
+            }
+            reject
+        }
+    }
+}
+
+// Floating "+" in the corner: an ink plate that opens a menu upwards. Place it where it belongs.
+export component QuickCreate inherits Rectangle {
+    callback new-task;
+    // Shows the brief confirmation next to the button.
+    public function notify() {
+        root.notice = true;
+    }
+
+    property <bool> notice;
+
+    width: 48px;
+    height: 48px;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: @tr("Create");
+    accessible-action-default => {
+        menu.show();
+    }
+
+    Rectangle {
+        border-radius: 24px;
+        background: Theme.ink;
+        opacity: touch.pressed ? 0.78 : touch.has-hover ? 0.88 : 1;
+        animate opacity { duration: Theme.fast; easing: Theme.ease-out; }
+    }
+
+    Image {
+        width: 20px;
+        height: 20px;
+        x: (parent.width - self.width) / 2;
+        y: (parent.height - self.height) / 2;
+        source: @image-url("icons/plus.svg");
+        colorize: Theme.on-ink;
+        accessible-role: none;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            menu.show();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                menu.show();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        x: -3px;
+        y: -3px;
+        width: root.width + 6px;
+        height: root.height + 6px;
+        border-radius: 27px;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+
+    // Draws no input, so it never blocks what lies beneath.
+    if root.notice: Rectangle {
+        x: -self.width - 12px;
+        y: (root.height - self.height) / 2;
+        width: message.preferred-width + 24px;
+        height: 32px;
+        border-radius: 6px;
+        border-width: 1px;
+        border-color: Theme.hairline;
+        background: Palette.background;
+        accessible-role: text;
+        accessible-label: message.text;
+
+        message := Text {
+            text: @tr("Task added to Inbox");
+            vertical-alignment: center;
+            horizontal-alignment: center;
+            accessible-role: none;
+        }
+
+        Timer {
+            interval: 2500ms;
+            running: true;
+            triggered => {
+                root.notice = false;
+            }
+        }
+    }
+
+    menu := PopupWindow {
+        // Opens upwards, right edges aligned.
+        x: root.width - self.width;
+        y: -self.height - 8px;
+        width: 168px;
+        height: 52px;
+        close-policy: close-on-click-outside;
+
+        PopupSurface {
+            FocusScope {
+                capture-key-pressed(event) => {
+                    if event.text == Key.Escape {
+                        menu.close();
+                        return accept;
+                    }
+                    reject
+                }
+
+                VerticalLayout {
+                    padding: 8px;
+                    MenuRow {
+                        text: @tr("Task");
+                        init => {
+                            self.focus();
+                        }
+                        activated => {
+                            menu.close();
+                            root.new-task();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

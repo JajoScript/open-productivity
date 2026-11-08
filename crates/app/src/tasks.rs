@@ -180,15 +180,17 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         }
     });
 
-    // Returns the message to show in the task creator; empty closes it.
-    window.on_create_task({
+    // Returns the message to show in the task creator; empty closes it. The floating button
+    // always files into the Inbox; the open view's "Add task" creates in that view.
+    for quick in [false, true] {
         let (state, finish) = (state.clone(), finish.clone());
-        move |title| {
+        let on_create = move |title: slint::SharedString| {
             let Some(w) = state.window.upgrade() else {
                 return Default::default();
             };
             let today = Local::now().date_naive();
-            match tasks::create(&state.conn, &title, state.view.get(), today) {
+            let view = if quick { View::Inbox } else { state.view.get() };
+            match tasks::create(&state.conn, &title, view, today) {
                 Err(TaskError::EmptyTitle) => w.global::<Strings>().get_task_title_empty(),
                 Err(e) => w
                     .global::<Strings>()
@@ -198,8 +200,13 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
                     Default::default()
                 }
             }
+        };
+        if quick {
+            window.on_quick_create_task(on_create);
+        } else {
+            window.on_create_task(on_create);
         }
-    });
+    }
 
     // Reload even on failure so the view shows what is really stored.
     let after = {

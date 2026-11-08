@@ -566,3 +566,9 @@ msgstr "Agrupa aquí tareas relacionadas, como un proyecto o un área de tu vida
 
 msgid "A habit is something you want to repeat on the days you choose. Mark each day on the monthly grid to build your streak and see your progress."
 msgstr "Un hábito es algo que quieres repetir los días que elijas. Marca cada día en la rejilla del mes para sumar a tu racha y ver tu progreso."
+
+msgid "Task"
+msgstr "Tarea"
+
+msgid "Task added to Inbox"
+msgstr "Tarea creada en Inbox"

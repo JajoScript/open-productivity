@@ -603,6 +603,17 @@ mod tests {
     }
 
     #[test]
+    fn create_in_inbox_has_no_list_or_date() {
+        let (dir, conn) = setup("inbox");
+        create(&conn, "x", View::Inbox, d("2026-06-15")).unwrap();
+        let tasks = list(&conn, View::Inbox, at(NOW)).unwrap();
+        assert_eq!(tasks.len(), 1);
+        assert!(tasks[0].list.is_none() && tasks[0].due.is_none());
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn empty_title_is_rejected_and_not_inserted() {
         let (dir, conn) = setup("empty");
         assert!(matches!(mk(&conn, ""), Err(TaskError::EmptyTitle)));
