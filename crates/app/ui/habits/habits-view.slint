@@ -2,11 +2,13 @@
 // Copyright (C) 2026 JajoScript
 
 import { Date, Palette, ScrollView } from "std-widgets.slint";
+import { EmptyState } from "../empty-state.slint";
 import { InkButton } from "../ink-button.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { DayState, HabitCell } from "habit-cell.slint";
+import { HabitPreview } from "habit-preview.slint";
 import { HeatCell, HeatLevel, MonthMap, MonthTotal } from "month-summary.slint";
 
 export { DayState, HeatCell, HeatLevel }
@@ -111,7 +113,8 @@ export component HabitsView inherits VerticalLayout {
             horizontal-stretch: 1;
         }
 
-        InkButton {
+        // With no habits, the empty state carries this button.
+        if root.habits.length > 0: InkButton {
             text: @tr("Add habit");
             clicked => {
                 root.new-habit();
@@ -125,12 +128,15 @@ export component HabitsView inherits VerticalLayout {
         wrap: word-wrap;
     }
 
-    if root.habits.length == 0: Text {
-        text: @tr("No habits yet. Add one above.");
-        color: Theme.muted;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        vertical-stretch: 1;
+    if root.habits.length == 0: EmptyState {
+        title: @tr("No habits yet.");
+        description: @tr("A habit is something you want to repeat on the days you choose. Mark each day on the monthly grid to build your streak and see your progress.");
+        action: @tr("Add habit");
+        clicked => {
+            root.new-habit();
+        }
+
+        HabitPreview { }
     }
 
     // With no active habits the grid is gone, so the link sits under the empty state.

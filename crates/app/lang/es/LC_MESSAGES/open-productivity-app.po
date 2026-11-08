@@ -39,8 +39,8 @@ msgstr "No se pudo guardar la tarea: {}"
 msgid "Tasks"
 msgstr "Tareas"
 
-msgid "No tasks yet. Add your first one above."
-msgstr "Aún no hay tareas. Añade la primera arriba."
+msgid "No tasks yet."
+msgstr "Aún no hay tareas."
 
 msgid "Today"
 msgstr "Hoy"
@@ -434,8 +434,8 @@ msgstr "Hábitos"
 msgid "Add habit"
 msgstr "Añadir hábito"
 
-msgid "No habits yet. Add one above."
-msgstr "Aún no hay hábitos. Añade uno arriba."
+msgid "No habits yet."
+msgstr "Aún no hay hábitos."
 
 msgid "Previous month"
 msgstr "Mes anterior"
@@ -536,3 +536,24 @@ msgstr "Restaurar {}"
 
 msgid "Month"
 msgstr "Mes"
+
+msgid "Tasks due today gather here, whichever list they belong to. Anything you add from this view is dated today."
+msgstr "Aquí se reúnen las tareas con fecha de hoy, sean de la lista que sean. Lo que añadas desde esta vista queda con fecha de hoy."
+
+msgid "Tasks with a future date wait here, soonest first, so you can see what is coming. A task added here starts out due tomorrow."
+msgstr "Aquí esperan las tareas con fecha futura, de la más próxima a la más lejana, para que veas lo que viene. Una tarea añadida aquí empieza con fecha de mañana."
+
+msgid "Jot things down here before deciding when or where they go. A task leaves the inbox once you give it a date or a list."
+msgstr "Apunta aquí lo que se te ocurra antes de decidir cuándo o dónde va. Una tarea sale del Inbox en cuanto le das una fecha o una lista."
+
+msgid "Tasks whose date has passed show up here until you complete them or give them a new date. You are up to date."
+msgstr "Aquí aparecen las tareas cuya fecha ya pasó, hasta que las completes o les des una fecha nueva. Vas al día."
+
+msgid "Every task you create shows up here, with or without a date or a list."
+msgstr "Aquí aparece cada tarea que crees, tenga o no fecha o lista."
+
+msgid "Group related tasks here, like a project or an area of your life. Tasks you add from this view go straight into this list."
+msgstr "Agrupa aquí tareas relacionadas, como un proyecto o un área de tu vida. Lo que añadas desde esta vista entra directamente en esta lista."
+
+msgid "A habit is something you want to repeat on the days you choose. Mark each day on the monthly grid to build your streak and see your progress."
+msgstr "Un hábito es algo que quieres repetir los días que elijas. Marca cada día en la rejilla del mes para sumar a tu racha y ver tu progreso."

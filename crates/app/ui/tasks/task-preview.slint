@@ -1,0 +1,182 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// One mock task, built like a real row: checkbox, title, list and date. Text is drawn as bars,
+// so it cannot be mistaken for real tasks, and nothing in it takes input.
+component PreviewRow inherits Rectangle {
+    in property <bool> on;
+    in property <length> title-width;
+    in property <bool> show-list;
+    in property <bool> show-date;
+    in property <bool> late;
+    in property <duration> delay;
+    // When the row gets checked off; only for `ticks`.
+    in property <duration> tick-delay;
+    in property <bool> ticks;
+
+    property <bool> ticked: root.on && root.ticks;
+    property <brush> date-color: root.late ? Theme.critical : Theme.muted;
+
+    height: 36px;
+
+    Rectangle {
+        y: root.on ? 0px : 6px;
+        opacity: root.on ? 1 : 0;
+        animate y, opacity { duration: Theme.enter; delay: root.delay; easing: Theme.ease-out; }
+
+        HorizontalLayout {
+            padding-left: 8px;
+            padding-right: 8px;
+            spacing: 10px;
+
+            Rectangle {
+                width: 16px;
+                Rectangle {
+                    width: 16px;
+                    height: 16px;
+                    border-radius: 4px;
+                    border-width: 1.5px;
+                    border-color: root.ticked ? Theme.ink : Theme.muted;
+                    background: root.ticked ? Theme.ink : transparent;
+                    animate background, border-color { duration: Theme.fast; delay: root.tick-delay; easing: Theme.ease-out; }
+
+                    Image {
+                        source: @image-url("../icons/check.svg");
+                        colorize: Theme.on-ink;
+                        width: root.ticked ? 12px : 4px;
+                        height: self.width;
+                        opacity: root.ticked ? 1 : 0;
+                        animate width, opacity { duration: Theme.fast; delay: root.tick-delay; easing: Theme.ease-out; }
+                        accessible-role: none;
+                    }
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                Rectangle {
+                    x: 0px;
+                    width: root.title-width;
+                    height: 8px;
+                    border-radius: 4px;
+                    background: root.ticked ? Theme.hover : Theme.hairline;
+                    animate background { duration: Theme.fast; delay: root.tick-delay; easing: Theme.ease-out; }
+                }
+            }
+
+            if root.show-list: HorizontalLayout {
+                horizontal-stretch: 0;
+                spacing: 5px;
+                alignment: center;
+                Image {
+                    source: @image-url("../icons/list.svg");
+                    colorize: Theme.muted;
+                    width: 14px;
+                    height: 14px;
+                    y: (parent.height - self.height) / 2;
+                    accessible-role: none;
+                }
+
+                Rectangle {
+                    width: 34px;
+                    Rectangle {
+                        width: 34px;
+                        height: 6px;
+                        border-radius: 3px;
+                        background: Theme.hairline;
+                    }
+                }
+            }
+
+            if root.show-date: HorizontalLayout {
+                horizontal-stretch: 0;
+                spacing: 5px;
+                alignment: center;
+                Image {
+                    source: @image-url("../icons/calendar.svg");
+                    colorize: root.date-color;
+                    width: 14px;
+                    height: 14px;
+                    y: (parent.height - self.height) / 2;
+                    accessible-role: none;
+                }
+
+                Rectangle {
+                    width: 38px;
+                    Rectangle {
+                        width: 38px;
+                        height: 6px;
+                        border-radius: 3px;
+                        background: root.late ? Theme.critical.with-alpha(0.4) : Theme.hairline;
+                    }
+                }
+            }
+        }
+    }
+}
+
+// A small task list that writes itself once when it appears, and checks a task off when `ticks`
+// is set. One pass and then still: nothing here loops.
+export component TaskPreview inherits Rectangle {
+    in property <bool> show-list;
+    in property <bool> show-date;
+    in property <bool> late;
+    // Whether tasks get checked off; a view of late tasks is better left pending.
+    in property <bool> ticks: true;
+
+    property <bool> on: false;
+
+    width: 340px;
+    height: 132px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+    background: Theme.field;
+    accessible-role: none;
+
+    Timer {
+        interval: 16ms;
+        running: !root.on;
+        triggered => {
+            root.on = true;
+        }
+    }
+
+    VerticalLayout {
+        padding: 12px;
+
+        PreviewRow {
+            on: root.on;
+            title-width: 118px;
+            show-list: root.show-list;
+            show-date: root.show-date;
+            late: root.late;
+            delay: 100ms;
+            tick-delay: 800ms;
+            ticks: root.ticks;
+        }
+
+        PreviewRow {
+            on: root.on;
+            title-width: 84px;
+            show-list: root.show-list;
+            show-date: root.show-date;
+            late: root.late;
+            delay: 200ms;
+            tick-delay: 1150ms;
+            ticks: root.ticks;
+        }
+
+        PreviewRow {
+            on: root.on;
+            title-width: 136px;
+            show-list: root.show-list;
+            show-date: root.show-date;
+            late: root.late;
+            delay: 300ms;
+        }
+    }
+}

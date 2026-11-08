@@ -3,6 +3,8 @@
 
 import { Date, ListView, Palette } from "std-widgets.slint";
 import { TaskCreator } from "task-creator.slint";
+import { TaskPreview } from "task-preview.slint";
+import { EmptyState } from "../empty-state.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
 import { PopupSurface } from "../popup-surface.slint";
@@ -234,7 +236,8 @@ export component TaskColumn inherits VerticalLayout {
             }
         }
 
-        if root.can-create: InkButton {
+        // With no tasks, the empty state carries this button.
+        if root.can-create && root.tasks.length > 0: InkButton {
             text: @tr("Add task");
             clicked => {
                 creator.show();
@@ -360,12 +363,20 @@ export component TaskColumn inherits VerticalLayout {
         color: Theme.muted;
     }
 
-    if root.tasks.length == 0: Text {
-        text: root.view == TaskView.today ? @tr("Nothing due today.") : root.view == TaskView.scheduled ? @tr("Nothing scheduled.") : root.view == TaskView.inbox ? @tr("The inbox is empty.") : root.view == TaskView.overdue ? @tr("Nothing overdue.") : root.view == TaskView.all ? @tr("No tasks yet. Add your first one above.") : @tr("This list is empty.");
-        color: Theme.muted;
-        horizontal-alignment: center;
-        vertical-alignment: center;
-        vertical-stretch: 1;
+    if root.tasks.length == 0: EmptyState {
+        title: root.view == TaskView.today ? @tr("Nothing due today.") : root.view == TaskView.scheduled ? @tr("Nothing scheduled.") : root.view == TaskView.inbox ? @tr("The inbox is empty.") : root.view == TaskView.overdue ? @tr("Nothing overdue.") : root.view == TaskView.all ? @tr("No tasks yet.") : @tr("This list is empty.");
+        action: root.can-create ? @tr("Add task") : "";
+        clicked => {
+            creator.show();
+        }
+        description: root.view == TaskView.today ? @tr("Tasks due today gather here, whichever list they belong to. Anything you add from this view is dated today.") : root.view == TaskView.scheduled ? @tr("Tasks with a future date wait here, soonest first, so you can see what is coming. A task added here starts out due tomorrow.") : root.view == TaskView.inbox ? @tr("Jot things down here before deciding when or where they go. A task leaves the inbox once you give it a date or a list.") : root.view == TaskView.overdue ? @tr("Tasks whose date has passed show up here until you complete them or give them a new date. You are up to date.") : root.view == TaskView.all ? @tr("Every task you create shows up here, with or without a date or a list.") : @tr("Group related tasks here, like a project or an area of your life. Tasks you add from this view go straight into this list.");
+
+        TaskPreview {
+            show-list: root.view == TaskView.today || root.view == TaskView.all || root.view == TaskView.list;
+            show-date: root.view != TaskView.inbox && root.view != TaskView.list;
+            late: root.view == TaskView.overdue;
+            ticks: root.view != TaskView.overdue;
+        }
     }
 
     if root.tasks.length > 0: ListView {

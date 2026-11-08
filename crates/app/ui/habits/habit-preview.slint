@@ -1,0 +1,150 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// One mock day: an outline that fills with ink and a check, as on the real grid.
+component PreviewCell inherits Rectangle {
+    in property <bool> on;
+    in property <bool> done;
+    in property <bool> today;
+    in property <duration> delay;
+
+    property <bool> filled: root.on && root.done;
+
+    width: 18px;
+    height: 18px;
+    border-radius: 4.5px;
+    border-width: root.done ? 1px : root.today ? 2px : 1.5px;
+    border-color: root.today ? Palette.foreground : root.done ? Theme.hairline : Theme.muted;
+
+    Rectangle {
+        width: root.filled ? 18px : 6px;
+        height: self.width;
+        border-radius: root.filled ? 4.5px : 3px;
+        background: Theme.ink;
+        opacity: root.filled ? 1 : 0;
+        animate width, border-radius, opacity { duration: Theme.fast; delay: root.delay; easing: Theme.ease-out; }
+
+        Image {
+            source: @image-url("../icons/check.svg");
+            colorize: Theme.on-ink;
+            width: 12px;
+            height: 12px;
+            accessible-role: none;
+        }
+    }
+}
+
+// A small month of habits that fills in once when it appears: days get marked, the week's bar
+// grows and the month map shades in. One pass and then still: nothing here loops.
+export component HabitPreview inherits Rectangle {
+    property <bool> on: false;
+    property <[[bool]]> marks: [
+        [true, true, false, true, true, true, false],
+        [true, false, true, true, false, true, false],
+        [true, true, true, true, true, false, false],
+    ];
+    property <[[float]]> heat: [
+        [0.25, 0.45, 0.7, 0.9, 0.45, 0.7, 0.25],
+        [0.7, 0.25, 0.9, 0.9, 0.7, 0.45, 0.9],
+        [0.45, 0.9, 0.7, 0.25, 0.9, 0.9, 0.7],
+        [0.9, 0.7, 0.45, 0.9, 0.7, 0.9, 0.06],
+    ];
+
+    width: 356px;
+    height: 132px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+    background: Theme.field;
+    accessible-role: none;
+
+    Timer {
+        interval: 16ms;
+        running: !root.on;
+        triggered => {
+            root.on = true;
+        }
+    }
+
+    HorizontalLayout {
+        padding: 12px;
+        spacing: 16px;
+        alignment: center;
+
+        VerticalLayout {
+            spacing: 6px;
+            alignment: center;
+
+            // The week's progress, over the day columns.
+            HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    width: 60px;
+                }
+
+                Rectangle {
+                    width: 144px;
+                    height: 3px;
+                    border-radius: 1.5px;
+                    background: Theme.hover;
+                    clip: true;
+                    Rectangle {
+                        x: 0px;
+                        width: root.on ? parent.width * 0.67 : 0px;
+                        background: Theme.ink;
+                        animate width { duration: 700ms; delay: 250ms; easing: Theme.ease-out; }
+                    }
+                }
+            }
+
+            for row[r] in root.marks: HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    width: 60px;
+                    Rectangle {
+                        x: 0px;
+                        width: 60px - r * 12px;
+                        height: 7px;
+                        border-radius: 3.5px;
+                        background: Theme.hairline;
+                    }
+                }
+
+                HorizontalLayout {
+                    spacing: 3px;
+                    for mark[c] in row: PreviewCell {
+                        on: root.on;
+                        done: mark;
+                        today: c == 6;
+                        delay: 200ms + (r * 7 + c) * 40ms;
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            width: 1px;
+            background: Theme.hairline;
+        }
+
+        // The month map.
+        VerticalLayout {
+            spacing: 2px;
+            alignment: center;
+            for row[r] in root.heat: HorizontalLayout {
+                spacing: 2px;
+                for level[c] in row: Rectangle {
+                    width: 11px;
+                    height: 11px;
+                    border-radius: 2.5px;
+                    background: Palette.foreground.with-alpha(level);
+                    opacity: root.on ? 1 : 0;
+                    animate opacity { duration: Theme.enter; delay: 900ms + (r + c) * 45ms; easing: Theme.ease-out; }
+                }
+            }
+        }
+    }
+}

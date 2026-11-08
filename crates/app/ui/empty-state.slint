@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { InkButton } from "ink-button.slint";
+import { Theme } from "theme.slint";
+
+// A module or view with nothing to show: a preview of it in use (the children), what it is for
+// and the action that fills it.
+export component EmptyState inherits HorizontalLayout {
+    in property <string> title;
+    in property <string> description;
+    // "" hides the button: some views can only be filled from elsewhere.
+    in property <string> action;
+    callback clicked;
+
+    alignment: center;
+    vertical-stretch: 1;
+
+    VerticalLayout {
+        max-width: 440px;
+        alignment: center;
+        spacing: 6px;
+
+        HorizontalLayout {
+            alignment: center;
+            padding-bottom: 18px;
+            @children
+        }
+
+        Text {
+            text: root.title;
+            font-size: 16px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        Text {
+            text: root.description;
+            color: Theme.muted;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        if root.action != "": HorizontalLayout {
+            alignment: center;
+            padding-top: 12px;
+            InkButton {
+                text: root.action;
+                clicked => {
+                    root.clicked();
+                }
+            }
+        }
+    }
+}
