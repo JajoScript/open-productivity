@@ -54,8 +54,8 @@ export component MonthTotal inherits VerticalLayout {
 // Weekday initials over the month in rows of seven, shaded by how much was done each day.
 export component MonthMap inherits VerticalLayout {
     in property <[[HeatCell]]> heat;
-    in property <length> cell: 22px;
 
+    property <length> cell: 18px;
     property <length> gap: 3px;
 
     spacing: root.gap;

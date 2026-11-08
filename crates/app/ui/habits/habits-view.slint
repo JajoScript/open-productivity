@@ -151,20 +151,21 @@ export component HabitsView inherits VerticalLayout {
         }
     }
 
-    // Sizes follow the window: the day cells grow to fill the width, so the grid never
-    // scrolls sideways, and a wide window moves the month summary to a side panel.
+    // Sizes follow the window: day cells stay at mouse size and the names take the spare
+    // width, so the grid never scrolls sideways; a wide window moves the month summary aside.
     property <length> content-w: root.width - 48px;
-    property <bool> wide: root.content-w >= 1100px;
-    property <length> panel-w: max(232px, min(320px, root.content-w * 0.18));
+    property <bool> wide: root.content-w >= 984px;
+    // As wide as the month map: seven 18px cells and six 3px gaps.
+    property <length> panel-w: 144px;
     // Room for the vertical scrollbar, so it never covers the last day.
     property <length> grid-w: (root.wide ? root.content-w - root.panel-w - 33px : root.content-w) - 16px;
-    property <length> name-w: max(112px, min(200px, root.grid-w * 0.15));
     property <int> blocks: root.day-numbers.length;
     property <int> days: root.blocks == 0 ? 0 : (root.blocks - 1) * 7 + root.day-numbers[root.blocks - 1].length;
-    property <length> cell: root.days == 0 ? 20px : max(18px, min(36px, Math.floor((root.grid-w - root.name-w - root.blocks * 8px - (root.days - root.blocks) * 3px) / root.days / 1px) * 1px));
-    // What the grid really takes once the cells hit their cap, so the panel follows it closely.
-    property <length> used-w: root.name-w + root.blocks * 8px + root.days * root.cell + (root.days - root.blocks) * 3px;
-    property <length> map-cell: root.wide ? Math.floor((root.panel-w - 18px) / 7 / 1px) * 1px : 22px;
+    property <length> gaps-w: root.blocks * 8px + (root.days - root.blocks) * 3px;
+    property <length> cell: root.days == 0 ? 20px : max(18px, min(20px, Math.floor((root.grid-w - 112px - root.gaps-w) / root.days / 1px) * 1px));
+    property <length> name-w: max(112px, min(240px, root.grid-w - root.gaps-w - root.days * root.cell));
+    // What the grid really takes once the names hit their cap, so the panel follows it closely.
+    property <length> used-w: root.name-w + root.gaps-w + root.days * root.cell;
 
     if root.habits.length > 0: scroll := ScrollView {
         content-width: self.visible-width;
@@ -186,7 +187,6 @@ export component HabitsView inherits VerticalLayout {
 
                 MonthMap {
                     heat: root.heat;
-                    cell: root.map-cell;
                 }
             }
 
@@ -251,7 +251,7 @@ export component HabitsView inherits VerticalLayout {
                                 spacing: 3px;
                                 for bar in week.bars: Rectangle {
                                     width: root.cell;
-                                    height: 64px;
+                                    height: 40px;
                                     if bar.applies: Rectangle {
                                         x: (parent.width - self.width) / 2;
                                         width: 6px;
@@ -384,7 +384,6 @@ export component HabitsView inherits VerticalLayout {
 
                     MonthMap {
                         heat: root.heat;
-                        cell: root.map-cell;
                     }
                 }
             }
