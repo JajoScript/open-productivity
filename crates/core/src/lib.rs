@@ -4,6 +4,7 @@
 //! Domain logic and storage, independent of the UI.
 
 pub use chrono;
+pub mod agenda;
 pub mod calendar;
 pub mod db;
 pub mod habits;

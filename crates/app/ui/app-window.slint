@@ -10,13 +10,14 @@ import { ListCreator } from "tasks/list-creator.slint";
 import { HabitCreator } from "habits/habit-creator.slint";
 import { ArchivedHabits } from "habits/archived-habits.slint";
 import { ArchivedRow, DayState, HabitRow, HabitsView, HeatCell, HeatLevel, WeekTotal } from "habits/habits-view.slint";
+import { CalendarDay, CalendarTask, CalendarView } from "calendar/calendar-view.slint";
 import { Module, Rail } from "rail.slint";
 import { QuickCreate } from "quick-create.slint";
 import { TaskCreator } from "tasks/task-creator.slint";
 import { ColorMode, Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
 import { DayHabit, DueKind, KanbanColumn, Quadrant, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { ArchivedRow, Calendar, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
+export { ArchivedRow, Calendar, CalendarDay, CalendarTask, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -54,6 +55,10 @@ export component AppWindow inherits Window {
     callback export-copy;
     callback select-view(TaskView);
     callback select-tab(TasksTab);
+    in property <[[CalendarDay]]> calendar-weeks;
+    in property <Date> calendar-month;
+    in property <string> calendar-error;
+    callback calendar-shift(int);
     in property <[WeekDay]> week-days;
     callback week-shift(int);
     in property <[KanbanColumn]> kanban-columns;
@@ -254,6 +259,17 @@ export component AppWindow inherits Window {
                     }
                     set-color-mode(m) => {
                         root.set-color-mode(m);
+                    }
+                }
+
+                if root.module == Module.calendar: CalendarView {
+                    width: parent.width;
+                    height: parent.height;
+                    weeks: root.calendar-weeks;
+                    month: root.calendar-month;
+                    error: root.calendar-error;
+                    shift(n) => {
+                        root.calendar-shift(n);
                     }
                 }
 

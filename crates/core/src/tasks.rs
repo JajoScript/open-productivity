@@ -334,11 +334,11 @@ pub fn kanban(conn: &Connection, now: DateTime<Utc>) -> Result<[Vec<Task>; 3], T
     ])
 }
 
-const SELECT_TASKS: &str = "SELECT t.id, t.title, t.note, t.done_at IS NOT NULL, t.due_date, \
+pub(crate) const SELECT_TASKS: &str = "SELECT t.id, t.title, t.note, t.done_at IS NOT NULL, t.due_date, \
      t.list_id, l.name, t.urgent, t.important FROM task t LEFT JOIN list l ON l.id = t.list_id";
 
 /// Runs a `SELECT_TASKS` query and parses the stored due dates.
-fn query(
+pub(crate) fn query(
     conn: &Connection,
     sql: &str,
     params: impl rusqlite::Params,

@@ -1,0 +1,176 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+
+// A task in a day cell; the calendar only shows it.
+export struct CalendarTask {
+    id: int,
+    title: string,
+    done: bool,
+}
+
+// One cell of the month grid: the day and the tasks due on it.
+export struct CalendarDay {
+    day: int,
+    // False for the filler days of the neighbouring months.
+    in-month: bool,
+    today: bool,
+    tasks: [CalendarTask],
+}
+
+component CalendarCell inherits Rectangle {
+    in property <CalendarDay> cell;
+
+    property <length> row-h: 20px;
+    // Rows that fit under the day number; when the tasks do not all fit, the last one is "+N".
+    property <int> fit: max(1, Math.floor((root.height - 38px) / root.row-h));
+    property <bool> overflow: root.cell.tasks.length > root.fit;
+    property <int> shown: root.overflow ? root.fit - 1 : root.cell.tasks.length;
+
+    // Equal cells whatever their content.
+    preferred-width: 0px;
+    preferred-height: 0px;
+    horizontal-stretch: 1;
+    vertical-stretch: 1;
+    clip: true;
+    border-radius: 6px;
+    background: root.cell.today ? Theme.field : transparent;
+    border-width: 1px;
+    border-color: Theme.hairline;
+
+    // Placed by hand, not in a layout: the rows that fit depend on the cell's height, and a
+    // layout would feed its own content size back into it.
+    Rectangle {
+        x: 6px;
+        y: 6px;
+        width: max(24px, number.preferred-width + 8px);
+        height: 24px;
+        border-radius: 5px;
+        background: root.cell.today ? Theme.ink : transparent;
+        number := Text {
+            text: root.cell.day;
+            font-size: 12px;
+            font-weight: root.cell.today ? 700 : 400;
+            color: root.cell.today ? Theme.on-ink : root.cell.in-month ? Palette.foreground : Theme.muted;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+        }
+    }
+
+    for t[i] in root.cell.tasks: Text {
+        visible: i < root.shown;
+        x: 6px;
+        y: 32px + i * root.row-h;
+        width: parent.width - 12px;
+        height: root.row-h;
+        text: t.title;
+        font-size: 12px;
+        overflow: elide;
+        vertical-alignment: center;
+        color: t.done ? Theme.done : root.cell.in-month ? Palette.foreground : Theme.muted;
+    }
+
+    if root.overflow: Text {
+        x: 6px;
+        y: 32px + root.shown * root.row-h;
+        width: parent.width - 12px;
+        height: root.row-h;
+        text: Strings.more-tasks(root.cell.tasks.length - root.shown);
+        font-size: 12px;
+        color: Theme.muted;
+        overflow: elide;
+        vertical-alignment: center;
+    }
+}
+
+// The month as a grid, Monday first, tasks placed by due date. Read only.
+export component CalendarView inherits VerticalLayout {
+    // Rows of seven days.
+    in property <[[CalendarDay]]> weeks;
+    // The month shown; only its month and year matter.
+    in property <Date> month;
+    in property <string> error;
+    // -1 / +1 moves a month; 0 goes back to the current one.
+    callback shift(int);
+
+    padding: 24px;
+    padding-top: 20px;
+    spacing: 12px;
+
+    HorizontalLayout {
+        spacing: 4px;
+        alignment: start;
+        Text {
+            text: @tr("Calendar");
+            font-size: 24px;
+            font-weight: 700;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/chevron-left.svg");
+            label: @tr("Previous month");
+            clicked => {
+                root.shift(-1);
+            }
+        }
+
+        Text {
+            text: Strings.month-year(root.month.month, root.month.year);
+            vertical-alignment: center;
+            horizontal-alignment: center;
+            min-width: 120px;
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/chevron-right.svg");
+            label: @tr("Next month");
+            clicked => {
+                root.shift(1);
+            }
+        }
+
+        SubtleButton {
+            text: @tr("Today");
+            color: Palette.foreground;
+            clicked => {
+                root.shift(0);
+            }
+        }
+    }
+
+    if root.error != "": Text {
+        text: root.error;
+        color: Theme.critical;
+        wrap: word-wrap;
+    }
+
+    HorizontalLayout {
+        spacing: 4px;
+        for name in Strings.weekdays: Text {
+            preferred-width: 0px;
+            horizontal-stretch: 1;
+            text: name;
+            color: Theme.muted;
+            font-size: 11px;
+            font-weight: 600;
+            horizontal-alignment: center;
+        }
+    }
+
+    VerticalLayout {
+        spacing: 4px;
+        vertical-stretch: 1;
+        for week in root.weeks: HorizontalLayout {
+            spacing: 4px;
+            for cell in week: CalendarCell {
+                cell: cell;
+            }
+        }
+    }
+}

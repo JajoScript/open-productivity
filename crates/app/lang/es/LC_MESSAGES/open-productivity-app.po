@@ -575,3 +575,12 @@ msgstr "Hábito"
 
 msgid "Task added to Inbox"
 msgstr "Tarea creada en Inbox"
+
+msgid "Could not load the calendar: {}"
+msgstr "No se pudo cargar el calendario: {}"
+
+msgid "+{}"
+msgstr "+{}"
+
+msgid "Calendar"
+msgstr "Calendario"

@@ -17,6 +17,7 @@ use rfd::{FileDialog, MessageButtons, MessageDialog, MessageLevel};
 
 mod about;
 mod calendar;
+mod calendar_view;
 mod data;
 mod dialogs;
 mod habits;
@@ -246,6 +247,25 @@ mod tests {
             s.invoke_week_range(30, 11, 6, 12),
             "November 30 – December 6"
         );
+    }
+
+    #[test]
+    fn calendar_module_shows_the_month_and_navigates() {
+        use slint::Model;
+
+        let (dir, w, _timer) = window_with_task("calendar", "a");
+        click(&w, "Calendar");
+        assert!(find(&w, "Next month").is_some());
+        assert_eq!(w.get_calendar_weeks().row_count(), 6);
+        let month = w.get_calendar_month();
+        click(&w, "Next month");
+        let next = w.get_calendar_month();
+        assert_ne!((month.year, month.month), (next.year, next.month));
+        click(&w, "Today");
+        let back = w.get_calendar_month();
+        assert_eq!((back.year, back.month), (month.year, month.month));
+        drop(w);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]

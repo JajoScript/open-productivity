@@ -3,7 +3,7 @@
 
 //! Glue between the Tasks view and `core::tasks`.
 
-use std::cell::Cell;
+use std::cell::{Cell, OnceCell};
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -15,7 +15,7 @@ use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::{
     AppWindow, Date, DueKind, KanbanColumn, ListEntry, Quadrant, Strings, TaskRow, TaskView,
-    TasksTab, WeekDay, habits, kanban, lists, matrix, week,
+    TasksTab, WeekDay, calendar_view, habits, kanban, lists, matrix, week,
 };
 
 pub struct State {
@@ -33,6 +33,8 @@ pub struct State {
     // Day of the last reload, so the timer only rebuilds rows when it changes.
     pub day: Cell<NaiveDate>,
     pub window: slint::Weak<AppWindow>,
+    /// Refreshes the Calendar module after every reload, so it never shows stale tasks.
+    pub on_reload: OnceCell<Box<dyn Fn()>>,
 }
 
 /// Slint ints are i32; a larger id is an error, not a panic.
@@ -96,6 +98,14 @@ pub fn show_today(w: &AppWindow, today: NaiveDate) {
 impl State {
     /// Only what the open tab shows: the week, or the view's rows plus the lists panel.
     pub fn reload(&self) -> Result<(), String> {
+        let res = self.reload_tab();
+        if let Some(f) = self.on_reload.get() {
+            f();
+        }
+        res
+    }
+
+    fn reload_tab(&self) -> Result<(), String> {
         let now = Local::now().fixed_offset();
         let today = now.date_naive();
         self.day.set(today);
@@ -141,6 +151,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         matrix: Rc::default(),
         day: Cell::new(Local::now().date_naive()),
         window: window.as_weak(),
+        on_reload: OnceCell::new(),
     });
     window.set_tasks(ModelRc::from(state.rows.clone()));
     window.set_week_days(ModelRc::from(state.week.clone()));
@@ -162,6 +173,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         }
     });
 
+    calendar_view::init(window, &state);
     finish(state.reload());
 
     window.on_select_view({

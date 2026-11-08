@@ -40,6 +40,15 @@ export global Strings {
         return @tr("Could not save the task: {}", error);
     }
 
+    public pure function calendar-failed(error: string) -> string {
+        return @tr("Could not load the calendar: {}", error);
+    }
+
+    // Tasks of a calendar day that do not fit in its cell.
+    public pure function more-tasks(n: int) -> string {
+        return @tr("+{}", n);
+    }
+
     public pure function settings-failed(error: string) -> string {
         return @tr("Could not save the settings: {}", error);
     }
