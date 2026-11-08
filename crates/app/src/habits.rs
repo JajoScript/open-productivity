@@ -14,7 +14,7 @@ use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::tasks::ui_id;
 use crate::{
-    AppWindow, ArchivedRow, Date, DayBar, DayHabit, DayState, HabitRow, HeatCell, HeatLevel,
+    AppWindow, ArchivedRow, Date, DayHabit, DayState, HabitRow, HeatCell, HeatLevel,
     Strings, WeekTotal,
 };
 
@@ -87,21 +87,12 @@ impl State {
             })
             .collect::<Result<Vec<_>, String>>()?;
         let totals: Vec<WeekTotal> = m
-            .day_totals
-            .chunks(7)
-            .zip(&m.week_totals)
-            .map(|(days, t)| WeekTotal {
+            .week_totals
+            .iter()
+            .map(|t| WeekTotal {
                 done: t.done as i32,
                 applicable: t.applicable as i32,
                 pct: t.pct().unwrap_or(0) as i32,
-                bars: ModelRc::new(VecModel::from(
-                    days.iter()
-                        .map(|d| DayBar {
-                            applies: d.applicable > 0,
-                            pct: d.pct().unwrap_or(0) as i32,
-                        })
-                        .collect::<Vec<_>>(),
-                )),
             })
             .collect();
         if let Some(w) = self.window.upgrade() {
@@ -116,7 +107,6 @@ impl State {
                 done: t.done as i32,
                 applicable: t.applicable as i32,
                 pct: t.pct().unwrap_or(0) as i32,
-                bars: Default::default(),
             });
             // Blank cells pad the first row so the map starts on Monday.
             let cells: Vec<HeatCell> = (0..m.lead)

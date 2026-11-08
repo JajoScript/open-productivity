@@ -16,6 +16,7 @@ export enum DayState {
 export component HabitCell {
     in property <DayState> state;
     in property <string> label;
+    in property <bool> today;
     callback toggled(bool);
 
     property <bool> markable: root.state == DayState.done || root.state == DayState.open;
@@ -41,10 +42,10 @@ export component HabitCell {
     box := Rectangle {
         visible: root.state != DayState.skipped;
         border-radius: root.size / 4;
-        // Future days are a faint filled square, so only open days carry an outline.
-        border-width: root.state == DayState.open ? 1.5px : 0px;
-        border-color: touch.has-hover ? Palette.foreground : Theme.muted;
-        background: root.done ? Theme.ink : root.state == DayState.future ? Theme.hairline : touch.has-hover ? Theme.hover : transparent;
+        // Future days are a faint outline, so the eye goes to today and the days still open.
+        border-width: root.state == DayState.future ? 1px : root.state == DayState.open ? (root.today ? 2px : 1.5px) : 0px;
+        border-color: root.state == DayState.future ? Theme.hairline : touch.has-hover || root.today ? Palette.foreground : Theme.muted;
+        background: root.done ? Theme.ink : touch.has-hover ? Theme.hover : transparent;
         animate background, border-color { duration: Theme.fast; easing: Theme.ease-out; }
 
         if root.done: Image {

@@ -24,18 +24,11 @@ export struct HabitRow {
     weeks: [[DayState]],
 }
 
-// One day of the totals band: whether any habit applies and the share done (0-100).
-export struct DayBar {
-    applies: bool,
-    pct: int,
-}
-
 // Totals of one block of seven days, in the same blocks as `HabitsView.day-numbers`.
 export struct WeekTotal {
     done: int,
     applicable: int,
     pct: int,
-    bars: [DayBar],
 }
 
 export struct ArchivedRow {
@@ -212,7 +205,7 @@ export component HabitsView inherits VerticalLayout {
                             Text {
                                 text: Strings.week-label(w + 1);
                                 color: Theme.muted;
-                                font-size: 10px;
+                                font-size: 11px;
                                 font-weight: 600;
                                 overflow: elide;
                             }
@@ -237,7 +230,7 @@ export component HabitsView inherits VerticalLayout {
                         }
                     }
 
-                    // Share done per day as a bar, and per block as "x/y z%" with its progress.
+                    // Each block as "x/y z%" with its progress.
                     HorizontalLayout {
                         spacing: 8px;
                         alignment: start;
@@ -245,32 +238,14 @@ export component HabitsView inherits VerticalLayout {
                             width: root.name-w;
                         }
 
-                        for week in root.week-totals: VerticalLayout {
+                        for week[w] in root.week-totals: VerticalLayout {
+                            // Room for the block's own width: the short last block only fits the share.
+                            width: root.day-numbers[w].length * root.cell + (root.day-numbers[w].length - 1) * 3px;
                             spacing: 3px;
-                            HorizontalLayout {
-                                spacing: 3px;
-                                for bar in week.bars: Rectangle {
-                                    width: root.cell;
-                                    height: 40px;
-                                    if bar.applies: Rectangle {
-                                        x: (parent.width - self.width) / 2;
-                                        width: 6px;
-                                        border-radius: 3px;
-                                        background: Theme.hover;
-                                        clip: true;
-                                        Rectangle {
-                                            y: parent.height * (1 - bar.pct / 100);
-                                            height: parent.height * bar.pct / 100;
-                                            background: Theme.ink;
-                                        }
-                                    }
-                                }
-                            }
-
                             Text {
-                                text: Strings.week-total(week.done, week.applicable, week.pct);
+                                text: root.day-numbers[w].length < 4 ? Strings.percent(week.pct) : Strings.week-total(week.done, week.applicable, week.pct);
                                 color: Theme.muted;
-                                font-size: 10px;
+                                font-size: 11px;
                                 overflow: elide;
                             }
 
@@ -318,7 +293,7 @@ export component HabitsView inherits VerticalLayout {
                                     Text {
                                         text: Strings.habit-streaks(habit.streak, habit.best);
                                         color: Theme.muted;
-                                        font-size: 10px;
+                                        font-size: 11px;
                                         overflow: elide;
                                         horizontal-stretch: 1;
                                     }
@@ -326,7 +301,7 @@ export component HabitsView inherits VerticalLayout {
                                     Text {
                                         text: Strings.percent(habit.month-pct);
                                         color: Theme.muted;
-                                        font-size: 10px;
+                                        font-size: 11px;
                                         horizontal-stretch: 0;
                                     }
                                 }
@@ -345,6 +320,7 @@ export component HabitsView inherits VerticalLayout {
                             for state[i] in week: HabitCell {
                                 size: root.cell;
                                 state: state;
+                                today: root.day-numbers[w][i] == root.today-day;
                                 label: habit.name + " " + Strings.date(root.day-numbers[w][i], root.month.month, root.month.year);
                                 toggled(done) => {
                                     root.set-habit-done(habit.id, root.day-numbers[w][i], done);
