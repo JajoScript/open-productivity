@@ -10,9 +10,11 @@ import { AboutSection } from "about-section.slint";
 import { LicenseOverlay } from "license-overlay.slint";
 
 export enum Language { system, spanish, english }
+export enum ColorMode { system, light, dark }
 
 export component SettingsView inherits Rectangle {
     in property <Language> language;
+    in property <ColorMode> color-mode;
     in property <string> error;
     in property <string> version;
     in property <string> license-text;
@@ -26,6 +28,7 @@ export component SettingsView inherits Rectangle {
     callback new-instance;
     callback open-folder;
     callback set-language(Language);
+    callback set-color-mode(ColorMode);
     callback open-source;
 
     property <bool> license-open;
@@ -60,6 +63,22 @@ export component SettingsView inherits Rectangle {
         } else {
             english.focus();
             root.set-language(Language.english);
+        }
+    }
+
+    function go-mode(from: int, delta: int) {
+        if (from + delta < 0 || from + delta > 2) {
+            return;
+        }
+        if (from + delta == 0) {
+            mode-system.focus();
+            root.set-color-mode(ColorMode.system);
+        } else if (from + delta == 1) {
+            mode-light.focus();
+            root.set-color-mode(ColorMode.light);
+        } else {
+            mode-dark.focus();
+            root.set-color-mode(ColorMode.dark);
         }
     }
 
@@ -164,6 +183,51 @@ export component SettingsView inherits Rectangle {
                     }
                     step(d) => {
                         root.go(2, d);
+                    }
+                }
+            }
+
+            Text {
+                text: @tr("Appearance");
+                font-weight: 700;
+                color: Palette.foreground.with-alpha(0.7);
+            }
+
+            VerticalLayout {
+                spacing: 2px;
+                max-width: 360px;
+                accessible-role: list;
+                accessible-label: @tr("Appearance");
+                mode-system := OptionRow {
+                    text: @tr("System");
+                    checked: root.color-mode == ColorMode.system;
+                    chosen => {
+                        root.set-color-mode(ColorMode.system);
+                    }
+                    step(d) => {
+                        root.go-mode(0, d);
+                    }
+                }
+
+                mode-light := OptionRow {
+                    text: @tr("Light");
+                    checked: root.color-mode == ColorMode.light;
+                    chosen => {
+                        root.set-color-mode(ColorMode.light);
+                    }
+                    step(d) => {
+                        root.go-mode(1, d);
+                    }
+                }
+
+                mode-dark := OptionRow {
+                    text: @tr("Dark");
+                    checked: root.color-mode == ColorMode.dark;
+                    chosen => {
+                        root.set-color-mode(ColorMode.dark);
+                    }
+                    step(d) => {
+                        root.go-mode(2, d);
                     }
                 }
             }

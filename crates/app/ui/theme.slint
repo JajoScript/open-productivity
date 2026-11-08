@@ -5,8 +5,10 @@ import { Palette } from "std-widgets.slint";
 
 // Monochrome system: every state is the ink (Palette.foreground) at an alpha; no accent color.
 export global Theme {
+    // Palette.color-scheme reads `unknown` when the app follows the system, so judge by the paper itself.
+    out property <bool> dark: Palette.color-scheme == ColorScheme.dark || (Palette.color-scheme == ColorScheme.unknown && Palette.background.to-oklch().lightness < 0.5);
     // Fluent "critical" text: readable on both the light and the dark background.
-    out property <color> critical: Palette.color-scheme == ColorScheme.dark ? #FF99A4 : #C42B1C;
+    out property <color> critical: root.dark ? #FF99A4 : #C42B1C;
     out property <brush> hover: Palette.foreground.with-alpha(0.06);
     out property <brush> pressed: Palette.foreground.with-alpha(0.1);
     out property <brush> selected: Palette.foreground.with-alpha(0.09);
@@ -16,13 +18,13 @@ export global Theme {
     out property <brush> done: Palette.foreground.with-alpha(0.5);
     // Resting fill of text fields; selected text in them.
     out property <brush> field: Palette.foreground.with-alpha(0.03);
-    out property <color> selection: Palette.color-scheme == ColorScheme.dark ? #FFFFFF38 : #00000038;
+    out property <color> selection: root.dark ? #FFFFFF38 : #00000038;
     // Ink-filled controls (primary button, checked box): ink plate, paper glyph.
     out property <brush> ink: Palette.foreground;
     out property <brush> on-ink: Palette.background;
 
     // Paper grain over the content plane; 0 turns the texture off.
-    out property <float> grain: Palette.color-scheme == ColorScheme.dark ? 0.05 : 0.035;
+    out property <float> grain: root.dark ? 0.05 : 0.035;
 
     // Motion: short state washes, one longer entrance per view change.
     out property <duration> fast: 150ms;

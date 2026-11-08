@@ -31,11 +31,25 @@ impl Language {
     }
 }
 
+/// Light/dark appearance. Not called `Theme`: that is the Slint global.
+#[derive(Serialize, Deserialize, Default, Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColorMode {
+    /// Follow the operating system.
+    #[default]
+    #[serde(rename = "system")]
+    System,
+    #[serde(rename = "light")]
+    Light,
+    #[serde(rename = "dark")]
+    Dark,
+}
+
 // `default` on the struct lets future settings be missing from old files.
 #[derive(Serialize, Deserialize, Default, Clone, Debug, PartialEq, Eq)]
 #[serde(default)]
 pub struct Settings {
     pub language: Language,
+    pub color_mode: ColorMode,
 }
 
 /// Reads the settings. A missing, unreadable or corrupt file gives the defaults and is
@@ -81,7 +95,14 @@ mod tests {
         let dir = setup("roundtrip");
         let path = dir.join("sub").join("settings.json");
         for language in [Language::System, Language::Spanish, Language::English] {
-            save(&path, &Settings { language }).unwrap();
+            save(
+                &path,
+                &Settings {
+                    language,
+                    ..Default::default()
+                },
+            )
+            .unwrap();
             assert_eq!(load(&path).language, language);
         }
         assert!(!path.with_extension("json.tmp").exists());
@@ -96,6 +117,7 @@ mod tests {
             &path,
             &Settings {
                 language: Language::Spanish,
+                ..Default::default()
             },
         )
         .unwrap();
@@ -119,8 +141,54 @@ mod tests {
     fn unknown_extra_fields_are_tolerated() {
         let dir = setup("extra");
         let path = dir.join("settings.json");
-        std::fs::write(&path, r#"{"language":"en","theme":"dark"}"#).unwrap();
+        std::fs::write(&path, r#"{"language":"en","font":"big"}"#).unwrap();
         assert_eq!(load(&path).language, Language::English);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn round_trips_each_color_mode() {
+        let dir = setup("colormode");
+        let path = dir.join("settings.json");
+        for color_mode in [ColorMode::System, ColorMode::Light, ColorMode::Dark] {
+            let s = Settings {
+                color_mode,
+                ..Default::default()
+            };
+            save(&path, &s).unwrap();
+            assert_eq!(load(&path).color_mode, color_mode);
+        }
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn old_file_without_color_mode_is_system_and_keeps_language() {
+        let dir = setup("oldfile");
+        let path = dir.join("settings.json");
+        std::fs::write(&path, r#"{"language":"es"}"#).unwrap();
+        let s = load(&path);
+        assert_eq!(s.color_mode, ColorMode::System);
+        assert_eq!(s.language, Language::Spanish);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn changing_one_setting_keeps_the_other() {
+        let dir = setup("keep");
+        let path = dir.join("settings.json");
+        let s = Settings {
+            language: Language::English,
+            color_mode: ColorMode::Dark,
+        };
+        save(&path, &s).unwrap();
+        let mut s = load(&path);
+        s.color_mode = ColorMode::Light;
+        save(&path, &s).unwrap();
+        assert_eq!(load(&path).language, Language::English);
+        let mut s = load(&path);
+        s.language = Language::Spanish;
+        save(&path, &s).unwrap();
+        assert_eq!(load(&path).color_mode, ColorMode::Light);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

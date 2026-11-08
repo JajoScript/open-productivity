@@ -198,6 +198,15 @@ msgstr "Idioma"
 msgid "System"
 msgstr "Sistema"
 
+msgid "Appearance"
+msgstr "Apariencia"
+
+msgid "Light"
+msgstr "Claro"
+
+msgid "Dark"
+msgstr "Oscuro"
+
 msgid "Could not open the link: {}"
 msgstr "No se pudo abrir el enlace: {}"
 
