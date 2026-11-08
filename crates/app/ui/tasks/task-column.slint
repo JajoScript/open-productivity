@@ -2,7 +2,7 @@
 // Copyright (C) 2026 JajoScript
 
 import { Date, ListView, Palette } from "std-widgets.slint";
-import { AddRow } from "../add-row.slint";
+import { TaskCreator } from "task-creator.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
 import { PopupSurface } from "../popup-surface.slint";
@@ -155,7 +155,7 @@ component TaskLine inherits Rectangle {
         }
     }
 }
-// The tasks of one view: title, new task field and the rows.
+// The tasks of one view: title, the button that opens the creator, and the rows.
 export component TaskColumn inherits VerticalLayout {
     in property <TaskView> view;
     // From core (`View::can_create`): whether the view takes new tasks.
@@ -167,7 +167,7 @@ export component TaskColumn inherits VerticalLayout {
     in property <int> list-id;
     in property <string> list-name;
     in property <[ListEntry]> lists;
-    callback create-task(string);
+    callback create-task(string) -> string;
     callback set-done(int, bool);
     callback set-due(int, Date);
     callback clear-due(int);
@@ -215,6 +215,21 @@ export component TaskColumn inherits VerticalLayout {
                 confirm.show();
             }
         }
+
+        if root.can-create: InkButton {
+            text: @tr("Add task");
+            clicked => {
+                creator.show();
+            }
+        }
+    }
+
+    creator := TaskCreator {
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        create(title) => {
+            return root.create-task(title);
+        }
     }
 
     confirm := PopupWindow {
@@ -250,13 +265,6 @@ export component TaskColumn inherits VerticalLayout {
                     }
                 }
             }
-        }
-    }
-
-    if root.can-create: AddRow {
-        placeholder: @tr("Add task…");
-        accepted(text) => {
-            root.create-task(text);
         }
     }
 
@@ -304,7 +312,7 @@ export component TaskColumn inherits VerticalLayout {
     }
 
     editor := TaskEditor {
-        // Fixed spot under the input row, so it never runs off the bottom for low rows.
+        // Fixed spot under the title, so it never runs off the bottom for low rows.
         x: (root.width - self.width) / 2;
         y: 72px;
         task-id: root.editing.id;
@@ -324,6 +332,14 @@ export component TaskColumn inherits VerticalLayout {
         text: root.error;
         color: Theme.critical;
         wrap: word-wrap;
+    }
+
+    // Only beside the habits: alone under the view's title it would say the same thing twice.
+    if root.day-habits.length > 0: Text {
+        text: Strings.tasks-today(root.done-count, root.tasks.length);
+        font-size: 12px;
+        font-weight: 600;
+        color: Theme.muted;
     }
 
     if root.tasks.length == 0: Text {

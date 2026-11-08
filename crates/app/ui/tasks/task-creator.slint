@@ -1,0 +1,95 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+
+// Rebuilt on every show(), so the title and the error always start empty.
+component CreatorBody inherits FocusScope {
+    callback create(string) -> string;
+    callback cancel;
+
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+
+        Text {
+            text: @tr("New task");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        name := InkField {
+            placeholder-text: @tr("Task title");
+            init => {
+                self.focus();
+            }
+            accepted(text) => {
+                root.error = root.create(text);
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Create");
+                clicked => {
+                    root.error = root.create(name.text);
+                }
+            }
+        }
+    }
+}
+
+// Creates a task in the open view; closing by clicking outside discards it.
+export component TaskCreator inherits PopupWindow {
+    // Returns the error to show; empty means the task was created and the modal closes.
+    callback create(string) -> string;
+
+    close-policy: close-on-click-outside;
+    width: 360px;
+
+    PopupSurface {
+        CreatorBody {
+            create(title) => {
+                let error = root.create(title);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

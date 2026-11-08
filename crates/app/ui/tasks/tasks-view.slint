@@ -86,7 +86,7 @@ export component TasksView inherits VerticalLayout {
     callback select-view(TaskView);
     callback select-list(int);
     callback new-list;
-    callback create-task(string);
+    callback create-task(string) -> string;
     callback set-done(int, bool);
     callback set-due(int, Date);
     callback clear-due(int);
@@ -288,7 +288,7 @@ export component TasksView inherits VerticalLayout {
             list-name: root.list-name;
             lists: root.lists;
             create-task(title) => {
-                root.create-task(title);
+                return root.create-task(title);
             }
             set-done(id, done) => {
                 root.set-done(id, done);

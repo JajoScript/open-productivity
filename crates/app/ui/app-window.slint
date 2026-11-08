@@ -58,7 +58,7 @@ export component AppWindow inherits Window {
     pure callback payload-task(data-transfer) -> int;
     in property <[Quadrant]> quadrants;
     callback set-priority(int, bool, bool);
-    callback create-task(string);
+    callback create-task(string) -> string;
     callback set-done(int, bool);
     callback set-due(int, Date);
     callback clear-due(int);
@@ -321,7 +321,7 @@ export component AppWindow inherits Window {
                     list-name: root.current-list-name;
                     lists: root.lists;
                     create-task(title) => {
-                        root.create-task(title);
+                        return root.create-task(title);
                     }
                     set-done(id, done) => {
                         root.set-done(id, done);

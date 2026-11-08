@@ -237,7 +237,7 @@ mod tests {
         let w = window();
         click(&w, "Week");
         assert!(find(&w, "Next week").is_some());
-        assert!(find(&w, "Add task…").is_none());
+        assert!(find(&w, "Add task").is_none());
         click(&w, "Lists");
         assert!(find(&w, "Next week").is_none());
         assert!(find(&w, "New list").is_some());
@@ -252,10 +252,27 @@ mod tests {
     fn kanban_tab_shows_the_board_alone() {
         let w = window();
         click(&w, "Kanban");
-        assert!(find(&w, "Add task…").is_none());
+        assert!(find(&w, "Add task").is_none());
         assert!(find(&w, "Next week").is_none());
         click(&w, "Today");
-        assert!(find(&w, "Add task…").is_some() || find(&w, "Nothing due today.").is_some());
+        assert!(find(&w, "Add task").is_some() || find(&w, "Nothing due today.").is_some());
+    }
+
+    #[test]
+    fn add_task_opens_the_creator_which_rejects_an_empty_title() {
+        let (dir, w, _timer) = window_with_task("creator", "a");
+        click(&w, "Add task");
+        // Inside a popup positions are popup-relative, so a pointer click would land outside it.
+        find(&w, "Create")
+            .unwrap()
+            .invoke_accessible_default_action();
+        assert!(find(&w, "Task title").is_some(), "stays open with no title");
+        assert!(find(&w, "Write a title for the task.").is_some());
+        let esc = slint::platform::Key::Escape.into();
+        w.window().dispatch_event(E::KeyPressed { text: esc });
+        assert!(find(&w, "Task title").is_none());
+        drop(w);
+        let _ = fs::remove_dir_all(&dir);
     }
 
     /// A window wired to a fresh database holding one undated task named `title`.

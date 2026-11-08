@@ -180,14 +180,23 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         }
     });
 
+    // Returns the message to show in the task creator; empty closes it.
     window.on_create_task({
         let (state, finish) = (state.clone(), finish.clone());
         move |title| {
+            let Some(w) = state.window.upgrade() else {
+                return Default::default();
+            };
             let today = Local::now().date_naive();
             match tasks::create(&state.conn, &title, state.view.get(), today) {
-                Err(TaskError::EmptyTitle) => {}
-                Err(e) => finish(Err(e.to_string())),
-                Ok(_) => finish(state.reload()),
+                Err(TaskError::EmptyTitle) => w.global::<Strings>().get_task_title_empty(),
+                Err(e) => w
+                    .global::<Strings>()
+                    .invoke_task_failed(e.to_string().into()),
+                Ok(_) => {
+                    finish(state.reload());
+                    Default::default()
+                }
             }
         }
     });

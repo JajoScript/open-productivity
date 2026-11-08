@@ -325,8 +325,17 @@ msgstr "El inbox está vacío."
 msgid "Nothing overdue."
 msgstr "No hay nada atrasado."
 
-msgid "Add task…"
-msgstr "Añadir tarea…"
+msgid "Add task"
+msgstr "Añadir tarea"
+
+msgid "New task"
+msgstr "Nueva tarea"
+
+msgid "TASKS · {}/{}"
+msgstr "TAREAS · {}/{}"
+
+msgid "Write a title for the task."
+msgstr "Escribe un título para la tarea."
 
 msgid "{n} pending"
 msgid_plural "{n} pending"

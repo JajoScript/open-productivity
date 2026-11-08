@@ -77,6 +77,7 @@ export global Strings {
     out property <string> title-empty: @tr("The title can't be empty.");
     out property <string> list-exists: @tr("A list with that name already exists.");
     out property <string> list-name-empty: @tr("The name can't be empty.");
+    out property <string> task-title-empty: @tr("Write a title for the task.");
 
     // English is month/day/year; translations may reorder the placeholders.
     public pure function date(day: int, month: int, year: int) -> string {
@@ -111,6 +112,10 @@ export global Strings {
     // Header of the habits section in Today of Tasks.
     public pure function habits-today(done: int, total: int) -> string {
         return @tr("HABITS · {}/{}", done, total);
+    }
+
+    public pure function tasks-today(done: int, total: int) -> string {
+        return @tr("TASKS · {}/{}", done, total);
     }
 
     // Habits done out of those that applied in a block of seven days, and the share.
