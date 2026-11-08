@@ -72,6 +72,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0006_task_in_progress.sql"),
     include_str!("../migrations/0007_task_priority.sql"),
     include_str!("../migrations/0008_habits.sql"),
+    include_str!("../migrations/0009_task_time.sql"),
 ];
 
 pub fn open(path: &Path) -> Result<Connection, DbError> {
@@ -227,6 +228,38 @@ mod tests {
             .unwrap();
         assert_eq!(fk, 1);
         assert_eq!(backups(&dir), 0);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn task_time_migration_keeps_existing_tasks() {
+        let (dir, db) = setup("task-time");
+        let mut conn = Connection::open(&db).unwrap();
+        migrate(&mut conn, &MIGRATIONS[..8]).unwrap();
+        conn.execute(
+            "INSERT INTO task (title, due_date) VALUES ('old', '2026-11-08'), ('bare', NULL)",
+            [],
+        )
+        .unwrap();
+        drop(conn);
+        let conn = open(&db).unwrap();
+        assert_eq!(version(&conn), MIGRATIONS.len() as u32);
+        type Row = (String, Option<String>, Option<String>, Option<String>);
+        let rows: Vec<Row> = conn
+            .prepare("SELECT title, due_date, due_time, end_time FROM task ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(
+            rows,
+            [
+                ("old".into(), Some("2026-11-08".into()), None, None),
+                ("bare".into(), None, None, None)
+            ]
+        );
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

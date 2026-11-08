@@ -65,6 +65,11 @@ fn ui_kind(l: Option<DueLabel>) -> DueKind {
 
 pub fn task_row(t: Task, today: NaiveDate, first_done: bool) -> Result<TaskRow, String> {
     let kind = ui_kind(tasks::due_label(&t, today));
+    let (time, start, end) = (
+        t.time_label(),
+        tasks::format_time(t.start),
+        tasks::format_time(t.end),
+    );
     // The date parts are always the stored due date (0 when none).
     let (day, month, year) = t
         .due
@@ -81,6 +86,9 @@ pub fn task_row(t: Task, today: NaiveDate, first_done: bool) -> Result<TaskRow, 
         list_name: t.list.map(|(_, name)| name).unwrap_or_default().into(),
         urgent: t.priority.urgent,
         important: t.priority.important,
+        time: time.into(),
+        start: start.into(),
+        end: end.into(),
         first_done,
     })
 }
@@ -267,14 +275,31 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
 
     window.on_update_task({
         let (state, after) = (state.clone(), after.clone());
-        move |id, title, note, urgent, important| {
+        move |id, title, note, urgent, important, start, end| {
+            let Some(w) = state.window.upgrade() else {
+                return Default::default();
+            };
+            let s = w.global::<Strings>();
             let priority = Priority { urgent, important };
-            match tasks::update(&state.conn, TaskId(id.into()), &title, &note, priority) {
-                // The editor stays open with the typed text and shows the message itself.
-                Err(TaskError::EmptyTitle) => false,
+            let res = tasks::update(
+                &state.conn,
+                TaskId(id.into()),
+                &title,
+                &note,
+                priority,
+                &start,
+                &end,
+            );
+            // The editor stays open with the typed text and shows the message itself.
+            match res {
+                Err(TaskError::EmptyTitle) => s.get_title_empty(),
+                Err(TaskError::BadTime(_)) => s.get_time_invalid(),
+                Err(TaskError::TimeWithoutDate) => s.get_time_needs_date(),
+                Err(TaskError::EndWithoutStart) => s.get_end_needs_start(),
+                Err(TaskError::EndNotAfterStart) => s.get_end_not_after_start(),
                 res => {
                     after(res);
-                    true
+                    Default::default()
                 }
             }
         }

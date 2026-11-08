@@ -18,12 +18,17 @@ component EditorBody inherits FocusScope {
     // Rebuilt on every show, so these start from the task and the checks only change them here.
     in-out property <bool> urgent;
     in-out property <bool> important;
-    callback save(string, string, bool, bool) -> bool;
+    in property <string> start-text;
+    in property <string> end-text;
+    // Times need a due date.
+    in property <bool> has-date;
+    // Returns the message to show, or an empty string when the task was saved.
+    callback save(string, string, bool, bool, string, string) -> string;
     callback delete;
     callback cancel;
 
     property <bool> confirming;
-    property <bool> title-empty;
+    property <string> error;
 
     capture-key-pressed(event) => {
         if event.text == Key.Escape {
@@ -52,21 +57,62 @@ component EditorBody inherits FocusScope {
                     self.focus();
                 }
                 accepted(text) => {
-                    title-empty = !root.save(text, note-field.text, root.urgent, root.important);
+                    error = root.save(text, note-field.text, root.urgent, root.important, start-field.text, end-field.text);
                 }
             }
 
-            if root.title-empty: Text {
-                text: Strings.title-empty;
+            if root.error != "": Text {
+                text: root.error;
                 color: Theme.critical;
+                wrap: word-wrap;
             }
 
             note-field := InkTextArea {
                 text: root.note;
                 placeholder-text: @tr("Note");
                 submitted => {
-                    title-empty = !root.save(title-field.text, self.text, root.urgent, root.important);
+                    error = root.save(title-field.text, self.text, root.urgent, root.important, start-field.text, end-field.text);
                 }
+            }
+
+            // Optional local times of the due day.
+            HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: @tr("Start");
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+
+                start-field := InkField {
+                    text: root.start-text;
+                    placeholder-text: @tr("HH:MM");
+                    enabled: root.has-date;
+                    accepted(text) => {
+                        error = root.save(title-field.text, note-field.text, root.urgent, root.important, text, end-field.text);
+                    }
+                }
+
+                Text {
+                    text: @tr("End");
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+
+                end-field := InkField {
+                    text: root.end-text;
+                    placeholder-text: @tr("HH:MM");
+                    enabled: root.has-date;
+                    accepted(text) => {
+                        error = root.save(title-field.text, note-field.text, root.urgent, root.important, start-field.text, text);
+                    }
+                }
+            }
+
+            if !root.has-date: Text {
+                text: @tr("Give the task a due date to set a time.");
+                color: Theme.muted;
+                font-size: 12px;
             }
 
             // Eisenhower marks.
@@ -132,7 +178,7 @@ component EditorBody inherits FocusScope {
                 InkButton {
                     text: @tr("Save");
                     clicked => {
-                        title-empty = !root.save(title-field.text, note-field.text, root.urgent, root.important);
+                        error = root.save(title-field.text, note-field.text, root.urgent, root.important, start-field.text, end-field.text);
                     }
                 }
             }
@@ -177,8 +223,11 @@ export component TaskEditor inherits PopupWindow {
     in property <string> note;
     in property <bool> urgent;
     in property <bool> important;
-    // Returns false when the task was not saved; the editor then stays open.
-    callback saved(int, string, string, bool, bool) -> bool;
+    in property <string> start-text;
+    in property <string> end-text;
+    in property <bool> has-date;
+    // Returns the error to show, empty when saved; the editor then stays open.
+    callback saved(int, string, string, bool, bool, string, string) -> string;
     callback deleted(int);
 
     close-policy: close-on-click-outside;
@@ -190,12 +239,15 @@ export component TaskEditor inherits PopupWindow {
             note: root.note;
             urgent: root.urgent;
             important: root.important;
-            save(title, note, urgent, important) => {
-                if root.saved(root.task-id, title, note, urgent, important) {
+            start-text: root.start-text;
+            end-text: root.end-text;
+            has-date: root.has-date;
+            save(title, note, urgent, important, start-t, end-t) => {
+                let error = root.saved(root.task-id, title, note, urgent, important, start-t, end-t);
+                if error == "" {
                     root.close();
-                    return true;
                 }
-                false
+                error
             }
             delete => {
                 root.close();

@@ -85,7 +85,7 @@ export component WeekView inherits VerticalLayout {
     // -1 / +1 moves a week; 0 goes back to the current one.
     callback shift(int);
     callback set-done(int, bool);
-    callback update-task(int, string, string, bool, bool) -> bool;
+    callback update-task(int, string, string, bool, bool, string, string) -> string;
     callback delete-task(int);
 
     property <TaskRow> editing;
@@ -137,8 +137,11 @@ export component WeekView inherits VerticalLayout {
         note: root.editing.note;
         urgent: root.editing.urgent;
         important: root.editing.important;
-        saved(id, title, note, urgent, important) => {
-            return root.update-task(id, title, note, urgent, important);
+        start-text: root.editing.start;
+        end-text: root.editing.end;
+        has-date: root.editing.due-kind != DueKind.none;
+        saved(id, title, note, urgent, important, start, end) => {
+            return root.update-task(id, title, note, urgent, important, start, end);
         }
         deleted(id) => {
             root.delete-task(id);

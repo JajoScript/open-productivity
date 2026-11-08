@@ -90,7 +90,7 @@ export component TasksView inherits VerticalLayout {
     callback clear-due(int);
     callback set-list(int, int);
     callback delete-list(int);
-    callback update-task(int, string, string, bool, bool) -> bool;
+    callback update-task(int, string, string, bool, bool, string, string) -> string;
     callback delete-task(int);
     in property <[DayHabit]> day-habits;
     in property <int> habits-done;
@@ -187,8 +187,8 @@ export component TasksView inherits VerticalLayout {
         set-done(id, done) => {
             root.set-done(id, done);
         }
-        update-task(id, title, note, urgent, important) => {
-            return root.update-task(id, title, note, urgent, important);
+        update-task(id, title, note, urgent, important, start, end) => {
+            return root.update-task(id, title, note, urgent, important, start, end);
         }
         delete-task(id) => {
             root.delete-task(id);
@@ -210,8 +210,8 @@ export component TasksView inherits VerticalLayout {
         payload-task(data) => {
             return root.payload-task(data);
         }
-        update-task(id, title, note, urgent, important) => {
-            return root.update-task(id, title, note, urgent, important);
+        update-task(id, title, note, urgent, important, start, end) => {
+            return root.update-task(id, title, note, urgent, important, start, end);
         }
         delete-task(id) => {
             root.delete-task(id);
@@ -227,8 +227,8 @@ export component TasksView inherits VerticalLayout {
         set-priority(id, urgent, important) => {
             root.set-priority(id, urgent, important);
         }
-        update-task(id, title, note, urgent, important) => {
-            return root.update-task(id, title, note, urgent, important);
+        update-task(id, title, note, urgent, important, start, end) => {
+            return root.update-task(id, title, note, urgent, important, start, end);
         }
         delete-task(id) => {
             root.delete-task(id);
@@ -296,8 +296,8 @@ export component TasksView inherits VerticalLayout {
                 delete-list(id) => {
                     root.delete-list(id);
                 }
-                update-task(id, title, note, urgent, important) => {
-                    return root.update-task(id, title, note, urgent, important);
+                update-task(id, title, note, urgent, important, start, end) => {
+                    return root.update-task(id, title, note, urgent, important, start, end);
                 }
                 delete-task(id) => {
                     root.delete-task(id);

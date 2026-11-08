@@ -590,3 +590,27 @@ msgstr "Nueva tarea el {0}"
 
 msgid "No date"
 msgstr "Sin fecha"
+
+msgid "Start"
+msgstr "Inicio"
+
+msgid "End"
+msgstr "Fin"
+
+msgid "HH:MM"
+msgstr "HH:MM"
+
+msgid "Give the task a due date to set a time."
+msgstr "Pon una fecha a la tarea para asignarle una hora."
+
+msgid "Enter the time as HH:MM, like 09:30."
+msgstr "Escribe la hora como HH:MM, por ejemplo 09:30."
+
+msgid "A time needs a due date."
+msgstr "Una hora necesita una fecha."
+
+msgid "Set a start time before the end."
+msgstr "Indica la hora de inicio antes de la de fin."
+
+msgid "The end must be after the start."
+msgstr "El fin debe ser posterior al inicio."

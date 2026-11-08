@@ -21,9 +21,53 @@ pub struct Task {
     pub note: String,
     pub done: bool,
     pub due: Option<NaiveDate>,
+    /// Local start and end times of the due day; only with a due date, the end only with a
+    /// start and strictly after it.
+    pub start: Option<NaiveTime>,
+    pub end: Option<NaiveTime>,
     /// The list id and its name.
     pub list: Option<(ListId, String)>,
     pub priority: Priority,
+}
+
+impl Task {
+    /// `09:00` or `09:00–`+`10:30`; empty without a start time.
+    pub fn time_label(&self) -> String {
+        match (self.start, self.end) {
+            (Some(s), Some(e)) => format!("{}\u{2013}{}", s.format("%H:%M"), e.format("%H:%M")),
+            (Some(s), None) => s.format("%H:%M").to_string(),
+            _ => String::new(),
+        }
+    }
+
+    /// The title with its start time in front, as the calendar shows it.
+    pub fn timed_title(&self) -> String {
+        match self.start {
+            Some(s) => format!("{} {}", s.format("%H:%M"), self.title),
+            None => self.title.clone(),
+        }
+    }
+}
+
+/// A time as the editor shows it (`09:00`); empty for none.
+pub fn format_time(t: Option<NaiveTime>) -> String {
+    t.map_or_else(String::new, |t| t.format("%H:%M").to_string())
+}
+
+/// Reads the user's text for a time: `H:MM` or `HH:MM`; blank means no time.
+pub fn parse_time(text: &str) -> Result<Option<NaiveTime>, TaskError> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(None);
+    }
+    let bad = || TaskError::BadTime(text.to_string());
+    let (h, m) = text.split_once(':').ok_or_else(bad)?;
+    let digits = |s: &str| s.bytes().all(|b| b.is_ascii_digit());
+    if !(1..=2).contains(&h.len()) || m.len() != 2 || !digits(h) || !digits(m) {
+        return Err(bad());
+    }
+    let (h, m) = (h.parse().map_err(|_| bad())?, m.parse().map_err(|_| bad())?);
+    NaiveTime::from_hms_opt(h, m, 0).map(Some).ok_or_else(bad)
 }
 
 /// The Eisenhower marks, set by hand.
@@ -153,6 +197,14 @@ pub enum TaskError {
     CannotCreateHere,
     NotFound,
     BadDate(String),
+    /// Text (or a stored value) that is not a valid `HH:MM` time.
+    BadTime(String),
+    /// A start time needs a due date.
+    TimeWithoutDate,
+    /// An end time needs a start time.
+    EndWithoutStart,
+    /// The end must be later than the start, on the same day.
+    EndNotAfterStart,
     ListNotFound,
     Sqlite(rusqlite::Error),
 }
@@ -164,6 +216,10 @@ impl fmt::Display for TaskError {
             TaskError::CannotCreateHere => write!(f, "tasks cannot be created in this view"),
             TaskError::NotFound => write!(f, "task not found"),
             TaskError::BadDate(d) => write!(f, "invalid stored date: {d}"),
+            TaskError::BadTime(t) => write!(f, "invalid time: {t}"),
+            TaskError::TimeWithoutDate => write!(f, "a time needs a due date"),
+            TaskError::EndWithoutStart => write!(f, "an end time needs a start time"),
+            TaskError::EndNotAfterStart => write!(f, "the end must be after the start"),
             TaskError::ListNotFound => write!(f, "list not found"),
             TaskError::Sqlite(e) => write!(f, "database error: {e}"),
         }
@@ -349,7 +405,7 @@ pub fn kanban(conn: &Connection, now: DateTime<Utc>) -> Result<[Vec<Task>; 3], T
 }
 
 pub(crate) const SELECT_TASKS: &str = "SELECT t.id, t.title, t.note, t.done_at IS NOT NULL, t.due_date, \
-     t.list_id, l.name, t.urgent, t.important FROM task t LEFT JOIN list l ON l.id = t.list_id";
+     t.list_id, l.name, t.urgent, t.important, t.due_time, t.end_time FROM task t LEFT JOIN list l ON l.id = t.list_id";
 
 /// Runs a `SELECT_TASKS` query and parses the stored due dates.
 pub(crate) fn query(
@@ -369,23 +425,31 @@ pub(crate) fn query(
                 note: r.get(2)?,
                 done: r.get(3)?,
                 due: None,
+                start: None,
+                end: None,
                 list,
                 priority: Priority {
                     urgent: r.get(7)?,
                     important: r.get(8)?,
                 },
             },
-            r.get::<_, Option<String>>(4)?,
+            [r.get::<_, Option<String>>(4)?, r.get(9)?, r.get(10)?],
         ))
     };
     conn.prepare(sql)?
         .query_map(params, map)?
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
-        .map(|(mut t, due)| {
+        .map(|(mut t, [due, start, end])| {
             t.due = due
                 .map(|d| d.parse().map_err(|_| TaskError::BadDate(d)))
                 .transpose()?;
+            let time = |s: Option<String>| {
+                s.map(|s| NaiveTime::parse_from_str(&s, "%H:%M").map_err(|_| TaskError::BadTime(s)))
+                    .transpose()
+            };
+            t.start = time(start)?;
+            t.end = time(end)?;
             Ok(t)
         })
         .collect()
@@ -410,8 +474,11 @@ pub fn set_due_date(
     id: TaskId,
     due: Option<NaiveDate>,
 ) -> Result<(), TaskError> {
+    // Without a date there is no day for the times, so they go in the same statement.
     match conn.execute(
-        "UPDATE task SET due_date = ?1 WHERE id = ?2",
+        "UPDATE task SET due_date = ?1, \
+         due_time = CASE WHEN ?1 IS NULL THEN NULL ELSE due_time END, \
+         end_time = CASE WHEN ?1 IS NULL THEN NULL ELSE end_time END WHERE id = ?2",
         (due.map(|d| d.to_string()), id.0),
     )? {
         0 => Err(TaskError::NotFound),
@@ -430,30 +497,77 @@ pub fn set_list(conn: &Connection, id: TaskId, list: Option<ListId>) -> Result<(
     }
 }
 
-/// Saves the editor in one statement. The title is trimmed and must not be empty; the note
-/// keeps inner newlines but loses trailing whitespace.
+/// The times as the stored `HH:MM` text, after the rules that need no database.
+fn check_times(
+    start: Option<NaiveTime>,
+    end: Option<NaiveTime>,
+) -> Result<[Option<String>; 2], TaskError> {
+    match (start, end) {
+        (None, Some(_)) => Err(TaskError::EndWithoutStart),
+        (Some(s), Some(e)) if e <= s => Err(TaskError::EndNotAfterStart),
+        _ => Ok([start, end].map(|t| t.map(|t| t.format("%H:%M").to_string()))),
+    }
+}
+
+/// Zero rows changed: the task is missing, or the guard "a start time needs a due date" failed.
+fn no_row(conn: &Connection, id: TaskId) -> TaskError {
+    match conn.query_row("SELECT 1 FROM task WHERE id = ?1", [id.0], |_| Ok(())) {
+        Ok(()) => TaskError::TimeWithoutDate,
+        Err(rusqlite::Error::QueryReturnedNoRows) => TaskError::NotFound,
+        Err(e) => e.into(),
+    }
+}
+
+/// Sets or clears the start and end times in one statement. See `Task::start`.
+pub fn set_time(
+    conn: &Connection,
+    id: TaskId,
+    start: Option<NaiveTime>,
+    end: Option<NaiveTime>,
+) -> Result<(), TaskError> {
+    let [s, e] = check_times(start, end)?;
+    match conn.execute(
+        "UPDATE task SET due_time = ?1, end_time = ?2 \
+         WHERE id = ?3 AND (?1 IS NULL OR due_date IS NOT NULL)",
+        (s, e, id.0),
+    )? {
+        0 => Err(no_row(conn, id)),
+        _ => Ok(()),
+    }
+}
+
+/// Saves the editor in one statement, so nothing is half saved. The title is trimmed and must
+/// not be empty; the note keeps inner newlines but loses trailing whitespace; `start` and `end`
+/// are the user's text (see `parse_time`).
 pub fn update(
     conn: &Connection,
     id: TaskId,
     title: &str,
     note: &str,
     priority: Priority,
+    start: &str,
+    end: &str,
 ) -> Result<(), TaskError> {
     let title = title.trim();
     if title.is_empty() {
         return Err(TaskError::EmptyTitle);
     }
+    let [s, e] = check_times(parse_time(start)?, parse_time(end)?)?;
     match conn.execute(
-        "UPDATE task SET title = ?1, note = ?2, urgent = ?3, important = ?4 WHERE id = ?5",
+        "UPDATE task SET title = ?1, note = ?2, urgent = ?3, important = ?4, \
+         due_time = ?5, end_time = ?6 \
+         WHERE id = ?7 AND (?5 IS NULL OR due_date IS NOT NULL)",
         (
             title,
             note.trim_end(),
             priority.urgent,
             priority.important,
+            s,
+            e,
             id.0,
         ),
     )? {
-        0 => Err(TaskError::NotFound),
+        0 => Err(no_row(conn, id)),
         _ => Ok(()),
     }
 }
@@ -617,6 +731,8 @@ mod tests {
             note: String::new(),
             done,
             due: due.map(d),
+            start: None,
+            end: None,
             list: None,
             priority: Priority::default(),
         }
@@ -726,6 +842,8 @@ line 3
                 urgent: true,
                 important: false,
             },
+            "",
+            "",
         )
         .unwrap();
         let t = &ls(&conn)[0];
@@ -743,7 +861,7 @@ line 3
 
 line 3"
         );
-        update(&conn, id, "new title", "", Priority::default()).unwrap();
+        update(&conn, id, "new title", "", Priority::default(), "", "").unwrap();
         assert_eq!(ls(&conn)[0].note, "");
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
@@ -753,7 +871,7 @@ line 3"
     fn update_with_empty_title_changes_nothing() {
         let (dir, conn) = setup("update-empty");
         let id = mk(&conn, "a").unwrap();
-        update(&conn, id, "a", "keep", Priority::default()).unwrap();
+        update(&conn, id, "a", "keep", Priority::default(), "", "").unwrap();
         assert!(matches!(
             update(
                 &conn,
@@ -761,7 +879,9 @@ line 3"
                 " 
 ",
                 "other",
-                Priority::default()
+                Priority::default(),
+                "",
+                ""
             ),
             Err(TaskError::EmptyTitle)
         ));
@@ -771,11 +891,134 @@ line 3"
         let _ = std::fs::remove_dir_all(&dir);
     }
 
+    fn t(s: &str) -> NaiveTime {
+        NaiveTime::parse_from_str(s, "%H:%M").unwrap()
+    }
+
+    fn times(conn: &Connection, id: TaskId) -> (Option<NaiveTime>, Option<NaiveTime>) {
+        let t = ls(conn).into_iter().find(|x| x.id.0 == id.0).unwrap();
+        (t.start, t.end)
+    }
+
+    #[test]
+    fn parse_time_accepts_h_mm_and_hh_mm() {
+        assert_eq!(parse_time("9:05").unwrap(), Some(t("09:05")));
+        assert_eq!(parse_time(" 09:05 ").unwrap(), Some(t("09:05")));
+        assert_eq!(parse_time("23:59").unwrap(), Some(t("23:59")));
+        assert_eq!(parse_time("0:00").unwrap(), Some(t("00:00")));
+        assert_eq!(parse_time("").unwrap(), None);
+        assert_eq!(parse_time("  ").unwrap(), None);
+        for bad in [
+            "24:00", "12:60", "9", "9:5", "009:00", "12:345", "ab:cd", "+9:00", "-1:00", "9.30",
+            ":30", "12:", "12:3x",
+        ] {
+            assert!(
+                matches!(parse_time(bad), Err(TaskError::BadTime(_))),
+                "{bad}"
+            );
+        }
+    }
+
+    #[test]
+    fn time_rules_in_set_time() {
+        let (dir, conn) = setup("set-time");
+        let id = mk(&conn, "a").unwrap();
+        // A time needs a date.
+        assert!(matches!(
+            set_time(&conn, id, Some(t("09:00")), None),
+            Err(TaskError::TimeWithoutDate)
+        ));
+        assert!(matches!(
+            set_time(&conn, TaskId(42), Some(t("09:00")), None),
+            Err(TaskError::NotFound)
+        ));
+        // Clearing is always fine.
+        set_time(&conn, id, None, None).unwrap();
+        set_due_date(&conn, id, Some(d("2026-06-15"))).unwrap();
+        // The end needs a start and must be strictly later.
+        assert!(matches!(
+            set_time(&conn, id, None, Some(t("10:00"))),
+            Err(TaskError::EndWithoutStart)
+        ));
+        for end in ["09:00", "08:59"] {
+            assert!(matches!(
+                set_time(&conn, id, Some(t("09:00")), Some(t(end))),
+                Err(TaskError::EndNotAfterStart)
+            ));
+        }
+        assert_eq!(times(&conn, id), (None, None));
+        set_time(&conn, id, Some(t("14:15")), Some(t("16:00"))).unwrap();
+        assert_eq!(times(&conn, id), (Some(t("14:15")), Some(t("16:00"))));
+        let raw: (String, String) = conn
+            .query_row("SELECT due_time, end_time FROM task", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!(raw, ("14:15".into(), "16:00".into()));
+        set_time(&conn, id, Some(t("14:15")), None).unwrap();
+        assert_eq!(times(&conn, id), (Some(t("14:15")), None));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn due_date_changes_and_times() {
+        let (dir, conn) = setup("due-times");
+        let id = mk(&conn, "a").unwrap();
+        set_due_date(&conn, id, Some(d("2026-06-15"))).unwrap();
+        set_time(&conn, id, Some(t("09:00")), Some(t("10:30"))).unwrap();
+        // Rescheduling keeps the times; removing the date clears both.
+        set_due_date(&conn, id, Some(d("2026-06-20"))).unwrap();
+        assert_eq!(times(&conn, id), (Some(t("09:00")), Some(t("10:30"))));
+        set_due_date(&conn, id, None).unwrap();
+        assert_eq!(times(&conn, id), (None, None));
+        set_due_date(&conn, id, Some(d("2026-06-21"))).unwrap();
+        assert_eq!(times(&conn, id), (None, None));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn update_saves_times_atomically() {
+        let (dir, conn) = setup("update-times");
+        let id = mk(&conn, "a").unwrap();
+        let go = |title: &str, s: &str, e: &str| {
+            update(&conn, id, title, "n", Priority::default(), s, e)
+        };
+        // Undated: a start is refused and nothing else changes.
+        assert!(matches!(
+            go("b", "9:00", ""),
+            Err(TaskError::TimeWithoutDate)
+        ));
+        assert_eq!(ls(&conn)[0].title, "a");
+        go("b", "", "").unwrap();
+        set_due_date(&conn, id, Some(d("2026-06-15"))).unwrap();
+        for (s, e) in [
+            ("xx", ""),
+            ("", "10:00"),
+            ("10:00", "9:00"),
+            ("10:00", "10:00"),
+        ] {
+            assert!(go("c", s, e).is_err(), "{s} {e}");
+            assert_eq!(ls(&conn)[0].title, "b");
+        }
+        go("c", "9:00", "10:30").unwrap();
+        let task = &ls(&conn)[0];
+        assert_eq!(task.title, "c");
+        assert_eq!(task.time_label(), "09:00\u{2013}10:30");
+        assert_eq!(task.timed_title(), "09:00 c");
+        go("c", "", "").unwrap();
+        assert_eq!(times(&conn, id), (None, None));
+        assert_eq!(ls(&conn)[0].timed_title(), "c");
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
     #[test]
     fn update_and_delete_unknown_id_are_not_found() {
         let (dir, conn) = setup("edit-missing");
         assert!(matches!(
-            update(&conn, TaskId(42), "a", "", Priority::default()),
+            update(&conn, TaskId(42), "a", "", Priority::default(), "", ""),
             Err(TaskError::NotFound)
         ));
         assert!(matches!(

@@ -22,7 +22,7 @@ fn rows(tasks: Vec<Task>) -> Result<ModelRc<CalendarTask>, String> {
         .map(|t| {
             Ok(CalendarTask {
                 id: ui_id(t.id.0)?,
-                title: t.title.into(),
+                title: t.timed_title().into(),
                 done: t.done,
             })
         })

@@ -83,7 +83,7 @@ export component AppWindow inherits Window {
     callback create-list(string) -> string;
     callback delete-list(int);
     callback set-list(int, int);
-    callback update-task(int, string, string, bool, bool) -> bool;
+    callback update-task(int, string, string, bool, bool, string, string) -> string;
     callback delete-task(int);
     in property <[HabitRow]> habits;
     in property <[[int]]> habit-day-numbers;
@@ -399,8 +399,8 @@ export component AppWindow inherits Window {
                     delete-list(id) => {
                         root.delete-list(id);
                     }
-                    update-task(id, title, note, urgent, important) => {
-                        return root.update-task(id, title, note, urgent, important);
+                    update-task(id, title, note, urgent, important, start, end) => {
+                        return root.update-task(id, title, note, urgent, important, start, end);
                     }
                     delete-task(id) => {
                         root.delete-task(id);

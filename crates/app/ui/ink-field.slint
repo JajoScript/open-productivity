@@ -8,9 +8,11 @@ import { Theme } from "theme.slint";
 export component InkField {
     in-out property <string> text <=> input.text;
     in property <string> placeholder-text;
+    in property <bool> enabled: true;
     callback accepted(string);
 
     min-height: 36px;
+    opacity: root.enabled ? 1 : 0.5;
     horizontal-stretch: 1;
     forward-focus: input;
 
@@ -47,6 +49,7 @@ export component InkField {
         height: root.height;
         vertical-alignment: center;
         single-line: true;
+        enabled: root.enabled;
         color: Palette.foreground;
         selection-background-color: Theme.selection;
         selection-foreground-color: Palette.foreground;

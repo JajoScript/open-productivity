@@ -10,6 +10,7 @@ import { DragBoard } from "../tasks/drag-board.slint";
 // A task in a day cell; the calendar only shows it.
 export struct CalendarTask {
     id: int,
+    // From core: the title with its start time in front, when it has one.
     title: string,
     done: bool,
 }

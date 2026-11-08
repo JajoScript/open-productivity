@@ -16,7 +16,7 @@ pub struct Day {
     /// False for the filler days of the neighbouring months.
     pub in_month: bool,
     pub today: bool,
-    /// Pending first, then done; each oldest created first.
+    /// Pending first, then done; each with a time first (by time), then oldest created first.
     pub tasks: Vec<Task>,
 }
 
@@ -44,7 +44,8 @@ pub fn month(
         .ok_or_else(bad)?;
     let sql = format!(
         "{SELECT_TASKS} WHERE t.due_date BETWEEN ?1 AND ?2 \
-         ORDER BY t.due_date, t.done_at IS NOT NULL, t.created_at, t.id"
+         ORDER BY t.due_date, t.done_at IS NOT NULL, t.due_time IS NULL, t.due_time, \
+         t.created_at, t.id"
     );
     for t in query(conn, &sql, (start.to_string(), end.to_string()))? {
         // In range by the query, so the offset is 0..=41.
@@ -169,6 +170,40 @@ mod tests {
         let w = month(&conn, d("2026-11-01"), d("2026-11-08")).unwrap();
         assert_eq!(titles(&w, "2026-11-10"), ["b", "c", "a"]);
         assert!(w.iter().flatten().any(|x| x.tasks.iter().any(|t| t.done)));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn timed_tasks_come_first_within_pending_and_done() {
+        let (dir, conn) = setup("timed");
+        let at = |title: &str, time: Option<&str>| {
+            let id = add(&conn, title, Some("2026-11-10"));
+            if let Some(t) = time {
+                tasks::set_time(&conn, id, Some(t.parse().unwrap()), None).unwrap();
+            }
+            id
+        };
+        at("plain1", None);
+        at("late", Some("14:00"));
+        at("plain2", None);
+        at("early", Some("09:30"));
+        let done_plain = at("done-plain", None);
+        let done_timed = at("done-timed", Some("08:00"));
+        tasks::set_done(&conn, done_plain, true).unwrap();
+        tasks::set_done(&conn, done_timed, true).unwrap();
+        let w = month(&conn, d("2026-11-01"), d("2026-11-08")).unwrap();
+        assert_eq!(
+            titles(&w, "2026-11-10"),
+            [
+                "early",
+                "late",
+                "plain1",
+                "plain2",
+                "done-timed",
+                "done-plain"
+            ]
+        );
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }
