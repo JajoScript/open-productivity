@@ -48,7 +48,8 @@ export component KanbanView inherits DragBoard {
         spacing: 12px;
 
         for col in root.columns: Rectangle {
-            // Equal columns whatever their content.
+            // Equal columns whatever their content: spare width is shared on top of the minimum.
+            min-width: 0px;
             preferred-width: 0px;
             horizontal-stretch: 1;
             border-radius: 6px;
