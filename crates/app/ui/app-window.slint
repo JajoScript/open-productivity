@@ -110,6 +110,14 @@ export component AppWindow inherits Window {
     property <[bool]> habit-edit-days;
     property <Date> habit-edit-start;
     // The only place that forces Palette; `unknown` hands it back to the system.
+    function open-new-habit() {
+        root.habit-editing = false;
+        root.habit-edit-name = "";
+        root.habit-edit-days = [false, false, false, false, false, false, false];
+        root.habit-edit-start = Calendar.today();
+        habit-creator.show();
+    }
+
     function apply-color-mode() {
         Palette.color-scheme = root.current-color-mode == ColorMode.light ? ColorScheme.light : root.current-color-mode == ColorMode.dark ? ColorScheme.dark : ColorScheme.unknown;
     }
@@ -266,11 +274,7 @@ export component AppWindow inherits Window {
                         archived-popup.show();
                     }
                     new-habit => {
-                        root.habit-editing = false;
-                        root.habit-edit-name = "";
-                        root.habit-edit-days = [false, false, false, false, false, false, false];
-                        root.habit-edit-start = Calendar.today();
-                        habit-creator.show();
+                        root.open-new-habit();
                     }
                     edit-habit(habit) => {
                         root.habit-editing = true;
@@ -394,6 +398,9 @@ export component AppWindow inherits Window {
         y: root.height - self.height - 24px;
         new-task => {
             quick-task-creator.show();
+        }
+        new-habit => {
+            root.open-new-habit();
         }
     }
 }

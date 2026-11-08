@@ -570,5 +570,8 @@ msgstr "Un hábito es algo que quieres repetir los días que elijas. Marca cada 
 msgid "Task"
 msgstr "Tarea"
 
+msgid "Habit"
+msgstr "Hábito"
+
 msgid "Task added to Inbox"
 msgstr "Tarea creada en Inbox"

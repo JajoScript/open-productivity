@@ -49,6 +49,7 @@ component MenuRow inherits Rectangle {
 // Floating "+" in the corner: an ink plate that opens a menu upwards. Place it where it belongs.
 export component QuickCreate inherits Rectangle {
     callback new-task;
+    callback new-habit;
     // Shows the brief confirmation next to the button.
     public function notify() {
         root.notice = true;
@@ -143,7 +144,7 @@ export component QuickCreate inherits Rectangle {
         x: root.width - self.width;
         y: -self.height - 8px;
         width: 168px;
-        height: 52px;
+        height: 88px;
         close-policy: close-on-click-outside;
 
         PopupSurface {
@@ -166,6 +167,13 @@ export component QuickCreate inherits Rectangle {
                         activated => {
                             menu.close();
                             root.new-task();
+                        }
+                    }
+                    MenuRow {
+                        text: @tr("Habit");
+                        activated => {
+                            menu.close();
+                            root.new-habit();
                         }
                     }
                 }
