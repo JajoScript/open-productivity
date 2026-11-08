@@ -614,3 +614,6 @@ msgstr "Indica la hora de inicio antes de la de fin."
 
 msgid "The end must be after the start."
 msgstr "El fin debe ser posterior al inicio."
+
+msgid "No time"
+msgstr "Sin hora"

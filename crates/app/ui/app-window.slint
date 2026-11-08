@@ -10,14 +10,14 @@ import { ListCreator } from "tasks/list-creator.slint";
 import { HabitCreator } from "habits/habit-creator.slint";
 import { ArchivedHabits } from "habits/archived-habits.slint";
 import { ArchivedRow, DayState, HabitRow, HabitsView, HeatCell, HeatLevel, WeekTotal } from "habits/habits-view.slint";
-import { CalendarDay, CalendarTask, CalendarView } from "calendar/calendar-view.slint";
+import { CalendarDay, CalendarMode, CalendarTask, CalendarView, WeekBlock, WeekColumn } from "calendar/calendar-view.slint";
 import { Module, Rail } from "rail.slint";
 import { QuickCreate } from "quick-create.slint";
 import { TaskCreator } from "tasks/task-creator.slint";
 import { ColorMode, Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
 import { DayHabit, DueKind, KanbanColumn, Quadrant, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { ArchivedRow, Calendar, CalendarDay, CalendarTask, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
+export { ArchivedRow, Calendar, CalendarDay, CalendarMode, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -61,6 +61,14 @@ export component AppWindow inherits Window {
     in property <[CalendarTask]> calendar-overdue;
     in property <[CalendarTask]> calendar-undated;
     callback calendar-shift(int);
+    in property <CalendarMode> calendar-mode;
+    in property <[WeekColumn]> calendar-week;
+    in property <int> calendar-now;
+    callback calendar-set-mode(CalendarMode);
+    // Dragged onto the week grid (minutes since midnight) or a day's "No time" strip.
+    callback reschedule-task-at(int, Date, int);
+    callback reschedule-task-untimed(int, Date);
+    pure callback calendar-slot(int) -> int;
     // Dragged onto a day of the calendar: the task is due that day.
     callback reschedule-task(int, Date);
     in property <[WeekDay]> week-days;
@@ -277,8 +285,23 @@ export component AppWindow inherits Window {
                     error: root.calendar-error;
                     overdue: root.calendar-overdue;
                     undated: root.calendar-undated;
+                    mode: root.calendar-mode;
+                    week: root.calendar-week;
+                    now: root.calendar-now;
                     shift(n) => {
                         root.calendar-shift(n);
+                    }
+                    set-mode(m) => {
+                        root.calendar-set-mode(m);
+                    }
+                    reschedule-at(id, date, minutes) => {
+                        root.reschedule-task-at(id, date, minutes);
+                    }
+                    reschedule-untimed(id, date) => {
+                        root.reschedule-task-untimed(id, date);
+                    }
+                    slot(m) => {
+                        return root.calendar-slot(m);
                     }
                     reschedule(id, date) => {
                         root.reschedule-task(id, date);

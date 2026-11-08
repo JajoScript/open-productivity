@@ -6,14 +6,13 @@ import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { DragBoard } from "../tasks/drag-board.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { CalendarTask, TaskChip } from "task-chip.slint";
+import { WeekBlock, WeekColumn, WeekGrid } from "week-grid.slint";
 
-// A task in a day cell; the calendar only shows it.
-export struct CalendarTask {
-    id: int,
-    // From core: the title with its start time in front, when it has one.
-    title: string,
-    done: bool,
-}
+export { CalendarTask, WeekBlock, WeekColumn }
+
+export enum CalendarMode { month, week }
 
 // One cell of the month grid: the day and the tasks due on it.
 export struct CalendarDay {
@@ -23,50 +22,6 @@ export struct CalendarDay {
     in-month: bool,
     today: bool,
     tasks: [CalendarTask],
-}
-
-// A task title that can be dragged to a day. A click is not a drag, so it still reaches `clicked`.
-component TaskChip inherits Rectangle {
-    in property <CalendarTask> task;
-    // What a drop receives; built by the app so foreign drags can be told apart.
-    in property <data-transfer> payload;
-    in property <color> ink: Palette.foreground;
-    callback clicked;
-    // For the board's floating copy: whether this chip is in flight and where it was grabbed.
-    out property <bool> dragging: drag.dragging;
-    out property <length> grab-x: touch.pressed-x;
-    out property <length> grab-y: touch.pressed-y;
-
-    border-radius: 4px;
-    background: touch.has-hover ? Theme.hover : transparent;
-    opacity: drag.dragging ? 0.4 : 1;
-    accessible-role: button;
-    accessible-label: root.task.title;
-    accessible-action-default => {
-        root.clicked();
-    }
-
-    drag := DragArea {
-        allow-move: true;
-        data: root.payload;
-
-        Text {
-            x: 2px;
-            width: parent.width - 4px;
-            text: root.task.title;
-            font-size: 12px;
-            overflow: elide;
-            vertical-alignment: center;
-            color: root.task.done ? Theme.done : root.ink;
-            accessible-role: none;
-        }
-
-        touch := TouchArea {
-            clicked => {
-                root.clicked();
-            }
-        }
-    }
 }
 
 component CalendarCell inherits Rectangle {
@@ -238,10 +193,21 @@ export component CalendarView inherits DragBoard {
     // Pending tasks past due, and without a date: the side panel.
     in property <[CalendarTask]> overdue;
     in property <[CalendarTask]> undated;
-    // -1 / +1 moves a month; 0 goes back to the current one.
+    in property <CalendarMode> mode;
+    // The week view: seven days, and the minutes since midnight of the current time.
+    in property <[WeekColumn]> week;
+    in property <int> now;
+    // -1 / +1 moves a month (or a week); 0 goes back to the current one.
     callback shift(int);
+    callback set-mode(CalendarMode);
     callback day-chosen(Date);
     callback reschedule(int, Date);
+    // Dropped on the week grid at a place in the day (minutes since midnight), or on a day's
+    // "No time" strip.
+    callback reschedule-at(int, Date, int);
+    callback reschedule-untimed(int, Date);
+    // The minutes a drop at the given minutes lands on.
+    pure callback slot(int) -> int;
 
     // A narrow window gives the whole width to the grid.
     property <bool> show-panel: root.width >= 800px;
@@ -268,14 +234,14 @@ export component CalendarView inherits DragBoard {
 
                 SubtleButton {
                     icon: @image-url("../icons/chevron-left.svg");
-                    label: @tr("Previous month");
+                    label: root.mode == CalendarMode.month ? @tr("Previous month") : @tr("Previous week");
                     clicked => {
                         root.shift(-1);
                     }
                 }
 
                 Text {
-                    text: Strings.month-year(root.month.month, root.month.year);
+                    text: root.mode == CalendarMode.month || root.week.length < 7 ? Strings.month-year(root.month.month, root.month.year) : Strings.date(root.week[0].date.day, root.week[0].date.month, root.week[0].date.year) + " \u{2013} " + Strings.date(root.week[6].date.day, root.week[6].date.month, root.week[6].date.year);
                     vertical-alignment: center;
                     horizontal-alignment: center;
                     min-width: 120px;
@@ -283,7 +249,7 @@ export component CalendarView inherits DragBoard {
 
                 SubtleButton {
                     icon: @image-url("../icons/chevron-right.svg");
-                    label: @tr("Next month");
+                    label: root.mode == CalendarMode.month ? @tr("Next month") : @tr("Next week");
                     clicked => {
                         root.shift(1);
                     }
@@ -296,6 +262,26 @@ export component CalendarView inherits DragBoard {
                         root.shift(0);
                     }
                 }
+
+                Rectangle {
+                    width: 12px;
+                }
+
+                SettingsTab {
+                    text: @tr("Month");
+                    selected: root.mode == CalendarMode.month;
+                    chosen => {
+                        root.set-mode(CalendarMode.month);
+                    }
+                }
+
+                SettingsTab {
+                    text: @tr("Week");
+                    selected: root.mode == CalendarMode.week;
+                    chosen => {
+                        root.set-mode(CalendarMode.week);
+                    }
+                }
             }
 
             if root.error != "": Text {
@@ -304,7 +290,7 @@ export component CalendarView inherits DragBoard {
                 wrap: word-wrap;
             }
 
-            HorizontalLayout {
+            if root.mode == CalendarMode.month: HorizontalLayout {
                 spacing: 4px;
                 for name in Strings.weekdays: Text {
                     preferred-width: 0px;
@@ -317,12 +303,12 @@ export component CalendarView inherits DragBoard {
                 }
             }
 
-            VerticalLayout {
+            if root.mode == CalendarMode.month: VerticalLayout {
                 spacing: 4px;
                 vertical-stretch: 1;
-                for week in root.weeks: HorizontalLayout {
+                for row in root.weeks: HorizontalLayout {
                     spacing: 4px;
-                    for cell in week: CalendarCell {
+                    for cell in row: CalendarCell {
                         cell: cell;
                         payload(id) => {
                             return root.task-payload(id);
@@ -340,6 +326,30 @@ export component CalendarView inherits DragBoard {
                             root.day-chosen(cell.date);
                         }
                     }
+                }
+            }
+
+            if root.mode == CalendarMode.week: WeekGrid {
+                vertical-stretch: 1;
+                days: root.week;
+                now: root.now;
+                slot(m) => {
+                    return root.slot(m);
+                }
+                payload(id) => {
+                    return root.task-payload(id);
+                }
+                drag-over(area, pos, data) => {
+                    return root.follow(area, pos, data);
+                }
+                dropped-at(data, date, minutes) => {
+                    root.reschedule-at(root.land(data), date, minutes);
+                }
+                dropped-untimed(data, date) => {
+                    root.reschedule-untimed(root.land(data), date);
+                }
+                chip-dragging(dragging, t, at, width, grab) => {
+                    root.card-dragging(dragging, { id: t.id, title: t.title }, at, width, grab);
                 }
             }
         }

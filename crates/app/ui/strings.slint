@@ -150,5 +150,10 @@ export global Strings {
     }
 
     // Monday-first column heads of the date picker.
+    // Hour label of the week grid's left column; the same in every language.
+    public pure function hour(h: int) -> string {
+        return h < 10 ? "0\{h}:00" : "\{h}:00";
+    }
+
     out property <[string]> weekdays: [@tr("Mo"), @tr("Tu"), @tr("We"), @tr("Th"), @tr("Fr"), @tr("Sa"), @tr("Su")];
 }

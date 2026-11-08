@@ -1,0 +1,333 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+// The week of the Calendar: a "No time" strip over an hour grid, one column per day.
+// Everything it draws comes placed from core (minutes since midnight, lanes); it only converts
+// minutes to pixels.
+
+import { Date, Palette } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+import { CalendarTask, TaskChip } from "task-chip.slint";
+
+// A task with a time: where it starts, how long it is drawn and which lane of its overlap
+// group it takes.
+export struct WeekBlock {
+    task: CalendarTask,
+    start: int,
+    len: int,
+    lane: int,
+    lanes: int,
+}
+
+export struct WeekColumn {
+    date: Date,
+    today: bool,
+    // Due that day without a time.
+    untimed: [CalendarTask],
+    blocks: [WeekBlock],
+}
+
+// A task block of the grid. Dragging it moves it; pressing it does nothing.
+component Block inherits Rectangle {
+    in property <WeekBlock> block;
+    in property <data-transfer> payload;
+    out property <bool> dragging: drag.dragging;
+    out property <length> grab-x: touch.pressed-x;
+    out property <length> grab-y: touch.pressed-y;
+
+    border-radius: 4px;
+    background: touch.has-hover ? Theme.pressed : Theme.selected;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    border-width: 1px;
+    border-color: Theme.hairline;
+    clip: true;
+    opacity: drag.dragging ? 0.4 : root.block.task.done ? 0.6 : 1;
+    accessible-role: button;
+    accessible-label: root.block.task.title;
+
+    drag := DragArea {
+        allow-move: true;
+        data: root.payload;
+
+        Rectangle {
+            width: 3px;
+            x: 0px;
+            background: Theme.ink;
+        }
+
+        Text {
+            x: 7px;
+            y: 2px;
+            width: parent.width - 10px;
+            height: parent.height - 4px;
+            text: root.block.task.title;
+            font-size: 12px;
+            wrap: word-wrap;
+            overflow: elide;
+            vertical-alignment: top;
+            color: root.block.task.done ? Theme.done : Palette.foreground;
+            accessible-role: none;
+        }
+
+        touch := TouchArea { }
+    }
+}
+
+// One day of the "No time" strip. Dropping a task here dates it that day without a time.
+component UntimedCell inherits Rectangle {
+    in property <WeekColumn> day;
+    pure callback payload(int) -> data-transfer;
+    callback drag-over(Point, Point, data-transfer) -> bool;
+    callback dropped(data-transfer);
+    callback chip-dragging(bool, CalendarTask, Point, length, Point);
+
+    property <length> row-h: 22px;
+    property <int> fit: 2;
+    property <bool> overflow: root.day.untimed.length > root.fit;
+    property <int> shown: root.overflow ? root.fit - 1 : root.day.untimed.length;
+
+    preferred-width: 0px;
+    horizontal-stretch: 1;
+    clip: true;
+    background: drop.has-drag ? Theme.selected : root.day.today ? Theme.field : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+
+    drop := DropArea {
+        can-drop(event) => {
+            root.drag-over(self.absolute-position, event.position, event.data) ? DragAction.move : DragAction.none
+        }
+        dropped(event) => {
+            root.dropped(event.data);
+            return event.proposed-action;
+        }
+
+        for t[i] in root.day.untimed: TaskChip {
+            visible: i < root.shown;
+            x: 3px;
+            y: 3px + i * root.row-h;
+            width: parent.width - 6px;
+            height: root.row-h;
+            task: t;
+            payload: root.payload(t.id);
+            changed dragging => {
+                root.chip-dragging(self.dragging, t, self.absolute-position, self.width, { x: self.grab-x, y: self.grab-y });
+            }
+        }
+
+        if root.overflow: Text {
+            x: 5px;
+            y: 3px + root.shown * root.row-h;
+            width: parent.width - 10px;
+            height: root.row-h;
+            text: Strings.more-tasks(root.day.untimed.length - root.shown);
+            font-size: 12px;
+            color: Theme.muted;
+            overflow: elide;
+            vertical-alignment: center;
+        }
+    }
+}
+
+// One day of the hour grid: the blocks, the drop target and, today, the line of the current time.
+component DayColumn inherits Rectangle {
+    in property <WeekColumn> day;
+    in property <int> now;
+    in property <length> hour-h;
+    pure callback slot(int) -> int;
+    pure callback payload(int) -> data-transfer;
+    callback drag-over(Point, Point, data-transfer) -> bool;
+    // The dropped payload and the minutes since midnight under the cursor.
+    callback dropped(data-transfer, int);
+    callback chip-dragging(bool, CalendarTask, Point, length, Point);
+
+    property <int> hover-min;
+
+    preferred-width: 0px;
+    horizontal-stretch: 1;
+    background: root.day.today ? Theme.field : transparent;
+
+    Rectangle {
+        x: 0;
+        width: 1px;
+        background: Theme.hairline;
+    }
+
+    drop := DropArea {
+        can-drop(event) => {
+            root.hover-min = Math.floor(event.position.y / root.hour-h * 60);
+            root.drag-over(self.absolute-position, event.position, event.data) ? DragAction.move : DragAction.none
+        }
+        dropped(event) => {
+            root.dropped(event.data, Math.floor(event.position.y / root.hour-h * 60));
+            return event.proposed-action;
+        }
+
+        if drop.has-drag: Rectangle {
+            y: root.slot(root.hover-min) * root.hour-h / 60;
+            height: root.hour-h / 2;
+            background: Theme.selected;
+        }
+
+        for b in root.day.blocks: Block {
+            x: parent.width * b.lane / b.lanes + 2px;
+            y: b.start * root.hour-h / 60;
+            width: parent.width / b.lanes - 3px;
+            height: max(14px, b.len * root.hour-h / 60 - 1px);
+            block: b;
+            payload: root.payload(b.task.id);
+            changed dragging => {
+                root.chip-dragging(self.dragging, b.task, self.absolute-position, self.width, { x: self.grab-x, y: self.grab-y });
+            }
+        }
+
+        if root.day.today: Rectangle {
+            y: root.now * root.hour-h / 60 - 1px;
+            height: 2px;
+            background: Theme.critical;
+            Rectangle {
+                x: -3px;
+                y: -2px;
+                width: 6px;
+                height: 6px;
+                border-radius: 3px;
+                background: Theme.critical;
+            }
+        }
+    }
+}
+
+export component WeekGrid inherits Rectangle {
+    in property <[WeekColumn]> days;
+    // Minutes since midnight of the current time.
+    in property <int> now;
+    pure callback slot(int) -> int;
+    pure callback payload(int) -> data-transfer;
+    callback drag-over(Point, Point, data-transfer) -> bool;
+    callback dropped-at(data-transfer, Date, int);
+    callback dropped-untimed(data-transfer, Date);
+    callback chip-dragging(bool, CalendarTask, Point, length, Point);
+
+    property <length> gutter: 48px;
+    property <length> hour-h: 48px;
+
+    VerticalLayout {
+        // Weekday and date of each column.
+        HorizontalLayout {
+            height: 40px;
+            Rectangle {
+                width: root.gutter;
+            }
+
+            for d[i] in root.days: Rectangle {
+                preferred-width: 0px;
+                horizontal-stretch: 1;
+                Rectangle {
+                    y: 2px;
+                    height: 36px;
+                    width: parent.width - 8px;
+                    border-radius: 5px;
+                    background: d.today ? Theme.ink : transparent;
+                    Text {
+                        text: Strings.weekdays[i] + " " + d.date.day;
+                        font-size: 12px;
+                        font-weight: d.today ? 700 : 600;
+                        color: d.today ? Theme.on-ink : Theme.muted;
+                        horizontal-alignment: center;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        // Tasks with a day and no time.
+        HorizontalLayout {
+            height: 54px;
+            Text {
+                width: root.gutter;
+                text: @tr("No time");
+                font-size: 11px;
+                color: Theme.muted;
+                vertical-alignment: center;
+                horizontal-alignment: center;
+                overflow: elide;
+            }
+
+            for d in root.days: UntimedCell {
+                day: d;
+                payload(id) => {
+                    return root.payload(id);
+                }
+                drag-over(area, pos, data) => {
+                    return root.drag-over(area, pos, data);
+                }
+                dropped(data) => {
+                    root.dropped-untimed(data, d.date);
+                }
+                chip-dragging(dragging, t, at, width, grab) => {
+                    root.chip-dragging(dragging, t, at, width, grab);
+                }
+            }
+        }
+
+        Rectangle {
+            height: 1px;
+            background: Theme.hairline;
+        }
+
+        // Opens scrolled to 07:00.
+        Flickable {
+            vertical-stretch: 1;
+            content-width: self.width;
+            content-height: 24 * root.hour-h;
+            content-y: -7 * root.hour-h;
+
+            for h in 24: Rectangle {
+                x: root.gutter;
+                y: h * root.hour-h;
+                width: root.width - root.gutter;
+                height: 1px;
+                background: Theme.hairline;
+            }
+
+            for h in 24: Text {
+                x: 0px;
+                y: h * root.hour-h - 7px;
+                width: root.gutter - 8px;
+                height: 14px;
+                text: Strings.hour(h);
+                visible: h > 0;
+                font-size: 11px;
+                color: Theme.muted;
+                horizontal-alignment: right;
+                vertical-alignment: center;
+            }
+
+            HorizontalLayout {
+                x: root.gutter;
+                width: root.width - root.gutter;
+                height: 24 * root.hour-h;
+                for d in root.days: DayColumn {
+                    day: d;
+                    now: root.now;
+                    hour-h: root.hour-h;
+                    slot(m) => {
+                        return root.slot(m);
+                    }
+                    payload(id) => {
+                        return root.payload(id);
+                    }
+                    drag-over(area, pos, data) => {
+                        return root.drag-over(area, pos, data);
+                    }
+                    dropped(data, minutes) => {
+                        root.dropped-at(data, d.date, minutes);
+                    }
+                    chip-dragging(dragging, t, at, width, grab) => {
+                        root.chip-dragging(dragging, t, at, width, grab);
+                    }
+                }
+            }
+        }
+    }
+}

@@ -3,11 +3,11 @@
 
 //! The Calendar module: the tasks of a month grid, placed by due date.
 
-use chrono::{Datelike, NaiveDate};
+use chrono::{Datelike, NaiveDate, NaiveTime, Timelike};
 use rusqlite::Connection;
 
 use crate::calendar;
-use crate::tasks::{SELECT_TASKS, Task, TaskError, View, query};
+use crate::tasks::{SELECT_TASKS, Task, TaskError, TaskId, View, query};
 
 /// One cell of the month grid.
 #[derive(Debug)]
@@ -57,6 +57,194 @@ pub fn month(
         weeks.push(days.drain(..7).collect());
     }
     Ok(weeks)
+}
+
+const DAY_END: u32 = 24 * 60;
+/// How long a task with a start and no end is drawn, never stored.
+const DEFAULT_LEN: u32 = 60;
+const SLOT: u32 = 30;
+
+/// Minutes since midnight of a time of day.
+pub fn minutes_of(t: NaiveTime) -> u32 {
+    t.hour() * 60 + t.minute()
+}
+
+/// A drop position (minutes since midnight) snapped to the nearest 30 minutes, the last slot
+/// being 23:30. Past the end of the day it is still 23:30.
+pub fn snap_to_slot(minutes: u32) -> NaiveTime {
+    let m = ((minutes + SLOT / 2) / SLOT * SLOT).min(DAY_END - SLOT);
+    NaiveTime::from_hms_opt(m / 60, m % 60, 0).unwrap_or(NaiveTime::MIN)
+}
+
+/// Lane of each span (start, end in minutes) and how many lanes its cluster needs. Spans that
+/// only touch do not overlap; a cluster is transitive (A-B and B-C overlapping share lanes
+/// even when A and C do not). Results come in the order of the input.
+pub fn assign_lanes(spans: &[(u32, u32)]) -> Vec<(usize, usize)> {
+    let mut order: Vec<usize> = (0..spans.len()).collect();
+    order.sort_by_key(|&i| spans[i]);
+    let mut out = vec![(0, 1); spans.len()];
+    // End of each lane of the open cluster, its members, and how far it reaches.
+    let (mut ends, mut members, mut reach): (Vec<u32>, Vec<usize>, u32) = (vec![], vec![], 0);
+    let close = |ends: &mut Vec<u32>, members: &mut Vec<usize>, out: &mut Vec<(usize, usize)>| {
+        for &m in members.iter() {
+            out[m].1 = ends.len();
+        }
+        ends.clear();
+        members.clear();
+    };
+    for i in order {
+        let (start, end) = spans[i];
+        if start >= reach {
+            close(&mut ends, &mut members, &mut out);
+        }
+        let lane = ends.iter().position(|&e| e <= start).unwrap_or(ends.len());
+        if lane == ends.len() {
+            ends.push(end);
+        } else {
+            ends[lane] = end;
+        }
+        reach = if members.is_empty() {
+            end
+        } else {
+            reach.max(end)
+        };
+        members.push(i);
+        out[i].0 = lane;
+    }
+    close(&mut ends, &mut members, &mut out);
+    out
+}
+
+/// A task with a start time, placed in its day.
+#[derive(Debug)]
+pub struct Block {
+    pub task: Task,
+    /// Minutes since midnight where it starts, and how long it is drawn (to 24:00 at most).
+    pub start: u32,
+    pub len: u32,
+    pub lane: usize,
+    pub lanes: usize,
+}
+
+/// One column of the week view.
+#[derive(Debug)]
+pub struct WeekDay {
+    pub date: NaiveDate,
+    pub today: bool,
+    /// Tasks of the day without a time: pending first, then done.
+    pub untimed: Vec<Task>,
+    /// Tasks with a time, by start.
+    pub blocks: Vec<Block>,
+}
+
+/// The 7 days (Monday first) of the week that holds `date`, with the tasks due on each. One
+/// range query.
+pub fn week(
+    conn: &Connection,
+    date: NaiveDate,
+    today: NaiveDate,
+) -> Result<Vec<WeekDay>, TaskError> {
+    let bad = || TaskError::BadDate(date.to_string());
+    let start = calendar::week_start(date);
+    let end = calendar::shift(start, 6).ok_or_else(bad)?;
+    let mut days = (0..7)
+        .map(|i| {
+            calendar::shift(start, i).map(|date| WeekDay {
+                date,
+                today: date == today,
+                untimed: Vec::new(),
+                blocks: Vec::new(),
+            })
+        })
+        .collect::<Option<Vec<_>>>()
+        .ok_or_else(bad)?;
+    let sql = format!(
+        "{SELECT_TASKS} WHERE t.due_date BETWEEN ?1 AND ?2 \
+         ORDER BY t.due_date, t.done_at IS NOT NULL, t.due_time IS NULL, t.due_time, \
+         t.created_at, t.id"
+    );
+    for t in query(conn, &sql, (start.to_string(), end.to_string()))? {
+        // In range by the query, so the offset is 0..=6.
+        let i = t.due.map_or(0, |d| (d - start).num_days()) as usize;
+        match t.start {
+            None => days[i].untimed.push(t),
+            Some(s) => {
+                let from = minutes_of(s);
+                let len = t
+                    .end
+                    .map_or(DEFAULT_LEN, |e| minutes_of(e).saturating_sub(from));
+                days[i].blocks.push(Block {
+                    start: from,
+                    len: len.min(DAY_END - from).max(1),
+                    task: t,
+                    lane: 0,
+                    lanes: 1,
+                });
+            }
+        }
+    }
+    for day in &mut days {
+        let spans: Vec<_> = day
+            .blocks
+            .iter()
+            .map(|b| (b.start, b.start + b.len))
+            .collect();
+        for (b, (lane, lanes)) in day.blocks.iter_mut().zip(assign_lanes(&spans)) {
+            (b.lane, b.lanes) = (lane, lanes);
+        }
+    }
+    Ok(days)
+}
+
+/// Moves a task to `date` at `start`, keeping its length when it has an end. A task that would
+/// run past 23:59 starts earlier so that it ends at 23:59. One transaction.
+pub fn reschedule_at(
+    conn: &Connection,
+    id: TaskId,
+    date: NaiveDate,
+    start: NaiveTime,
+) -> Result<(), TaskError> {
+    let tx = conn.unchecked_transaction()?;
+    let old: (Option<String>, Option<String>) = tx
+        .query_row(
+            "SELECT due_time, end_time FROM task WHERE id = ?1",
+            [id.0],
+            |r| Ok((r.get(0)?, r.get(1)?)),
+        )
+        .map_err(|e| match e {
+            rusqlite::Error::QueryReturnedNoRows => TaskError::NotFound,
+            e => e.into(),
+        })?;
+    let at = |s: &str| {
+        NaiveTime::parse_from_str(s, "%H:%M")
+            .map(minutes_of)
+            .map_err(|_| TaskError::BadTime(s.to_string()))
+    };
+    let mut from = minutes_of(start);
+    let mut end = None;
+    if let (Some(s), Some(e)) = (&old.0, &old.1) {
+        let len = at(e)?.saturating_sub(at(s)?);
+        from = from.min(DAY_END - 1 - len);
+        end = Some(from + len);
+    }
+    let text = |m: u32| format!("{:02}:{:02}", m / 60, m % 60);
+    tx.execute(
+        "UPDATE task SET due_date = ?1, due_time = ?2, end_time = ?3 WHERE id = ?4",
+        (date.to_string(), text(from), end.map(text), id.0),
+    )?;
+    tx.commit()?;
+    Ok(())
+}
+
+/// Moves a task to `date` and drops its times, so it sits in the day's "no time" strip.
+pub fn reschedule_untimed(conn: &Connection, id: TaskId, date: NaiveDate) -> Result<(), TaskError> {
+    match conn.execute(
+        "UPDATE task SET due_date = ?1, due_time = NULL, end_time = NULL WHERE id = ?2",
+        (date.to_string(), id.0),
+    )? {
+        0 => Err(TaskError::NotFound),
+        _ => Ok(()),
+    }
 }
 
 /// The calendar's side panel: pending tasks that have no place in the month grid.
@@ -248,6 +436,157 @@ mod tests {
         let w = month(&conn, d("2026-11-01"), today).unwrap();
         assert_eq!(titles(&w, "2026-11-20"), ["late"]);
         assert_eq!(titles(&w, "2026-11-21"), ["none"]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn t(s: &str) -> NaiveTime {
+        s.parse().unwrap()
+    }
+
+    type Stored = (String, Option<String>, Option<String>);
+
+    fn stored(conn: &Connection, id: tasks::TaskId) -> Stored {
+        conn.query_row(
+            "SELECT due_date, due_time, end_time FROM task WHERE id = ?1",
+            [id.0],
+            |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+        )
+        .unwrap()
+    }
+
+    fn row(date: &str, s: Option<&str>, e: Option<&str>) -> Stored {
+        (date.into(), s.map(Into::into), e.map(Into::into))
+    }
+
+    #[test]
+    fn snap_rounds_to_half_hours_within_the_day() {
+        assert_eq!(snap_to_slot(0), t("00:00"));
+        assert_eq!(snap_to_slot(14), t("00:00"));
+        assert_eq!(snap_to_slot(15), t("00:30"));
+        assert_eq!(snap_to_slot(44), t("00:30"));
+        assert_eq!(snap_to_slot(45), t("01:00"));
+        assert_eq!(snap_to_slot(7 * 60 + 10), t("07:00"));
+        assert_eq!(snap_to_slot(23 * 60 + 14), t("23:00"));
+        assert_eq!(snap_to_slot(23 * 60 + 15), t("23:30"));
+        assert_eq!(snap_to_slot(1439), t("23:30"));
+        assert_eq!(snap_to_slot(5000), t("23:30"));
+    }
+
+    #[test]
+    fn lanes() {
+        assert!(assign_lanes(&[]).is_empty());
+        // No overlap: each alone.
+        assert_eq!(assign_lanes(&[(60, 120), (180, 240)]), [(0, 1), (0, 1)]);
+        // Partial overlap.
+        assert_eq!(assign_lanes(&[(60, 120), (90, 150)]), [(0, 2), (1, 2)]);
+        // Contained, given out of order.
+        assert_eq!(assign_lanes(&[(70, 80), (60, 180)]), [(1, 2), (0, 2)]);
+        // Chain A-B, B-C: A and C share lane 0 in a 2-lane cluster.
+        assert_eq!(
+            assign_lanes(&[(60, 120), (100, 160), (150, 200)]),
+            [(0, 2), (1, 2), (0, 2)]
+        );
+        // Three at once.
+        assert_eq!(
+            assign_lanes(&[(60, 180), (70, 170), (80, 160)]),
+            [(0, 3), (1, 3), (2, 3)]
+        );
+        // Touching is not overlapping.
+        assert_eq!(assign_lanes(&[(60, 120), (120, 180)]), [(0, 1), (0, 1)]);
+        // A later, separate cluster does not inherit the lane count.
+        assert_eq!(
+            assign_lanes(&[(0, 60), (30, 90), (120, 180)]),
+            [(0, 2), (1, 2), (0, 1)]
+        );
+    }
+
+    #[test]
+    fn week_places_untimed_and_blocks_in_lanes() {
+        let (dir, conn) = setup("week");
+        let today = d("2026-11-08");
+        let timed = |title: &str, day: &str, s: &str, e: Option<&str>| {
+            let id = add(&conn, title, Some(day));
+            tasks::set_time(&conn, id, Some(t(s)), e.map(t)).unwrap();
+        };
+        // Week of Monday 2026-11-02 to Sunday 2026-11-08.
+        timed("a", "2026-11-04", "09:00", Some("10:00"));
+        timed("b", "2026-11-04", "09:30", None);
+        timed("c", "2026-11-04", "10:00", None);
+        timed("late", "2026-11-04", "23:30", None);
+        add(&conn, "plain", Some("2026-11-04"));
+        add(&conn, "out", Some("2026-11-09"));
+        add(&conn, "undated", None);
+        let w = week(&conn, d("2026-11-06"), today).unwrap();
+        assert_eq!(w.len(), 7);
+        assert_eq!((w[0].date, w[6].date), (d("2026-11-02"), d("2026-11-08")));
+        assert!(w[6].today && !w[0].today);
+        let wed = &w[2];
+        assert_eq!(wed.untimed.len(), 1);
+        let got: Vec<_> = wed
+            .blocks
+            .iter()
+            .map(|b| (b.task.title.as_str(), b.start, b.len, b.lane, b.lanes))
+            .collect();
+        // b has no end: one hour, 09:30-10:30; c starts when a ends and joins b's cluster.
+        assert_eq!(
+            got,
+            [
+                ("a", 540, 60, 0, 2),
+                ("b", 570, 60, 1, 2),
+                ("c", 600, 60, 0, 2),
+                ("late", 1410, 30, 0, 1)
+            ]
+        );
+        let n: usize = w.iter().map(|x| x.blocks.len() + x.untimed.len()).sum();
+        assert_eq!(n, 5);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reschedule_at_keeps_duration_or_pulls_back_from_midnight() {
+        let (dir, conn) = setup("resched-at");
+        let id = add(&conn, "x", Some("2026-11-02"));
+        tasks::set_time(&conn, id, Some(t("14:15")), Some(t("16:00"))).unwrap();
+        reschedule_at(&conn, id, d("2026-11-05"), t("09:00")).unwrap();
+        assert_eq!(
+            stored(&conn, id),
+            row("2026-11-05", Some("09:00"), Some("10:45"))
+        );
+        // Would end at 00:15 of the next day: ends at 23:59 instead.
+        reschedule_at(&conn, id, d("2026-11-05"), t("22:30")).unwrap();
+        assert_eq!(
+            stored(&conn, id),
+            row("2026-11-05", Some("22:14"), Some("23:59"))
+        );
+        // Without an end, and without a date before, it is just placed.
+        let open = add(&conn, "y", None);
+        reschedule_at(&conn, open, d("2026-11-06"), t("23:30")).unwrap();
+        assert_eq!(stored(&conn, open), row("2026-11-06", Some("23:30"), None));
+        assert!(matches!(
+            reschedule_at(&conn, tasks::TaskId(999), d("2026-11-06"), t("08:00")),
+            Err(TaskError::NotFound)
+        ));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn reschedule_untimed_moves_the_day_and_drops_the_times() {
+        let (dir, conn) = setup("resched-untimed");
+        let id = add(&conn, "x", Some("2026-11-02"));
+        tasks::set_time(&conn, id, Some(t("14:15")), Some(t("16:00"))).unwrap();
+        reschedule_untimed(&conn, id, d("2026-11-04")).unwrap();
+        assert_eq!(stored(&conn, id), row("2026-11-04", None, None));
+        // The same day, to drop the times only.
+        tasks::set_time(&conn, id, Some(t("08:00")), None).unwrap();
+        reschedule_untimed(&conn, id, d("2026-11-04")).unwrap();
+        assert_eq!(stored(&conn, id), row("2026-11-04", None, None));
+        assert!(matches!(
+            reschedule_untimed(&conn, tasks::TaskId(999), d("2026-11-04")),
+            Err(TaskError::NotFound)
+        ));
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

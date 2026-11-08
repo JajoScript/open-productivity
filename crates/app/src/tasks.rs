@@ -181,7 +181,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         }
     });
 
-    calendar_view::init(window, &state);
+    let calendar_timer = calendar_view::init(window, &state);
     finish(state.reload());
 
     window.on_select_view({
@@ -333,6 +333,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_secs(60), move || {
+        let _keep_alive = &calendar_timer;
         // set_vec closes open popups, so reload only when the day rolls over.
         if Local::now().date_naive() != state.day.get() {
             finish(state.reload())

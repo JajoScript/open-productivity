@@ -5,76 +5,129 @@
 
 use std::cell::Cell;
 use std::rc::Rc;
+use std::time::Duration;
 
 use open_productivity_core::agenda;
 use open_productivity_core::calendar;
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
 use open_productivity_core::tasks::{self, Task, TaskError, TaskId};
-use slint::{ComponentHandle, ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::tasks::{State, ui_id};
-use crate::{AppWindow, CalendarDay, CalendarTask, Date, Strings};
+use crate::{
+    AppWindow, CalendarDay, CalendarMode, CalendarTask, Date, Strings, WeekBlock, WeekColumn,
+};
+
+fn row(t: &Task) -> Result<CalendarTask, String> {
+    Ok(CalendarTask {
+        id: ui_id(t.id.0)?,
+        title: t.timed_title().into(),
+        done: t.done,
+    })
+}
 
 fn rows(tasks: Vec<Task>) -> Result<ModelRc<CalendarTask>, String> {
-    let rows = tasks
-        .into_iter()
-        .map(|t| {
-            Ok(CalendarTask {
-                id: ui_id(t.id.0)?,
-                title: t.timed_title().into(),
-                done: t.done,
-            })
-        })
-        .collect::<Result<Vec<_>, String>>()?;
+    let rows = tasks.iter().map(row).collect::<Result<Vec<_>, String>>()?;
     Ok(ModelRc::new(VecModel::from(rows)))
 }
 
-fn load(w: &AppWindow, conn: &Connection, first: NaiveDate) -> Result<(), String> {
-    let today = Local::now().date_naive();
-    let weeks = agenda::month(conn, first, today).map_err(|e| e.to_string())?;
-    let backlog = agenda::backlog(conn, today).map_err(|e| e.to_string())?;
-    let weeks = weeks
+fn ui_date(d: NaiveDate) -> Date {
+    Date {
+        year: d.year(),
+        month: d.month() as i32,
+        day: d.day() as i32,
+    }
+}
+
+fn week_columns(days: Vec<agenda::WeekDay>) -> Result<ModelRc<WeekColumn>, String> {
+    let cols = days
         .into_iter()
-        .map(|week| {
-            let days = week
-                .into_iter()
-                .map(|d| {
-                    Ok(CalendarDay {
-                        date: Date {
-                            year: d.date.year(),
-                            month: d.date.month() as i32,
-                            day: d.date.day() as i32,
-                        },
-                        day: d.date.day() as i32,
-                        in_month: d.in_month,
-                        today: d.today,
-                        tasks: rows(d.tasks)?,
+        .map(|d| {
+            let blocks = d
+                .blocks
+                .iter()
+                .map(|b| {
+                    Ok(WeekBlock {
+                        task: row(&b.task)?,
+                        start: b.start as i32,
+                        len: b.len as i32,
+                        lane: b.lane as i32,
+                        lanes: b.lanes as i32,
                     })
                 })
                 .collect::<Result<Vec<_>, String>>()?;
-            Ok(ModelRc::new(VecModel::from(days)))
+            Ok(WeekColumn {
+                date: ui_date(d.date),
+                today: d.today,
+                untimed: rows(d.untimed)?,
+                blocks: ModelRc::new(VecModel::from(blocks)),
+            })
         })
         .collect::<Result<Vec<_>, String>>()?;
+    Ok(ModelRc::new(VecModel::from(cols)))
+}
+
+fn now_minutes() -> i32 {
+    agenda::minutes_of(Local::now().time()) as i32
+}
+
+fn load(
+    w: &AppWindow,
+    conn: &Connection,
+    anchor: NaiveDate,
+    mode: CalendarMode,
+) -> Result<(), String> {
+    let today = Local::now().date_naive();
+    let backlog = agenda::backlog(conn, today).map_err(|e| e.to_string())?;
+    if mode == CalendarMode::Week {
+        let days = agenda::week(conn, anchor, today).map_err(|e| e.to_string())?;
+        w.set_calendar_week(week_columns(days)?);
+    } else {
+        let weeks = agenda::month(conn, first_of(anchor), today).map_err(|e| e.to_string())?;
+        let weeks = weeks
+            .into_iter()
+            .map(|week| {
+                let days = week
+                    .into_iter()
+                    .map(|d| {
+                        Ok(CalendarDay {
+                            date: ui_date(d.date),
+                            day: d.date.day() as i32,
+                            in_month: d.in_month,
+                            today: d.today,
+                            tasks: rows(d.tasks)?,
+                        })
+                    })
+                    .collect::<Result<Vec<_>, String>>()?;
+                Ok(ModelRc::new(VecModel::from(days)))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        w.set_calendar_weeks(ModelRc::new(VecModel::from(weeks)));
+    }
+    w.set_calendar_mode(mode);
     w.set_calendar_month(Date {
-        year: first.year(),
-        month: first.month() as i32,
         day: 1,
+        ..ui_date(first_of(anchor))
     });
-    w.set_calendar_weeks(ModelRc::new(VecModel::from(weeks)));
+    w.set_calendar_now(now_minutes());
     w.set_calendar_overdue(rows(backlog.overdue)?);
     w.set_calendar_undated(rows(backlog.undated)?);
     Ok(())
 }
 
-/// Registers the navigation and makes every reload of the tasks refresh the calendar too.
-pub fn init(window: &AppWindow, state: &Rc<State>) {
-    let shown = Rc::new(Cell::new(first_of(Local::now().date_naive())));
+/// Registers the navigation and makes every reload of the tasks refresh the calendar too. The
+/// returned timer moves the line of the current time and must be kept alive.
+pub fn init(window: &AppWindow, state: &Rc<State>) -> Timer {
+    // The month shown is the one holding `anchor`; the week shown, the one holding it too.
+    let anchor = Rc::new(Cell::new(Local::now().date_naive()));
+    let mode = Rc::new(Cell::new(CalendarMode::Month));
     let reload = Rc::new({
-        let (conn, weak, shown) = (state.conn.clone(), window.as_weak(), shown.clone());
+        let (conn, weak) = (state.conn.clone(), window.as_weak());
+        let (anchor, mode) = (anchor.clone(), mode.clone());
         move || {
             let Some(w) = weak.upgrade() else { return };
-            let msg = match load(&w, &conn, shown.get()) {
+            let msg = match load(&w, &conn, anchor.get(), mode.get()) {
                 Ok(()) => String::new(),
                 Err(e) => w
                     .global::<Strings>()
@@ -115,14 +168,16 @@ pub fn init(window: &AppWindow, state: &Rc<State>) {
         }
     });
 
-    window.on_reschedule_task({
+    // One drag-and-drop: applies `op` to the task and the dropped day, then reloads.
+    let reschedule = {
         let (state, weak) = (state.clone(), window.as_weak());
-        move |id, d: Date| {
+        move |id: i32,
+              d: Date,
+              op: &dyn Fn(&Connection, TaskId, NaiveDate) -> Result<(), TaskError>| {
             let Some(w) = weak.upgrade() else { return };
             let failed = |e: String| w.global::<Strings>().invoke_task_failed(e.into());
             let res = match NaiveDate::from_ymd_opt(d.year, d.month as u32, d.day as u32) {
-                Some(due) => tasks::set_due_date(&state.conn, TaskId(id.into()), Some(due))
-                    .map_err(|e| e.to_string()),
+                Some(due) => op(&state.conn, TaskId(id.into()), due).map_err(|e| e.to_string()),
                 None => Err(format!("{}-{}-{}", d.year, d.month, d.day)),
             };
             // Reload even on failure so the grid shows what is really stored; it also clears
@@ -133,33 +188,76 @@ pub fn init(window: &AppWindow, state: &Rc<State>) {
                 Err(e) => failed(e),
             });
         }
+    };
+    let reschedule = Rc::new(reschedule);
+    window.on_reschedule_task({
+        let reschedule = reschedule.clone();
+        move |id, d| reschedule(id, d, &|c, id, due| tasks::set_due_date(c, id, Some(due)))
+    });
+    window.on_reschedule_task_untimed({
+        let reschedule = reschedule.clone();
+        move |id, d| reschedule(id, d, &agenda::reschedule_untimed)
+    });
+    window.on_reschedule_task_at(move |id, d, minutes| {
+        let start = agenda::snap_to_slot(minutes.max(0) as u32);
+        reschedule(id, d, &|c, id, due| {
+            agenda::reschedule_at(c, id, due, start)
+        })
+    });
+    window.on_calendar_slot(|m| agenda::minutes_of(agenda::snap_to_slot(m.max(0) as u32)) as i32);
+
+    window.on_calendar_set_mode({
+        let (anchor, mode, reload) = (anchor.clone(), mode.clone(), reload.clone());
+        move |m| {
+            let today = Local::now().date_naive();
+            // Into the week of today when the month shown holds it.
+            if m == CalendarMode::Week && first_of(anchor.get()) == first_of(today) {
+                anchor.set(today);
+            }
+            mode.set(m);
+            reload();
+        }
     });
 
-    // 0 goes back to the current month; otherwise moves that many months.
+    // 0 goes back to today; otherwise moves that many months (or weeks).
     window.on_calendar_shift({
         let weak = window.as_weak();
-        move |months| {
+        move |n| {
             let today = Local::now().date_naive();
-            let target = if months == 0 {
-                Some(first_of(today))
+            let cur = anchor.get();
+            let target = if n == 0 {
+                Some(today)
+            } else if mode.get() == CalendarMode::Week {
+                calendar::shift(cur, 7 * i64::from(n))
             } else {
-                let cur = shown.get();
-                calendar::month_grid(cur.year(), cur.month(), months, today).map(|g| g.first)
+                calendar::month_grid(cur.year(), cur.month(), n, today).map(|g| g.first)
             };
             match (target, weak.upgrade()) {
-                (Some(first), _) => {
-                    shown.set(first);
+                (Some(date), _) => {
+                    anchor.set(date);
                     reload();
                 }
                 (None, Some(w)) => {
-                    let e = shown.get().to_string();
-                    let msg = w.global::<Strings>().invoke_calendar_failed(e.into());
+                    let msg = w
+                        .global::<Strings>()
+                        .invoke_calendar_failed(cur.to_string().into());
                     w.set_calendar_error(msg);
                 }
                 (None, None) => {}
             }
         }
     });
+
+    let timer = Timer::default();
+    timer.start(TimerMode::Repeated, Duration::from_secs(60), {
+        let weak = window.as_weak();
+        move || {
+            if let Some(w) = weak.upgrade() {
+                w.set_calendar_now(now_minutes());
+            }
+        }
+    });
+    timer
 }
 
 fn first_of(date: NaiveDate) -> NaiveDate {
