@@ -58,7 +58,11 @@ export component AppWindow inherits Window {
     in property <[[CalendarDay]]> calendar-weeks;
     in property <Date> calendar-month;
     in property <string> calendar-error;
+    in property <[CalendarTask]> calendar-overdue;
+    in property <[CalendarTask]> calendar-undated;
     callback calendar-shift(int);
+    // Dragged onto a day of the calendar: the task is due that day.
+    callback reschedule-task(int, Date);
     in property <[WeekDay]> week-days;
     callback week-shift(int);
     in property <[KanbanColumn]> kanban-columns;
@@ -271,8 +275,19 @@ export component AppWindow inherits Window {
                     weeks: root.calendar-weeks;
                     month: root.calendar-month;
                     error: root.calendar-error;
+                    overdue: root.calendar-overdue;
+                    undated: root.calendar-undated;
                     shift(n) => {
                         root.calendar-shift(n);
+                    }
+                    reschedule(id, date) => {
+                        root.reschedule-task(id, date);
+                    }
+                    task-payload(id) => {
+                        return root.task-payload(id);
+                    }
+                    payload-task(data) => {
+                        return root.payload-task(data);
                     }
                     day-chosen(date) => {
                         root.creating-on = date;

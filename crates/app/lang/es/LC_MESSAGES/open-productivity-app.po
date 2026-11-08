@@ -587,3 +587,6 @@ msgstr "Calendario"
 
 msgid "New task on {0}"
 msgstr "Nueva tarea el {0}"
+
+msgid "No date"
+msgstr "Sin fecha"

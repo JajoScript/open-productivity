@@ -7,7 +7,7 @@ use chrono::{Datelike, NaiveDate};
 use rusqlite::Connection;
 
 use crate::calendar;
-use crate::tasks::{SELECT_TASKS, Task, TaskError, query};
+use crate::tasks::{SELECT_TASKS, Task, TaskError, View, query};
 
 /// One cell of the month grid.
 #[derive(Debug)]
@@ -56,6 +56,31 @@ pub fn month(
         weeks.push(days.drain(..7).collect());
     }
     Ok(weeks)
+}
+
+/// The calendar's side panel: pending tasks that have no place in the month grid.
+#[derive(Debug)]
+pub struct Backlog {
+    /// Due before `today`, by date then creation.
+    pub overdue: Vec<Task>,
+    /// Without a due date (in a list or not), by creation.
+    pub undated: Vec<Task>,
+}
+
+pub fn backlog(conn: &Connection, today: NaiveDate) -> Result<Backlog, TaskError> {
+    let overdue = format!(
+        "WITH p(today) AS (SELECT ?1) {SELECT_TASKS} CROSS JOIN p \
+         WHERE ({}) AND t.done_at IS NULL ORDER BY t.due_date, t.created_at, t.id",
+        View::Overdue.rule()
+    );
+    let undated = format!(
+        "{SELECT_TASKS} WHERE t.due_date IS NULL AND t.done_at IS NULL \
+         ORDER BY t.created_at, t.id"
+    );
+    Ok(Backlog {
+        overdue: query(conn, &overdue, [today.to_string()])?,
+        undated: query(conn, &undated, [])?,
+    })
 }
 
 #[cfg(test)]
@@ -144,6 +169,50 @@ mod tests {
         let w = month(&conn, d("2026-11-01"), d("2026-11-08")).unwrap();
         assert_eq!(titles(&w, "2026-11-10"), ["b", "c", "a"]);
         assert!(w.iter().flatten().any(|x| x.tasks.iter().any(|t| t.done)));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    fn names(ts: &[Task]) -> Vec<&str> {
+        ts.iter().map(|t| t.title.as_str()).collect()
+    }
+
+    #[test]
+    fn backlog_sections() {
+        let (dir, conn) = setup("backlog");
+        let today = d("2026-11-08");
+        add(&conn, "late2", Some("2026-11-05"));
+        add(&conn, "late1", Some("2026-11-01"));
+        add(&conn, "today", Some("2026-11-08"));
+        add(&conn, "future", Some("2026-11-09"));
+        add(&conn, "none1", None);
+        let listed = add(&conn, "none2", None);
+        let list = crate::lists::create(&conn, "L").unwrap();
+        tasks::set_list(&conn, listed, Some(list)).unwrap();
+        let old = add(&conn, "old-done", Some("2026-10-01"));
+        tasks::set_done(&conn, old, true).unwrap();
+        let gone = add(&conn, "none-done", None);
+        tasks::set_done(&conn, gone, true).unwrap();
+        let b = backlog(&conn, today).unwrap();
+        assert_eq!(names(&b.overdue), ["late1", "late2"]);
+        assert_eq!(names(&b.undated), ["none1", "none2"]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn rescheduling_an_overdue_task_moves_it_to_the_day() {
+        let (dir, conn) = setup("resched");
+        let today = d("2026-11-08");
+        let id = add(&conn, "late", Some("2026-11-01"));
+        let undated = add(&conn, "none", None);
+        tasks::set_due_date(&conn, id, Some(d("2026-11-20"))).unwrap();
+        tasks::set_due_date(&conn, undated, Some(d("2026-11-21"))).unwrap();
+        let b = backlog(&conn, today).unwrap();
+        assert!(b.overdue.is_empty() && b.undated.is_empty());
+        let w = month(&conn, d("2026-11-01"), today).unwrap();
+        assert_eq!(titles(&w, "2026-11-20"), ["late"]);
+        assert_eq!(titles(&w, "2026-11-21"), ["none"]);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

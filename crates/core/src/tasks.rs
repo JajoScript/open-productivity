@@ -78,7 +78,7 @@ pub enum View {
 impl View {
     /// The only place each view's rule is written: an SQL condition on the task `t` and
     /// on `p.today`, shared by `list` and `counts` so they never disagree.
-    fn rule(self) -> String {
+    pub(crate) fn rule(self) -> String {
         match self {
             View::Today => "t.due_date = p.today".into(),
             View::Scheduled => "t.due_date > p.today".into(),

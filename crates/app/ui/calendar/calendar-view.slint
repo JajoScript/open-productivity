@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Date, Palette } from "std-widgets.slint";
+import { Date, ListView, Palette } from "std-widgets.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
+import { DragBoard } from "../tasks/drag-board.slint";
 
 // A task in a day cell; the calendar only shows it.
 export struct CalendarTask {
@@ -23,9 +24,58 @@ export struct CalendarDay {
     tasks: [CalendarTask],
 }
 
+// A task title that can be dragged to a day. A click is not a drag, so it still reaches `clicked`.
+component TaskChip inherits Rectangle {
+    in property <CalendarTask> task;
+    // What a drop receives; built by the app so foreign drags can be told apart.
+    in property <data-transfer> payload;
+    in property <color> ink: Palette.foreground;
+    callback clicked;
+    // For the board's floating copy: whether this chip is in flight and where it was grabbed.
+    out property <bool> dragging: drag.dragging;
+    out property <length> grab-x: touch.pressed-x;
+    out property <length> grab-y: touch.pressed-y;
+
+    border-radius: 4px;
+    background: touch.has-hover ? Theme.hover : transparent;
+    opacity: drag.dragging ? 0.4 : 1;
+    accessible-role: button;
+    accessible-label: root.task.title;
+    accessible-action-default => {
+        root.clicked();
+    }
+
+    drag := DragArea {
+        allow-move: true;
+        data: root.payload;
+
+        Text {
+            x: 2px;
+            width: parent.width - 4px;
+            text: root.task.title;
+            font-size: 12px;
+            overflow: elide;
+            vertical-alignment: center;
+            color: root.task.done ? Theme.done : root.ink;
+            accessible-role: none;
+        }
+
+        touch := TouchArea {
+            clicked => {
+                root.clicked();
+            }
+        }
+    }
+}
+
 component CalendarCell inherits Rectangle {
     in property <CalendarDay> cell;
     callback chosen;
+    pure callback payload(int) -> data-transfer;
+    // A drag is over the cell: returns whether it is one of our tasks.
+    callback drag-over(Point, Point, data-transfer) -> bool;
+    callback dropped(data-transfer);
+    callback chip-dragging(bool, CalendarTask, Point, length, Point);
 
     property <length> row-h: 20px;
     // Rows that fit under the day number; when the tasks do not all fit, the last one is "+N".
@@ -40,7 +90,8 @@ component CalendarCell inherits Rectangle {
     vertical-stretch: 1;
     clip: true;
     border-radius: 6px;
-    background: touch.has-hover ? Theme.hover : root.cell.today ? Theme.field : transparent;
+    background: drop.has-drag ? Theme.selected : touch.has-hover ? Theme.hover : root.cell.today ? Theme.field : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
     border-width: 1px;
     border-color: Theme.hairline;
     forward-focus: focus;
@@ -50,64 +101,80 @@ component CalendarCell inherits Rectangle {
         root.chosen();
     }
 
-    // Placed by hand, not in a layout: the rows that fit depend on the cell's height, and a
-    // layout would feed its own content size back into it.
-    Rectangle {
-        x: 6px;
-        y: 6px;
-        width: max(24px, number.preferred-width + 8px);
-        height: 24px;
-        border-radius: 5px;
-        background: root.cell.today ? Theme.ink : transparent;
-        number := Text {
-            text: root.cell.day;
+    drop := DropArea {
+        // Only our own task chips; text dragged from other apps is refused.
+        can-drop(event) => {
+            root.drag-over(self.absolute-position, event.position, event.data) ? DragAction.move : DragAction.none
+        }
+        dropped(event) => {
+            root.dropped(event.data);
+            return event.proposed-action;
+        }
+
+        // Placed by hand, not in a layout: the rows that fit depend on the cell's height, and a
+        // layout would feed its own content size back into it.
+        Rectangle {
+            x: 6px;
+            y: 6px;
+            width: max(24px, number.preferred-width + 8px);
+            height: 24px;
+            border-radius: 5px;
+            background: root.cell.today ? Theme.ink : transparent;
+            number := Text {
+                text: root.cell.day;
+                font-size: 12px;
+                font-weight: root.cell.today ? 700 : 400;
+                color: root.cell.today ? Theme.on-ink : root.cell.in-month ? Palette.foreground : Theme.muted;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // The cell's own click sits under the chips, so it comes before them.
+        touch := TouchArea {
+            clicked => {
+                root.chosen();
+            }
+        }
+
+        for t[i] in root.cell.tasks: TaskChip {
+            visible: i < root.shown;
+            x: 6px;
+            y: 32px + i * root.row-h;
+            width: parent.width - 12px;
+            height: root.row-h;
+            task: t;
+            payload: root.payload(t.id);
+            ink: root.cell.in-month ? Palette.foreground : Theme.muted;
+            changed dragging => {
+                root.chip-dragging(self.dragging, t, self.absolute-position, self.width, { x: self.grab-x, y: self.grab-y });
+            }
+            clicked => {
+                root.chosen();
+            }
+        }
+
+        if root.overflow: Text {
+            x: 6px;
+            y: 32px + root.shown * root.row-h;
+            width: parent.width - 12px;
+            height: root.row-h;
+            text: Strings.more-tasks(root.cell.tasks.length - root.shown);
             font-size: 12px;
-            font-weight: root.cell.today ? 700 : 400;
-            color: root.cell.today ? Theme.on-ink : root.cell.in-month ? Palette.foreground : Theme.muted;
-            horizontal-alignment: center;
+            color: Theme.muted;
+            overflow: elide;
             vertical-alignment: center;
         }
-    }
 
-    for t[i] in root.cell.tasks: Text {
-        visible: i < root.shown;
-        x: 6px;
-        y: 32px + i * root.row-h;
-        width: parent.width - 12px;
-        height: root.row-h;
-        text: t.title;
-        font-size: 12px;
-        overflow: elide;
-        vertical-alignment: center;
-        color: t.done ? Theme.done : root.cell.in-month ? Palette.foreground : Theme.muted;
-    }
-
-    if root.overflow: Text {
-        x: 6px;
-        y: 32px + root.shown * root.row-h;
-        width: parent.width - 12px;
-        height: root.row-h;
-        text: Strings.more-tasks(root.cell.tasks.length - root.shown);
-        font-size: 12px;
-        color: Theme.muted;
-        overflow: elide;
-        vertical-alignment: center;
-    }
-
-    touch := TouchArea {
-        clicked => {
-            root.chosen();
-        }
-    }
-
-    focus := FocusScope {
-        width: 0px; // keyboard only; clicks go to the TouchArea
-        key-pressed(event) => {
-            if event.text == Key.Space || event.text == Key.Return {
-                root.chosen();
-                return accept;
+        focus := FocusScope {
+            width: 0px; // keyboard only; clicks go to the TouchArea
+            key-pressed(event) => {
+                if event.text == Key.Space || event.text == Key.Return {
+                    root.chosen();
+                    return accept;
+                }
+                reject
             }
-            reject
         }
     }
 
@@ -118,92 +185,194 @@ component CalendarCell inherits Rectangle {
     }
 }
 
-// The month as a grid, Monday first, tasks placed by due date. Pressing a day asks to add a task.
-export component CalendarView inherits VerticalLayout {
+// One section of the side panel: a title with its count over a scrolling list.
+component PanelSection inherits VerticalLayout {
+    in property <string> title;
+    in property <[CalendarTask]> tasks;
+    pure callback payload(int) -> data-transfer;
+    callback chip-dragging(bool, CalendarTask, Point, length, Point);
+
+    spacing: 4px;
+    padding: 8px;
+
+    HorizontalLayout {
+        padding-left: 4px;
+        spacing: 8px;
+        height: 28px;
+        Text {
+            text: root.title;
+            font-weight: 600;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Text {
+            text: root.tasks.length;
+            color: Theme.muted;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+        }
+    }
+
+    ListView {
+        for t in root.tasks: TaskChip {
+            height: 28px;
+            task: t;
+            payload: root.payload(t.id);
+            changed dragging => {
+                root.chip-dragging(self.dragging, t, self.absolute-position, self.width, { x: self.grab-x, y: self.grab-y });
+            }
+        }
+    }
+}
+
+// The month as a grid, Monday first, tasks placed by due date. Pressing a day asks to add a task;
+// dragging a task onto a day (or from the side panel) reschedules it.
+export component CalendarView inherits DragBoard {
     // Rows of seven days.
     in property <[[CalendarDay]]> weeks;
     // The month shown; only its month and year matter.
     in property <Date> month;
     in property <string> error;
+    // Pending tasks past due, and without a date: the side panel.
+    in property <[CalendarTask]> overdue;
+    in property <[CalendarTask]> undated;
     // -1 / +1 moves a month; 0 goes back to the current one.
     callback shift(int);
     callback day-chosen(Date);
+    callback reschedule(int, Date);
 
-    padding: 24px;
-    padding-top: 20px;
-    spacing: 12px;
-
-    HorizontalLayout {
-        spacing: 4px;
-        alignment: start;
-        Text {
-            text: @tr("Calendar");
-            font-size: 24px;
-            font-weight: 700;
-            vertical-alignment: center;
-            overflow: elide;
-        }
-
-        SubtleButton {
-            icon: @image-url("../icons/chevron-left.svg");
-            label: @tr("Previous month");
-            clicked => {
-                root.shift(-1);
-            }
-        }
-
-        Text {
-            text: Strings.month-year(root.month.month, root.month.year);
-            vertical-alignment: center;
-            horizontal-alignment: center;
-            min-width: 120px;
-        }
-
-        SubtleButton {
-            icon: @image-url("../icons/chevron-right.svg");
-            label: @tr("Next month");
-            clicked => {
-                root.shift(1);
-            }
-        }
-
-        SubtleButton {
-            text: @tr("Today");
-            color: Palette.foreground;
-            clicked => {
-                root.shift(0);
-            }
-        }
-    }
-
-    if root.error != "": Text {
-        text: root.error;
-        color: Theme.critical;
-        wrap: word-wrap;
-    }
+    // A narrow window gives the whole width to the grid.
+    property <bool> show-panel: root.width >= 800px;
 
     HorizontalLayout {
-        spacing: 4px;
-        for name in Strings.weekdays: Text {
-            preferred-width: 0px;
+        padding: 24px;
+        padding-top: 20px;
+        spacing: 12px;
+
+        VerticalLayout {
+            spacing: 12px;
             horizontal-stretch: 1;
-            text: name;
-            color: Theme.muted;
-            font-size: 11px;
-            font-weight: 600;
-            horizontal-alignment: center;
-        }
-    }
 
-    VerticalLayout {
-        spacing: 4px;
-        vertical-stretch: 1;
-        for week in root.weeks: HorizontalLayout {
-            spacing: 4px;
-            for cell in week: CalendarCell {
-                cell: cell;
-                chosen => {
-                    root.day-chosen(cell.date);
+            HorizontalLayout {
+                spacing: 4px;
+                alignment: start;
+                Text {
+                    text: @tr("Calendar");
+                    font-size: 24px;
+                    font-weight: 700;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+
+                SubtleButton {
+                    icon: @image-url("../icons/chevron-left.svg");
+                    label: @tr("Previous month");
+                    clicked => {
+                        root.shift(-1);
+                    }
+                }
+
+                Text {
+                    text: Strings.month-year(root.month.month, root.month.year);
+                    vertical-alignment: center;
+                    horizontal-alignment: center;
+                    min-width: 120px;
+                }
+
+                SubtleButton {
+                    icon: @image-url("../icons/chevron-right.svg");
+                    label: @tr("Next month");
+                    clicked => {
+                        root.shift(1);
+                    }
+                }
+
+                SubtleButton {
+                    text: @tr("Today");
+                    color: Palette.foreground;
+                    clicked => {
+                        root.shift(0);
+                    }
+                }
+            }
+
+            if root.error != "": Text {
+                text: root.error;
+                color: Theme.critical;
+                wrap: word-wrap;
+            }
+
+            HorizontalLayout {
+                spacing: 4px;
+                for name in Strings.weekdays: Text {
+                    preferred-width: 0px;
+                    horizontal-stretch: 1;
+                    text: name;
+                    color: Theme.muted;
+                    font-size: 11px;
+                    font-weight: 600;
+                    horizontal-alignment: center;
+                }
+            }
+
+            VerticalLayout {
+                spacing: 4px;
+                vertical-stretch: 1;
+                for week in root.weeks: HorizontalLayout {
+                    spacing: 4px;
+                    for cell in week: CalendarCell {
+                        cell: cell;
+                        payload(id) => {
+                            return root.task-payload(id);
+                        }
+                        drag-over(area, pos, data) => {
+                            return root.follow(area, pos, data);
+                        }
+                        dropped(data) => {
+                            root.reschedule(root.land(data), cell.date);
+                        }
+                        chip-dragging(dragging, t, at, width, grab) => {
+                            root.card-dragging(dragging, { id: t.id, title: t.title }, at, width, grab);
+                        }
+                        chosen => {
+                            root.day-chosen(cell.date);
+                        }
+                    }
+                }
+            }
+        }
+
+        // Dropping on the panel does nothing; the date is removed in the task editor. The bottom
+        // margin keeps the lists clear of the floating button.
+        if root.show-panel: VerticalLayout {
+            width: 220px;
+            padding-bottom: 72px;
+            Rectangle {
+                border-radius: 6px;
+                background: Theme.field;
+                VerticalLayout {
+                    PanelSection {
+                        title: @tr("smart list" => "Overdue");
+                        tasks: root.overdue;
+                        payload(id) => {
+                            return root.task-payload(id);
+                        }
+                        chip-dragging(dragging, t, at, width, grab) => {
+                            root.card-dragging(dragging, { id: t.id, title: t.title }, at, width, grab);
+                        }
+                    }
+
+                    PanelSection {
+                        title: @tr("No date");
+                        tasks: root.undated;
+                        payload(id) => {
+                            return root.task-payload(id);
+                        }
+                        chip-dragging(dragging, t, at, width, grab) => {
+                            root.card-dragging(dragging, { id: t.id, title: t.title }, at, width, grab);
+                        }
+                    }
                 }
             }
         }
