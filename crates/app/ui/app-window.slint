@@ -70,6 +70,8 @@ export component AppWindow inherits Window {
     callback create-task(string) -> string;
     // From the floating button: always files into the Inbox, whatever view is open.
     callback quick-create-task(string) -> string;
+    // From a day of the calendar: the task is due that day.
+    callback create-task-on(string, Date) -> string;
     callback set-done(int, bool);
     callback set-due(int, Date);
     callback clear-due(int);
@@ -107,6 +109,7 @@ export component AppWindow inherits Window {
     // then fades in and rises into place.
     property <bool> entering;
     property <Module> module;
+    property <Date> creating-on;
     property <TasksTab> tasks-tab;
     // What the habit modal opens with: a new habit, or the one being edited.
     property <bool> habit-editing;
@@ -271,6 +274,10 @@ export component AppWindow inherits Window {
                     shift(n) => {
                         root.calendar-shift(n);
                     }
+                    day-chosen(date) => {
+                        root.creating-on = date;
+                        day-task-creator.show();
+                    }
                 }
 
                 if root.module == Module.habits: HabitsView {
@@ -405,6 +412,15 @@ export component AppWindow inherits Window {
                 quick.notify();
             }
             return error;
+        }
+    }
+
+    day-task-creator := TaskCreator {
+        subtitle: Strings.date(root.creating-on.day, root.creating-on.month, root.creating-on.year);
+        x: (root.width - self.width) / 2;
+        y: 120px;
+        create(title) => {
+            return root.create-task-on(title, root.creating-on);
         }
     }
 

@@ -12,6 +12,8 @@ import { Theme } from "../theme.slint";
 component CreatorBody inherits FocusScope {
     callback create(string) -> string;
     callback cancel;
+    // Optional line under the heading, e.g. the day the task is for; hidden when empty.
+    in property <string> subtitle;
 
     property <string> error;
 
@@ -31,6 +33,11 @@ component CreatorBody inherits FocusScope {
             text: @tr("New task");
             font-size: 14px;
             font-weight: 700;
+        }
+
+        if root.subtitle != "": Text {
+            text: root.subtitle;
+            color: Theme.muted;
         }
 
         name := InkField {
@@ -74,12 +81,15 @@ component CreatorBody inherits FocusScope {
 export component TaskCreator inherits PopupWindow {
     // Returns the error to show; empty means the task was created and the modal closes.
     callback create(string) -> string;
+    // Optional line naming where the task goes; the modal is unchanged when empty.
+    in property <string> subtitle;
 
     close-policy: close-on-click-outside;
     width: 360px;
 
     PopupSurface {
         CreatorBody {
+            subtitle: root.subtitle;
             create(title) => {
                 let error = root.create(title);
                 if error == "" {

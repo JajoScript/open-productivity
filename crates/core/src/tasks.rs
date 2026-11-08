@@ -202,10 +202,6 @@ pub fn create(
     if !view.can_create() {
         return Err(TaskError::CannotCreateHere);
     }
-    let title = title.trim();
-    if title.is_empty() {
-        return Err(TaskError::EmptyTitle);
-    }
     // The new task must show up in the view it was created from.
     let due = match view {
         View::Today => Some(today),
@@ -220,6 +216,24 @@ pub fn create(
         View::List(id) => Some(id.0),
         _ => None,
     };
+    insert(conn, title, due, list)
+}
+
+/// A task with the given due date and no list, in a single INSERT; any date is valid, past too.
+pub fn create_on(conn: &Connection, title: &str, due: NaiveDate) -> Result<TaskId, TaskError> {
+    insert(conn, title, Some(due), None)
+}
+
+fn insert(
+    conn: &Connection,
+    title: &str,
+    due: Option<NaiveDate>,
+    list: Option<i64>,
+) -> Result<TaskId, TaskError> {
+    let title = title.trim();
+    if title.is_empty() {
+        return Err(TaskError::EmptyTitle);
+    }
     conn.execute(
         "INSERT INTO task (title, due_date, list_id) VALUES (?1, ?2, ?3)",
         (title, due.map(|d| d.to_string()), list),
@@ -549,6 +563,32 @@ mod tests {
     }
 
     const NOW: &str = "2026-06-15T12:00:00+00:00";
+
+    #[test]
+    fn create_on_stores_the_exact_date_and_validates_the_title() {
+        let (dir, conn) = setup("create-on");
+        for date in ["2020-01-31", "2026-11-08", "2031-02-28"] {
+            let id = create_on(&conn, "  x ", d(date)).unwrap();
+            let (title, due, list): (String, String, Option<i64>) = conn
+                .query_row(
+                    "SELECT title, due_date, list_id FROM task WHERE id = ?1",
+                    [id.0],
+                    |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)),
+                )
+                .unwrap();
+            assert_eq!((title.as_str(), due.as_str(), list), ("x", date, None));
+        }
+        assert!(matches!(
+            create_on(&conn, " 	", d("2026-11-08")),
+            Err(TaskError::EmptyTitle)
+        ));
+        let n: i64 = conn
+            .query_row("SELECT COUNT(*) FROM task", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(n, 3);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     fn mk(conn: &Connection, title: &str) -> Result<TaskId, TaskError> {
         create(conn, title, View::All, d("2026-06-15"))

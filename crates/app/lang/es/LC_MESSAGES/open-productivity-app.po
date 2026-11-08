@@ -584,3 +584,6 @@ msgstr "+{}"
 
 msgid "Calendar"
 msgstr "Calendario"
+
+msgid "New task on {0}"
+msgstr "Nueva tarea el {0}"

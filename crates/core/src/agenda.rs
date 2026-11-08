@@ -125,6 +125,16 @@ mod tests {
     }
 
     #[test]
+    fn created_on_a_day_shows_in_that_cell() {
+        let (dir, conn) = setup("created-on");
+        tasks::create_on(&conn, "past", d("2026-10-28")).unwrap();
+        let w = month(&conn, d("2026-11-01"), d("2026-11-08")).unwrap();
+        assert_eq!(titles(&w, "2026-10-28"), ["past"]);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
     fn pending_before_done_then_creation() {
         let (dir, conn) = setup("order");
         let a = add(&conn, "a", Some("2026-11-10"));

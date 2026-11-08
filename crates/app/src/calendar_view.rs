@@ -10,6 +10,7 @@ use open_productivity_core::agenda;
 use open_productivity_core::calendar;
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
+use open_productivity_core::tasks::{self, TaskError};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
 use crate::tasks::{State, ui_id};
@@ -36,6 +37,11 @@ fn load(w: &AppWindow, conn: &Connection, first: NaiveDate) -> Result<(), String
                         })
                         .collect::<Result<Vec<_>, String>>()?;
                     Ok(CalendarDay {
+                        date: Date {
+                            year: d.date.year(),
+                            month: d.date.month() as i32,
+                            day: d.date.day() as i32,
+                        },
                         day: d.date.day() as i32,
                         in_month: d.in_month,
                         today: d.today,
@@ -77,6 +83,31 @@ pub fn init(window: &AppWindow, state: &Rc<State>) {
         let reload = reload.clone();
         move || reload()
     }));
+
+    window.on_create_task_on({
+        let (state, weak) = (state.clone(), window.as_weak());
+        move |title, d: Date| {
+            let Some(w) = weak.upgrade() else {
+                return Default::default();
+            };
+            let strings = w.global::<Strings>();
+            let Some(due) = NaiveDate::from_ymd_opt(d.year, d.month as u32, d.day as u32) else {
+                return strings
+                    .invoke_task_failed(format!("{}-{}-{}", d.year, d.month, d.day).into());
+            };
+            match tasks::create_on(&state.conn, &title, due) {
+                Err(TaskError::EmptyTitle) => strings.get_task_title_empty(),
+                Err(e) => strings.invoke_task_failed(e.to_string().into()),
+                Ok(_) => {
+                    // Failures of the reload show in the tasks error line, as everywhere.
+                    if let Err(e) = state.reload() {
+                        w.set_tasks_error(strings.invoke_task_failed(e.into()));
+                    }
+                    Default::default()
+                }
+            }
+        }
+    });
 
     // 0 goes back to the current month; otherwise moves that many months.
     window.on_calendar_shift({

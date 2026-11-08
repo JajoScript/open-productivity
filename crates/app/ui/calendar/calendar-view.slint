@@ -15,6 +15,7 @@ export struct CalendarTask {
 
 // One cell of the month grid: the day and the tasks due on it.
 export struct CalendarDay {
+    date: Date,
     day: int,
     // False for the filler days of the neighbouring months.
     in-month: bool,
@@ -24,6 +25,7 @@ export struct CalendarDay {
 
 component CalendarCell inherits Rectangle {
     in property <CalendarDay> cell;
+    callback chosen;
 
     property <length> row-h: 20px;
     // Rows that fit under the day number; when the tasks do not all fit, the last one is "+N".
@@ -38,9 +40,15 @@ component CalendarCell inherits Rectangle {
     vertical-stretch: 1;
     clip: true;
     border-radius: 6px;
-    background: root.cell.today ? Theme.field : transparent;
+    background: touch.has-hover ? Theme.hover : root.cell.today ? Theme.field : transparent;
     border-width: 1px;
     border-color: Theme.hairline;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: @tr("New task on {0}", Strings.date(root.cell.date.day, root.cell.date.month, root.cell.date.year));
+    accessible-action-default => {
+        root.chosen();
+    }
 
     // Placed by hand, not in a layout: the rows that fit depend on the cell's height, and a
     // layout would feed its own content size back into it.
@@ -85,9 +93,32 @@ component CalendarCell inherits Rectangle {
         overflow: elide;
         vertical-alignment: center;
     }
+
+    touch := TouchArea {
+        clicked => {
+            root.chosen();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.chosen();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: 6px;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
 }
 
-// The month as a grid, Monday first, tasks placed by due date. Read only.
+// The month as a grid, Monday first, tasks placed by due date. Pressing a day asks to add a task.
 export component CalendarView inherits VerticalLayout {
     // Rows of seven days.
     in property <[[CalendarDay]]> weeks;
@@ -96,6 +127,7 @@ export component CalendarView inherits VerticalLayout {
     in property <string> error;
     // -1 / +1 moves a month; 0 goes back to the current one.
     callback shift(int);
+    callback day-chosen(Date);
 
     padding: 24px;
     padding-top: 20px;
@@ -170,6 +202,9 @@ export component CalendarView inherits VerticalLayout {
             spacing: 4px;
             for cell in week: CalendarCell {
                 cell: cell;
+                chosen => {
+                    root.day-chosen(cell.date);
+                }
             }
         }
     }
