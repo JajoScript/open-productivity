@@ -14,8 +14,8 @@ use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::tasks::ui_id;
 use crate::{
-    AppWindow, ArchivedRow, Date, DayHabit, DayState, HabitRow, HeatCell, HeatLevel,
-    Strings, WeekTotal,
+    AppWindow, ArchivedRow, Date, DayHabit, DayState, HabitRow, HeatCell, HeatLevel, Strings,
+    WeekTotal,
 };
 
 /// Publishes the habits that apply today for the Today tab of Tasks.
