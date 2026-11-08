@@ -272,7 +272,6 @@ export component AppWindow inherits Window {
                     width: parent.width;
                     height: parent.height;
                     tab <=> root.tasks-tab;
-                    instance-name: root.instance-name;
                     view: root.current-view;
                     can-create: root.can-create;
                     pending-count: root.pending-count;
@@ -354,5 +353,6 @@ export component AppWindow inherits Window {
         y: 0px;
         height: root.height;
         module <=> root.module;
+        instance-name: root.instance-name;
     }
 }

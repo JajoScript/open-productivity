@@ -85,6 +85,8 @@ component RailButton inherits Rectangle {
 // keyboard focus to show the module names; the window keeps only the collapsed width for it.
 export component Rail inherits Rectangle {
     in-out property <Module> module;
+    // The open instance, so the user can tell which data they are looking at.
+    in property <string> instance-name;
 
     property <length> collapsed: 56px;
     property <length> open: 200px;
@@ -131,7 +133,7 @@ export component Rail inherits Rectangle {
 
                 RailLabel {
                     width: parent.width - self.x;
-                    text: "Open Productivity";
+                    text: root.instance-name;
                     font-weight: 600;
                     reveal: root.reveal;
                 }

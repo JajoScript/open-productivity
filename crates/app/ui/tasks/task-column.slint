@@ -163,6 +163,9 @@ component TaskLine inherits Rectangle {
 // The tasks of one view: title, the button that opens the creator, and the rows.
 export component TaskColumn inherits VerticalLayout {
     in property <TaskView> view;
+    in property <Date> today;
+    // 0 is Monday.
+    in property <int> today-weekday;
     // From core (`View::can_create`): whether the view takes new tasks.
     in property <bool> can-create;
     in property <int> pending-count;
@@ -206,10 +209,20 @@ export component TaskColumn inherits VerticalLayout {
             overflow: elide;
         }
 
-        Text {
+        if root.view == TaskView.today: Text {
+            text: Strings.long-date(root.today.day, root.today.month, root.today-weekday);
+            color: Theme.muted;
+            vertical-alignment: center;
+        }
+
+        // Beside the habits, the section labels already carry the count.
+        if root.day-habits.length == 0: Text {
             text: @tr("{n} pending" | "{n} pending" % root.pending-count);
             color: Theme.muted;
             vertical-alignment: center;
+        }
+
+        Rectangle {
             horizontal-stretch: 1;
         }
 
