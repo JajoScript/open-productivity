@@ -278,6 +278,8 @@ export component WeekGrid inherits Rectangle {
         // Opens scrolled to 07:00.
         Flickable {
             vertical-stretch: 1;
+            // A mouse drag moves tasks; the wheel scrolls.
+            mouse-drag-pan-enabled: false;
             content-width: self.width;
             content-height: 24 * root.hour-h;
             content-y: -7 * root.hour-h;
