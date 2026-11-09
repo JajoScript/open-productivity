@@ -177,42 +177,34 @@ export component StudyView inherits VerticalLayout {
     padding-top: 20px;
     spacing: 12px;
 
-    VerticalLayout {
-        spacing: 2px;
-        HorizontalLayout {
-            spacing: 8px;
-            Text {
-                text: @tr("Study");
-                font-size: 24px;
-                font-weight: 700;
-                vertical-alignment: center;
-                overflow: elide;
-            }
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            text: @tr("Study");
+            font-size: 24px;
+            font-weight: 700;
+            vertical-alignment: center;
+            overflow: elide;
+        }
 
-            Rectangle {
-                horizontal-stretch: 1;
-            }
+        Rectangle {
+            horizontal-stretch: 1;
+        }
 
-            SubtleButton {
-                text: @tr("New subject");
-                color: Palette.foreground;
-                clicked => {
-                    root.new-subject();
-                }
-            }
-
-            InkButton {
-                text: @tr("Log session");
-                enabled: root.can-log;
-                clicked => {
-                    root.log-session();
-                }
+        SubtleButton {
+            text: @tr("New subject");
+            color: Palette.foreground;
+            clicked => {
+                root.new-subject();
             }
         }
 
-        Text {
-            text: @tr("Your subjects and study sessions.");
-            color: Theme.muted;
+        InkButton {
+            text: @tr("Log session");
+            enabled: root.can-log;
+            clicked => {
+                root.log-session();
+            }
         }
     }
 
