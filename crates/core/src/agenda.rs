@@ -252,6 +252,17 @@ pub fn week(
     Ok(days)
 }
 
+/// The single column of `date`, placed as in its week.
+pub fn day(
+    conn: &Connection,
+    date: NaiveDate,
+    today: NaiveDate,
+) -> Result<Vec<WeekDay>, TaskError> {
+    let mut days = week(conn, date, today)?;
+    days.retain(|d| d.date == date);
+    Ok(days)
+}
+
 /// Moves a task to `date` at `start`, keeping its length when it has an end. A task that would
 /// run past 23:59 starts earlier so that it ends at 23:59. One transaction.
 pub fn reschedule_at(
@@ -596,6 +607,19 @@ mod tests {
             assign_lanes(&[(0, 60), (30, 90), (120, 180)]),
             [(0, 2), (1, 2), (0, 1)]
         );
+    }
+
+    #[test]
+    fn day_is_only_that_date() {
+        let conn = db::test_conn();
+        add(&conn, "wed", Some("2026-11-04"));
+        add(&conn, "thu", Some("2026-11-05"));
+        let got = super::day(&conn, d("2026-11-04"), d("2026-11-04")).unwrap();
+        assert_eq!(got.len(), 1);
+        assert_eq!(got[0].date, d("2026-11-04"));
+        assert!(got[0].today);
+        assert_eq!(got[0].untimed.len(), 1);
+        assert_eq!(got[0].untimed[0].title, "wed");
     }
 
     #[test]

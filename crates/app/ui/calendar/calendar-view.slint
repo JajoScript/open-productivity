@@ -15,7 +15,7 @@ import { WeekBlock, WeekColumn, WeekGrid } from "week-grid.slint";
 
 export { CalendarDay, CalendarHabit, CalendarTask, WeekBlock, WeekColumn }
 
-export enum CalendarMode { month, week }
+export enum CalendarMode { month, week, day }
 
 export enum CalendarSource { tasks, habits }
 
@@ -85,7 +85,7 @@ export component CalendarView inherits DragBoard {
     in property <[CalendarEntry]> sources;
     in property <bool> show-backlog: true;
     callback set-source(CalendarSource, bool);
-    // -1 / +1 moves a month (or a week); 0 goes back to the current one.
+    // -1 / +1 moves a month (or a week, or a day); 0 goes back to the current one.
     callback shift(int);
     callback set-mode(CalendarMode);
     callback day-chosen(Date);
@@ -115,7 +115,6 @@ export component CalendarView inherits DragBoard {
 
             HorizontalLayout {
                 spacing: 4px;
-                alignment: start;
                 Text {
                     text: @tr("Calendar");
                     font-size: 24px;
@@ -124,39 +123,42 @@ export component CalendarView inherits DragBoard {
                     overflow: elide;
                 }
 
-                SubtleButton {
-                    icon: @image-url("../icons/chevron-left.svg");
-                    label: root.mode == CalendarMode.month ? @tr("Previous month") : @tr("Previous week");
-                    clicked => {
-                        root.shift(-1);
-                    }
-                }
-
-                Text {
-                    text: root.mode == CalendarMode.month || root.week.length < 7 ? Strings.month-year(root.month.month, root.month.year) : Strings.date(root.week[0].date.day, root.week[0].date.month, root.week[0].date.year) + " \u{2013} " + Strings.date(root.week[6].date.day, root.week[6].date.month, root.week[6].date.year);
-                    vertical-alignment: center;
-                    horizontal-alignment: center;
-                    min-width: 120px;
-                }
-
-                SubtleButton {
-                    icon: @image-url("../icons/chevron-right.svg");
-                    label: root.mode == CalendarMode.month ? @tr("Next month") : @tr("Next week");
-                    clicked => {
-                        root.shift(1);
-                    }
+                Rectangle {
+                    width: 12px;
                 }
 
                 SubtleButton {
                     text: @tr("Today");
                     color: Palette.foreground;
+                    outlined: true;
                     clicked => {
                         root.shift(0);
                     }
                 }
 
-                Rectangle {
-                    width: 12px;
+                SubtleButton {
+                    icon: @image-url("../icons/chevron-left.svg");
+                    label: root.mode == CalendarMode.month ? @tr("Previous month") : root.mode == CalendarMode.day ? @tr("Previous day") : @tr("Previous week");
+                    clicked => {
+                        root.shift(-1);
+                    }
+                }
+
+                SubtleButton {
+                    icon: @image-url("../icons/chevron-right.svg");
+                    label: root.mode == CalendarMode.month ? @tr("Next month") : root.mode == CalendarMode.day ? @tr("Next day") : @tr("Next week");
+                    clicked => {
+                        root.shift(1);
+                    }
+                }
+
+                // After the arrows and left-aligned, so its length never moves them.
+                Text {
+                    text: root.mode == CalendarMode.day && root.week.length > 0 ? Strings.date(root.week[0].date.day, root.week[0].date.month, root.week[0].date.year) : root.mode == CalendarMode.month || root.week.length < 7 ? Strings.month-year(root.month.month, root.month.year) : Strings.date(root.week[0].date.day, root.week[0].date.month, root.week[0].date.year) + " \u{2013} " + Strings.date(root.week[6].date.day, root.week[6].date.month, root.week[6].date.year);
+                    font-weight: 600;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
                 }
 
                 SettingsTab {
@@ -172,6 +174,14 @@ export component CalendarView inherits DragBoard {
                     selected: root.mode == CalendarMode.week;
                     chosen => {
                         root.set-mode(CalendarMode.week);
+                    }
+                }
+
+                SettingsTab {
+                    text: @tr("Day");
+                    selected: root.mode == CalendarMode.day;
+                    chosen => {
+                        root.set-mode(CalendarMode.day);
                     }
                 }
             }
@@ -221,7 +231,7 @@ export component CalendarView inherits DragBoard {
                 }
             }
 
-            if root.mode == CalendarMode.week: WeekGrid {
+            if root.mode != CalendarMode.month: WeekGrid {
                 vertical-stretch: 1;
                 days: root.week;
                 now: root.now;

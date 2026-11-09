@@ -23,6 +23,8 @@ export struct WeekBlock {
 
 export struct WeekColumn {
     date: Date,
+    // Index into `Strings.weekdays`, Monday first.
+    weekday: int,
     today: bool,
     // Due that day without a time.
     untimed: [CalendarTask],
@@ -86,7 +88,7 @@ component UntimedCell inherits Rectangle {
     callback chip-dragging(bool, CalendarTask, Point, length, Point);
 
     property <length> row-h: 22px;
-    property <int> fit: 2;
+    in property <int> fit: 2;
     property <int> total: root.day.untimed.length + root.day.habits.length;
     property <bool> overflow: root.total > root.fit;
     property <int> shown: root.overflow ? root.fit - 1 : root.total;
@@ -223,6 +225,8 @@ export component WeekGrid inherits Rectangle {
 
     property <length> gutter: 48px;
     property <length> hour-h: 48px;
+    // shortcut: a single day shows at most 8 rows without a time, then "+N"; scroll it if days get that full.
+    property <int> untimed-fit: root.days.length == 1 ? min(8, max(2, root.days[0].untimed.length + root.days[0].habits.length)) : 2;
 
     VerticalLayout {
         // Weekday and date of each column.
@@ -232,17 +236,19 @@ export component WeekGrid inherits Rectangle {
                 width: root.gutter;
             }
 
-            for d[i] in root.days: Rectangle {
+            for d in root.days: Rectangle {
                 preferred-width: 0px;
                 horizontal-stretch: 1;
                 Rectangle {
                     y: 2px;
                     height: 36px;
-                    width: parent.width - 8px;
+                    // A lone day keeps the plate small: the header already names its date.
+                    x: root.days.length == 1 ? 2px : (parent.width - self.width) / 2;
+                    width: root.days.length == 1 ? 72px : parent.width - 8px;
                     border-radius: 5px;
                     background: d.today ? Theme.ink : transparent;
                     Text {
-                        text: Strings.weekdays[i] + " " + d.date.day;
+                        text: Strings.weekdays[d.weekday] + " " + d.date.day;
                         font-size: 12px;
                         font-weight: d.today ? 700 : 600;
                         color: d.today ? Theme.on-ink : Theme.muted;
@@ -255,7 +261,7 @@ export component WeekGrid inherits Rectangle {
 
         // Tasks with a day and no time.
         HorizontalLayout {
-            height: 54px;
+            height: max(54px, 6px + root.untimed-fit * 22px);
             Text {
                 width: root.gutter;
                 text: @tr("No time");
@@ -268,6 +274,7 @@ export component WeekGrid inherits Rectangle {
 
             for d in root.days: UntimedCell {
                 day: d;
+                fit: root.untimed-fit;
                 payload(id) => {
                     return root.payload(id);
                 }

@@ -42,6 +42,7 @@ fn period(m: CalendarMode) -> calendar::Period {
     match m {
         CalendarMode::Month => calendar::Period::Month,
         CalendarMode::Week => calendar::Period::Week,
+        CalendarMode::Day => calendar::Period::Day,
     }
 }
 
@@ -91,6 +92,7 @@ fn week_columns(days: Vec<agenda::WeekDay>) -> Result<ModelRc<WeekColumn>, Strin
                 .collect::<Result<Vec<_>, String>>()?;
             Ok(WeekColumn {
                 date: ui_date(d.date),
+                weekday: d.date.weekday().num_days_from_monday() as i32,
                 today: d.today,
                 untimed: rows(d.untimed)?,
                 habits: habit_rows(d.habits)?,
@@ -114,8 +116,12 @@ fn load(
 ) -> Result<(), String> {
     let today = Local::now().date_naive();
     let backlog = agenda::backlog(conn, today).map_err(|e| e.to_string())?;
-    if mode == CalendarMode::Week {
-        let mut days = agenda::week(conn, anchor, today).map_err(|e| e.to_string())?;
+    if mode != CalendarMode::Month {
+        let days = match mode {
+            CalendarMode::Day => agenda::day(conn, anchor, today),
+            _ => agenda::week(conn, anchor, today),
+        };
+        let mut days = days.map_err(|e| e.to_string())?;
         agenda::filter_week(&mut days, shown);
         w.set_calendar_week(week_columns(days)?);
     } else {

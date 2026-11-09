@@ -9,6 +9,8 @@ export component SubtleButton {
     in property <image> icon;
     in property <string> text;
     in property <brush> color: Theme.muted;
+    // A thin outline, for a button that sits among tabs or plain text and must read as a button.
+    in property <bool> outlined;
     // Required when there is no text, so screen readers can name the button.
     in property <string> label: root.text;
     out property <bool> focused: focus.has-focus;
@@ -29,12 +31,14 @@ export component SubtleButton {
         height: 28px;
         y: (root.height - self.height) / 2;
         border-radius: 4px;
+        border-width: root.outlined ? 1px : 0px;
+        border-color: Theme.hairline;
         background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
         animate background { duration: Theme.fast; easing: Theme.ease-out; }
     }
 
     HorizontalLayout {
-        padding-left: root.text == "" ? 6px : 8px;
+        padding-left: root.text == "" ? 6px : root.outlined ? 10px : 8px;
         padding-right: root.text == "" ? 6px : 10px;
         spacing: 6px;
         // Start, so a button stretched to a column keeps its label at the left edge.

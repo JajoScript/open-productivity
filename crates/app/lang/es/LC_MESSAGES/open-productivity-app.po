@@ -386,6 +386,15 @@ msgstr "Semana anterior"
 msgid "Next week"
 msgstr "Semana siguiente"
 
+msgid "Day"
+msgstr "Día"
+
+msgid "Previous day"
+msgstr "Día anterior"
+
+msgid "Next day"
+msgstr "Día siguiente"
+
 msgid "{1} {0} – {3} {2}"
 msgstr "{0} de {1} – {2} de {3}"
 
@@ -662,9 +671,6 @@ msgstr "{}, pendiente"
 
 msgid "Study"
 msgstr "Estudio"
-
-msgid "Your subjects and study sessions."
-msgstr "Tus materias y sesiones de estudio."
 
 msgid "New subject"
 msgstr "Nueva materia"
