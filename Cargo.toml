@@ -9,6 +9,12 @@ rust-version = "1.99"
 license = "GPL-3.0-or-later"
 repository = "https://github.com/JajoScript/open-productivity"
 
+# winit 0.30.13 + backport of rust-windowing/winit#4341: on Windows 11 the window grew or shifted
+# when dragged to a monitor with another scale. Only src/platform_impl/windows differs from upstream;
+# docs, examples and tests are left out. Remove once winit 0.30.14 ships the fix or Slint moves to 0.31.
+[patch.crates-io]
+winit = { path = "patches/winit" }
+
 # Optimize dependencies (Slint...) in dev builds so the app runs fast; our crates still compile quickly.
 [profile.dev.package."*"]
 opt-level = 2
