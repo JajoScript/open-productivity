@@ -1,0 +1,14 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+// A subject with what has been studied on it; `duration` arrives already formatted.
+export struct SubjectRow {
+    id: int,
+    name: string,
+    duration: string,
+    sessions: int,
+    archived: bool,
+}
+
+// Which subjects the list shows.
+export enum SubjectTab { active, archived, all }

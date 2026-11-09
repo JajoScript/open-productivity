@@ -4,23 +4,28 @@
 import { Palette, ListView } from "std-widgets.slint";
 import { EmptyState } from "../empty-state.slint";
 import { InkButton } from "../ink-button.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
+import { SubjectDetail, SessionRow } from "subject-detail.slint";
 import { SubjectPreview } from "subject-preview.slint";
-
-// A subject with what has been studied on it; `duration` arrives already formatted.
-export struct SubjectRow {
-    id: int,
-    name: string,
-    duration: string,
-    sessions: int,
-}
+import { SubjectRow, SubjectTab } from "subject-row.slint";
 
 component SubjectLine inherits Rectangle {
     in property <SubjectRow> subject;
+    callback opened;
 
     height: 40px;
+    border-radius: 6px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: Strings.subject-line-label(root.subject.name, root.subject.duration, root.subject.sessions);
+    accessible-action-default => {
+        root.opened();
+    }
 
     HorizontalLayout {
         padding-left: 8px;
@@ -29,6 +34,7 @@ component SubjectLine inherits Rectangle {
         Image {
             source: @image-url("../icons/notebook-text.svg");
             colorize: Theme.muted;
+            opacity: root.subject.archived ? 0.6 : 1;
             width: 16px;
             image-fit: contain;
             accessible-role: none;
@@ -36,9 +42,11 @@ component SubjectLine inherits Rectangle {
 
         Text {
             text: root.subject.name;
+            color: root.subject.archived ? Theme.muted : Palette.foreground;
             vertical-alignment: center;
             overflow: elide;
             horizontal-stretch: 1;
+            accessible-role: none;
         }
 
         Text {
@@ -46,6 +54,7 @@ component SubjectLine inherits Rectangle {
             color: Theme.muted;
             vertical-alignment: center;
             horizontal-alignment: right;
+            accessible-role: none;
         }
     }
 
@@ -54,14 +63,115 @@ component SubjectLine inherits Rectangle {
         height: 1px;
         background: Theme.hairline;
     }
+
+    touch := TouchArea {
+        clicked => {
+            root.opened();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.opened();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
 }
 
-// Subjects and the time studied on each; sessions are logged from the header.
+// Active / Archived / All; the owner reads `tab` when `changed` fires.
+component SubjectTabs inherits HorizontalLayout {
+    in-out property <SubjectTab> tab;
+    callback changed;
+
+    spacing: 4px;
+    alignment: start;
+    accessible-role: tab-list;
+
+    function choose(t: SubjectTab) {
+        root.tab = t;
+        root.changed();
+    }
+
+    // Arrow keys move the choice and the focus together, like a native radio group.
+    function step(delta: int) {
+        let i = root.tab == SubjectTab.active ? 0 : root.tab == SubjectTab.archived ? 1 : 2;
+        let next = max(0, min(2, i + delta));
+        if next == 0 {
+            root.choose(SubjectTab.active);
+            active-tab.focus();
+        } else if next == 1 {
+            root.choose(SubjectTab.archived);
+            archived-tab.focus();
+        } else {
+            root.choose(SubjectTab.all);
+            all-tab.focus();
+        }
+    }
+
+    active-tab := SettingsTab {
+        text: @tr("Active");
+        selected: root.tab == SubjectTab.active;
+        chosen => {
+            root.choose(SubjectTab.active);
+        }
+        step(d) => {
+            root.step(d);
+        }
+    }
+
+    archived-tab := SettingsTab {
+        text: @tr("Archived");
+        selected: root.tab == SubjectTab.archived;
+        chosen => {
+            root.choose(SubjectTab.archived);
+        }
+        step(d) => {
+            root.step(d);
+        }
+    }
+
+    all-tab := SettingsTab {
+        text: @tr("All");
+        selected: root.tab == SubjectTab.all;
+        chosen => {
+            root.choose(SubjectTab.all);
+        }
+        step(d) => {
+            root.step(d);
+        }
+    }
+}
+
+// Subjects and the time studied on each, or one subject's detail; sessions are logged from the header.
 export component StudyView inherits VerticalLayout {
+    // The subjects of the chosen tab.
     in property <[SubjectRow]> subjects;
+    // Whether any subject exists at all, whatever the tab shows.
+    in property <bool> any-subject;
+    // Whether there is an active subject to log a session on.
+    in property <bool> can-log;
+    in property <SubjectRow> detail;
+    in property <[SessionRow]> sessions;
     in property <string> error;
+    in-out property <SubjectTab> tab;
+    in-out property <bool> detail-open;
     callback new-subject();
     callback log-session();
+    callback tab-changed();
+    callback open-subject(int);
+    callback rename-subject();
+    callback set-archived(int, bool);
+    callback delete-session(int);
 
     padding: 24px;
     padding-top: 20px;
@@ -93,7 +203,7 @@ export component StudyView inherits VerticalLayout {
 
             InkButton {
                 text: @tr("Log session");
-                enabled: root.subjects.length > 0;
+                enabled: root.can-log;
                 clicked => {
                     root.log-session();
                 }
@@ -112,7 +222,7 @@ export component StudyView inherits VerticalLayout {
         wrap: word-wrap;
     }
 
-    if root.subjects.length == 0: EmptyState {
+    if !root.any-subject: EmptyState {
         title: @tr("Create your first subject");
         description: @tr("Group what you study by subject. Every session you log adds hours to its subject, so you can see how much time each one gets.");
         action: @tr("New subject");
@@ -123,15 +233,49 @@ export component StudyView inherits VerticalLayout {
         SubjectPreview { }
     }
 
-    if root.subjects.length > 0: Text {
+    if root.any-subject && root.detail-open: SubjectDetail {
+        subject: root.detail;
+        sessions: root.sessions;
+        back => {
+            root.detail-open = false;
+        }
+        rename => {
+            root.rename-subject();
+        }
+        set-archived(archived) => {
+            root.set-archived(root.detail.id, archived);
+        }
+        delete-session(id) => {
+            root.delete-session(id);
+        }
+    }
+
+    if root.any-subject && !root.detail-open: Text {
         text: Strings.subjects-count(root.subjects.length);
         font-weight: 700;
         color: Palette.foreground.with-alpha(0.7);
     }
 
-    if root.subjects.length > 0: ListView {
+    if root.any-subject && !root.detail-open: SubjectTabs {
+        tab <=> root.tab;
+        changed => {
+            root.tab-changed();
+        }
+    }
+
+    if root.any-subject && !root.detail-open && root.subjects.length == 0: Text {
+        text: root.tab == SubjectTab.archived ? @tr("No archived subjects. Archive one from its page to tuck it away.") : @tr("No active subjects. Restore one from the Archived tab or create a new one.");
+        color: Theme.muted;
+        wrap: word-wrap;
+        vertical-stretch: 1; // takes the ListView's place, or the header stretches instead
+    }
+
+    if root.any-subject && !root.detail-open && root.subjects.length > 0: ListView {
         for subject in root.subjects: SubjectLine {
             subject: subject;
+            opened => {
+                root.open-subject(subject.id);
+            }
         }
     }
 }

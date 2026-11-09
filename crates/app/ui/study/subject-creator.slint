@@ -10,10 +10,12 @@ import { Theme } from "../theme.slint";
 
 // Rebuilt on every show(), so the fields and the error always start fresh.
 component CreatorBody inherits FocusScope {
+    in property <bool> editing;
+    // The modal gives the initial name and the user edits it here.
+    in-out property <string> name;
     callback save(string) -> string;
     callback cancel;
 
-    property <string> name;
     property <string> error;
 
     capture-key-pressed(event) => {
@@ -32,7 +34,7 @@ component CreatorBody inherits FocusScope {
         padding: 16px;
         spacing: 12px;
         Text {
-            text: @tr("New subject");
+            text: root.editing ? @tr("Rename subject") : @tr("New subject");
             font-size: 14px;
             font-weight: 700;
         }
@@ -66,7 +68,7 @@ component CreatorBody inherits FocusScope {
             }
 
             InkButton {
-                text: @tr("Create");
+                text: root.editing ? @tr("Save") : @tr("Create");
                 clicked => {
                     root.submit();
                 }
@@ -75,18 +77,27 @@ component CreatorBody inherits FocusScope {
     }
 }
 
-// Creates a subject. Closing by clicking outside discards it.
+// Creates a subject or renames one, depending on how it is opened. Closing by clicking outside
+// discards it.
 export component SubjectCreator inherits PopupWindow {
-    // Returns the error to show; empty means it worked and the modal closes.
+    // Return the error to show; empty means it worked and the modal closes.
     callback create(string) -> string;
+    callback rename(int, string) -> string;
+
+    // Set by the opener before show().
+    in property <bool> editing;
+    in property <int> subject-id;
+    in property <string> subject-name;
 
     close-policy: close-on-click-outside;
     width: 360px;
 
     PopupSurface {
         CreatorBody {
+            editing: root.editing;
+            name: root.subject-name;
             save(name) => {
-                let error = root.create(name);
+                let error = root.editing ? root.rename(root.subject-id, name) : root.create(name);
                 if error == "" {
                     root.close();
                 }

@@ -1,0 +1,177 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette, ListView } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { SubjectRow } from "subject-row.slint";
+
+// One logged session; `duration` arrives already formatted.
+export struct SessionRow {
+    id: int,
+    date: Date,
+    duration: string,
+    description: string,
+}
+
+component SessionLine inherits Rectangle {
+    in property <SessionRow> session;
+    callback delete;
+
+    height: 40px;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        spacing: 12px;
+        Text {
+            text: Strings.date(root.session.date.day, root.session.date.month, root.session.date.year);
+            width: 110px;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: root.session.duration;
+            width: 64px;
+            vertical-alignment: center;
+            font-weight: 600;
+        }
+
+        Text {
+            text: root.session.description;
+            color: Theme.muted;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/trash-2.svg");
+            label: @tr("Delete session");
+            clicked => {
+                root.delete();
+            }
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+}
+
+// One subject: its totals, rename, archive or restore, and its sessions, newest first.
+export component SubjectDetail inherits VerticalLayout {
+    in property <SubjectRow> subject;
+    in property <[SessionRow]> sessions;
+    callback back;
+    callback rename;
+    callback set-archived(bool);
+    callback delete-session(int);
+
+    spacing: 12px;
+
+    // What the confirmation asks about.
+    property <int> pending-id;
+    property <string> pending-text;
+
+    HorizontalLayout {
+        spacing: 8px;
+        SubtleButton {
+            icon: @image-url("../icons/chevron-left.svg");
+            label: @tr("Back to subjects");
+            clicked => {
+                root.back();
+            }
+        }
+
+        Text {
+            text: root.subject.name;
+            font-size: 18px;
+            font-weight: 700;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+
+        SubtleButton {
+            text: @tr("Rename");
+            color: Palette.foreground;
+            clicked => {
+                root.rename();
+            }
+        }
+
+        SubtleButton {
+            text: root.subject.archived ? @tr("Restore") : @tr("Archive");
+            color: Palette.foreground;
+            clicked => {
+                root.set-archived(!root.subject.archived);
+            }
+        }
+    }
+
+    Text {
+        text: root.subject.archived ? Strings.subject-archived-stats(root.subject.duration, root.subject.sessions) : Strings.subject-stats(root.subject.duration, root.subject.sessions);
+        color: Theme.muted;
+    }
+
+    if root.sessions.length == 0: Text {
+        text: @tr("No sessions yet.");
+        color: Theme.muted;
+        vertical-stretch: 1; // takes the ListView's place, or the header stretches instead
+    }
+
+    if root.sessions.length > 0: ListView {
+        for session in root.sessions: SessionLine {
+            session: session;
+            delete => {
+                root.pending-id = session.id;
+                root.pending-text = Strings.delete-session-question(session.duration, Strings.date(session.date.day, session.date.month, session.date.year));
+                confirm.show();
+            }
+        }
+    }
+
+    confirm := PopupWindow {
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        width: 360px;
+        PopupSurface {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: root.pending-text;
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Cancel");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            confirm.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Delete");
+                        clicked => {
+                            confirm.close();
+                            root.delete-session(root.pending-id);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

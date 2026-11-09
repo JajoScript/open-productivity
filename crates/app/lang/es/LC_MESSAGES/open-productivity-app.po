@@ -719,3 +719,45 @@ msgstr "Materias · {}"
 
 msgid "{} · {}×"
 msgstr "{} · {}×"
+
+msgid "Rename subject"
+msgstr "Renombrar materia"
+
+msgid "Rename"
+msgstr "Renombrar"
+
+msgid "Active"
+msgstr "Activas"
+
+msgid "Archived"
+msgstr "Archivadas"
+
+msgid "Delete session"
+msgstr "Borrar sesión"
+
+msgid "Back to subjects"
+msgstr "Volver a las materias"
+
+msgid "No sessions yet."
+msgstr "Aún no hay sesiones."
+
+msgid "No archived subjects. Archive one from its page to tuck it away."
+msgstr "No hay materias archivadas. Archiva una desde su página para quitarla de en medio."
+
+msgid "No active subjects. Restore one from the Archived tab or create a new one."
+msgstr "No hay materias activas. Restaura una desde Archivadas o crea una nueva."
+
+msgid "That subject is archived. Restore it to log sessions."
+msgstr "Esa materia está archivada. Restáurala para registrar sesiones."
+
+msgid "That session no longer exists."
+msgstr "Esa sesión ya no existe."
+
+msgid "{}, {}, {} sessions"
+msgstr "{}, {}, {} sesiones"
+
+msgid "{} · {}× · Archived"
+msgstr "{} · {}× · Archivada"
+
+msgid "Delete the {} session on {}? This can't be undone."
+msgstr "¿Borrar la sesión de {} del {}? No se puede deshacer."

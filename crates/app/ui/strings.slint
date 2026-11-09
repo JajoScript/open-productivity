@@ -40,6 +40,22 @@ export global Strings {
     out property <string> study-bad-minutes: @tr("Enter the minutes as a whole number, like 45.");
     out property <string> study-future-date: @tr("The date can't be in the future.");
     out property <string> study-no-subject: @tr("Choose a subject.");
+    out property <string> study-archived: @tr("That subject is archived. Restore it to log sessions.");
+    out property <string> study-no-session: @tr("That session no longer exists.");
+
+    // Accessible name of a subject row.
+    public pure function subject-line-label(name: string, duration: string, sessions: int) -> string {
+        return @tr("{}, {}, {} sessions", name, duration, sessions);
+    }
+
+    // The detail's totals line for an archived subject.
+    public pure function subject-archived-stats(duration: string, sessions: int) -> string {
+        return @tr("{} · {}× · Archived", duration, sessions);
+    }
+
+    public pure function delete-session-question(duration: string, date: string) -> string {
+        return @tr("Delete the {} session on {}? This can't be undone.", duration, date);
+    }
 
     public pure function study-failed(error: string) -> string {
         return @tr("Could not save the study session: {}", error);

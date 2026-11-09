@@ -11,7 +11,9 @@ import { HabitCreator } from "habits/habit-creator.slint";
 import { ArchivedHabits } from "habits/archived-habits.slint";
 import { SessionLogger } from "study/session-logger.slint";
 import { SubjectCreator } from "study/subject-creator.slint";
-import { StudyView, SubjectRow } from "study/study-view.slint";
+import { StudyView } from "study/study-view.slint";
+import { SessionRow } from "study/subject-detail.slint";
+import { SubjectRow, SubjectTab } from "study/subject-row.slint";
 import { ArchivedRow, DayState, HabitRow, HabitsView, HeatCell, HeatLevel, WeekTotal } from "habits/habits-view.slint";
 import { CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource, CalendarTask, CalendarView, WeekBlock, WeekColumn } from "calendar/calendar-view.slint";
 import { Module, Rail } from "rail.slint";
@@ -20,7 +22,7 @@ import { TaskCreator } from "tasks/task-creator.slint";
 import { ColorMode, Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
 import { DayHabit, DueKind, KanbanColumn, Quadrant, Repeat, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { ArchivedRow, Calendar, Repeat, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, Strings, SubjectRow, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
+export { ArchivedRow, Calendar, Repeat, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, SessionRow, Strings, SubjectRow, SubjectTab, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -120,11 +122,23 @@ export component AppWindow inherits Window {
     in property <[DayHabit]> day-habits;
     in property <int> habits-done;
     callback set-day-habit-done(int, bool);
+    // The subjects of the chosen tab, and the active ones, which the session logger offers.
     in property <[SubjectRow]> subjects;
+    in property <[SubjectRow]> active-subjects;
+    in property <bool> any-subject;
+    in property <SubjectRow> subject-detail;
+    in property <[SessionRow]> subject-sessions;
+    in-out property <SubjectTab> subject-tab;
+    in-out property <bool> subject-open;
     in property <string> study-error;
     // Both return the error to show; empty means it worked.
     callback create-subject(string) -> string;
     callback log-study-session(int, Date, string, string) -> string;
+    callback rename-subject(int, string) -> string;
+    callback subject-tab-changed();
+    callback open-subject(int);
+    callback set-subject-archived(int, bool);
+    callback delete-study-session(int);
 
     title: "Open Productivity — " + instance-name;
     preferred-width: 1280px;
@@ -145,8 +159,12 @@ export component AppWindow inherits Window {
     // What the session modal opens with.
     property <int> log-subject;
     property <Date> log-date;
+    // What the subject modal opens with: a new subject, or the one being renamed.
+    property <bool> subject-editing;
+    property <string> subject-edit-name;
     function open-log-session() {
-        root.log-subject = root.subjects[0].id;
+        // The open subject if it can take sessions, else the first active one.
+        root.log-subject = root.subject-open && !root.subject-detail.archived ? root.subject-detail.id : root.active-subjects[0].id;
         root.log-date = Calendar.today();
         session-logger.show();
     }
@@ -217,6 +235,12 @@ export component AppWindow inherits Window {
         }
 
         subject-creator := SubjectCreator {
+            editing: root.subject-editing;
+            subject-id: root.subject-detail.id;
+            subject-name: root.subject-edit-name;
+            rename(id, name) => {
+                return root.rename-subject(id, name);
+            }
             x: (root.width - self.width) / 2;
             y: 120px;
             create(name) => {
@@ -225,7 +249,7 @@ export component AppWindow inherits Window {
         }
 
         session-logger := SessionLogger {
-            subjects: root.subjects;
+            subjects: root.active-subjects;
             subject-id: root.log-subject;
             date: root.log-date;
             x: (root.width - self.width) / 2;
@@ -403,9 +427,34 @@ export component AppWindow inherits Window {
                     width: parent.width;
                     height: parent.height;
                     subjects: root.subjects;
+                    any-subject: root.any-subject;
+                    can-log: root.active-subjects.length > 0;
+                    detail: root.subject-detail;
+                    sessions: root.subject-sessions;
                     error: root.study-error;
+                    tab <=> root.subject-tab;
+                    detail-open <=> root.subject-open;
                     new-subject => {
+                        root.subject-editing = false;
+                        root.subject-edit-name = "";
                         subject-creator.show();
+                    }
+                    rename-subject => {
+                        root.subject-editing = true;
+                        root.subject-edit-name = root.subject-detail.name;
+                        subject-creator.show();
+                    }
+                    tab-changed => {
+                        root.subject-tab-changed();
+                    }
+                    open-subject(id) => {
+                        root.open-subject(id);
+                    }
+                    set-archived(id, archived) => {
+                        root.set-subject-archived(id, archived);
+                    }
+                    delete-session(id) => {
+                        root.delete-study-session(id);
                     }
                     log-session => {
                         root.open-log-session();
