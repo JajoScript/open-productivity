@@ -59,13 +59,7 @@ impl From<io::Error> for Error {
 
 /// Returns the last used instance folder. Never writes, so a corrupt file survives.
 pub fn resolve(registry: &Path) -> Result<PathBuf, Error> {
-    let text = match std::fs::read_to_string(registry) {
-        Ok(t) => t,
-        Err(e) if e.kind() == io::ErrorKind::NotFound => return Err(Error::Missing(None)),
-        Err(e) => return Err(e.into()),
-    };
-    let reg: Registry =
-        serde_json::from_str(&text).map_err(|_| Error::Corrupt(registry.to_path_buf()))?;
+    let reg = load(registry)?.ok_or(Error::Missing(None))?;
     match reg.last {
         None => Err(Error::Missing(None)),
         Some(p) if p.is_dir() => Ok(p),
@@ -74,12 +68,14 @@ pub fn resolve(registry: &Path) -> Result<PathBuf, Error> {
 }
 
 /// Lists `dir` and makes it the last one. A missing or corrupt file is replaced,
-/// since the user just chose this folder explicitly.
+/// since the user just chose this folder explicitly. A read error is returned and nothing is
+/// written.
 pub fn register(registry: &Path, dir: &Path) -> Result<(), Error> {
-    let mut reg: Registry = std::fs::read_to_string(registry)
-        .ok()
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .unwrap_or_default();
+    let mut reg = match load(registry) {
+        Ok(r) => r.unwrap_or_default(),
+        Err(Error::Corrupt(_)) => Registry::default(),
+        Err(e) => return Err(e),
+    };
     if !reg.instances.iter().any(|e| e.path == dir) {
         reg.instances.push(Entry {
             path: dir.to_path_buf(),
@@ -259,6 +255,17 @@ mod tests {
         std::fs::write(&reg, "garbage").unwrap();
         register(&reg, &a).unwrap();
         assert_eq!(resolve(&reg).unwrap(), a);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn register_keeps_the_file_when_it_cannot_be_read() {
+        let dir = setup("unreadable");
+        let reg = dir.join("instances.json");
+        // Reading a directory fails with something other than NotFound.
+        std::fs::create_dir_all(&reg).unwrap();
+        assert!(matches!(register(&reg, &dir.join("a")), Err(Error::Io(_))));
+        assert!(!reg.with_extension("json.tmp").exists());
         let _ = std::fs::remove_dir_all(&dir);
     }
 
