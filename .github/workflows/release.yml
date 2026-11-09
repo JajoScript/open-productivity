@@ -2,7 +2,7 @@ name: Release
 
 on:
   push:
-    tags: ["v*"]
+    branches: [releases]
 
 permissions:
   contents: write
@@ -12,16 +12,24 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v5
+        with:
+          fetch-tags: true
       - run: rustup toolchain install
       - uses: Swatinem/rust-cache@v2
-      - name: Check the tag matches the workspace version
+      - name: Read the version tag from the last commit
         shell: bash
         run: |
-          VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
-          if [ "$GITHUB_REF_NAME" != "v$VERSION" ]; then
-            echo "::error::Tag $GITHUB_REF_NAME does not match workspace version v$VERSION in Cargo.toml"
+          TAG=$(git tag --points-at HEAD --list 'v*' --sort=-v:refname | head -n1)
+          if [ -z "$TAG" ]; then
+            echo "::error::The last commit has no v* tag. Push with: git push --atomic github releases vX.Y.Z"
             exit 1
           fi
+          VERSION=$(grep -m1 '^version' Cargo.toml | cut -d'"' -f2)
+          if [ "$TAG" != "v$VERSION" ]; then
+            echo "::error::Tag $TAG does not match workspace version v$VERSION in Cargo.toml"
+            exit 1
+          fi
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
       - run: cargo build --release --locked
       - name: Publish release
@@ -32,5 +40,5 @@ jobs:
           EXE="open-productivity-$VERSION-windows-x86_64.exe"
           cp target/release/open-productivity.exe "$EXE"
           sha256sum "$EXE" > "$EXE.sha256"
-          gh release create "$GITHUB_REF_NAME" "$EXE" "$EXE.sha256" \
+          gh release create "$TAG" "$EXE" "$EXE.sha256" \
             --title "Open Productivity $VERSION" --generate-notes
