@@ -10,5 +10,6 @@ pub mod db;
 pub mod habits;
 pub mod instances;
 pub mod lists;
+pub mod recurrence;
 pub mod settings;
 pub mod tasks;

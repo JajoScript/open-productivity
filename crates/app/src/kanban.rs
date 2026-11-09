@@ -67,7 +67,8 @@ pub fn init(
                 Stage::Done => tasks::Stage::Done,
             };
             // Reload even on failure so the board shows what is really stored.
-            let res = tasks::set_stage(&state.conn, TaskId(id.into()), stage);
+            let today = open_productivity_core::chrono::Local::now().date_naive();
+            let res = tasks::set_stage(&state.conn, TaskId(id.into()), stage, today);
             let reloaded = state.reload();
             finish(res.map_err(|e| e.to_string()).and(reloaded));
         }

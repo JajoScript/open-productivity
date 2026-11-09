@@ -11,6 +11,8 @@ import { SubtleButton } from "../subtle-button.slint";
 import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
 
+export enum Repeat { never, daily, weekly, monthly, yearly }
+
 // Rebuilt on every show(), so the fields and the confirmation always start fresh.
 component EditorBody inherits FocusScope {
     in property <string> title;
@@ -18,12 +20,14 @@ component EditorBody inherits FocusScope {
     // Rebuilt on every show, so these start from the task and the checks only change them here.
     in-out property <bool> urgent;
     in-out property <bool> important;
+    in-out property <Repeat> repeat;
+    in property <string> every-text;
     in property <string> start-text;
     in property <string> end-text;
     // Times need a due date.
     in property <bool> has-date;
     // Returns the message to show, or an empty string when the task was saved.
-    callback save(string, string, bool, bool, string, string) -> string;
+    callback save(string, string, bool, bool, string, string, Repeat, string) -> string;
     callback delete;
     callback cancel;
 
@@ -57,7 +61,7 @@ component EditorBody inherits FocusScope {
                     self.focus();
                 }
                 accepted(text) => {
-                    error = root.save(text, note-field.text, root.urgent, root.important, start-field.text, end-field.text);
+                    error = root.save(text, note-field.text, root.urgent, root.important, start-field.text, end-field.text, root.repeat, every-field.text);
                 }
             }
 
@@ -71,7 +75,7 @@ component EditorBody inherits FocusScope {
                 text: root.note;
                 placeholder-text: @tr("Note");
                 submitted => {
-                    error = root.save(title-field.text, self.text, root.urgent, root.important, start-field.text, end-field.text);
+                    error = root.save(title-field.text, self.text, root.urgent, root.important, start-field.text, end-field.text, root.repeat, every-field.text);
                 }
             }
 
@@ -89,7 +93,7 @@ component EditorBody inherits FocusScope {
                     placeholder-text: @tr("HH:MM");
                     enabled: root.has-date;
                     accepted(text) => {
-                        error = root.save(title-field.text, note-field.text, root.urgent, root.important, text, end-field.text);
+                        error = root.save(title-field.text, note-field.text, root.urgent, root.important, text, end-field.text, root.repeat, every-field.text);
                     }
                 }
 
@@ -104,13 +108,65 @@ component EditorBody inherits FocusScope {
                     placeholder-text: @tr("HH:MM");
                     enabled: root.has-date;
                     accepted(text) => {
-                        error = root.save(title-field.text, note-field.text, root.urgent, root.important, start-field.text, text);
+                        error = root.save(title-field.text, note-field.text, root.urgent, root.important, start-field.text, text, root.repeat, every-field.text);
+                    }
+                }
+            }
+
+            // Repeats when completed: the next task is made then. Needs a due date.
+            HorizontalLayout {
+                spacing: 4px;
+                Text {
+                    text: @tr("Repeat");
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+
+                for option in [
+                    { kind: Repeat.never, label: @tr("Never") },
+                    { kind: Repeat.daily, label: @tr("Daily") },
+                    { kind: Repeat.weekly, label: @tr("Weekly") },
+                    { kind: Repeat.monthly, label: @tr("Monthly") },
+                    { kind: Repeat.yearly, label: @tr("Yearly") },
+                ]: SubtleButton {
+                    text: option.label;
+                    color: !root.has-date ? Theme.muted : root.repeat == option.kind ? Theme.ink : Theme.muted;
+                    clicked => {
+                        if root.has-date {
+                            root.repeat = option.kind;
+                        }
+                    }
+                }
+            }
+
+            // The "every N" count, only for a task that repeats.
+            Rectangle {
+                height: root.repeat != Repeat.never ? 36px : 0px;
+                visible: root.repeat != Repeat.never;
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: start;
+                    Text {
+                        text: @tr("Every");
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+
+                    every-field := InkField {
+                        horizontal-stretch: 0;
+                        width: 64px;
+                        text: root.every-text;
+                        placeholder-text: "1";
+                        enabled: root.has-date;
+                        accepted(text) => {
+                            error = root.save(title-field.text, note-field.text, root.urgent, root.important, start-field.text, end-field.text, root.repeat, text);
+                        }
                     }
                 }
             }
 
             if !root.has-date: Text {
-                text: @tr("Give the task a due date to set a time.");
+                text: @tr("Give the task a due date to set a time or repeat it.");
                 color: Theme.muted;
                 font-size: 12px;
             }
@@ -178,7 +234,7 @@ component EditorBody inherits FocusScope {
                 InkButton {
                     text: @tr("Save");
                     clicked => {
-                        error = root.save(title-field.text, note-field.text, root.urgent, root.important, start-field.text, end-field.text);
+                        error = root.save(title-field.text, note-field.text, root.urgent, root.important, start-field.text, end-field.text, root.repeat, every-field.text);
                     }
                 }
             }
@@ -223,11 +279,13 @@ export component TaskEditor inherits PopupWindow {
     in property <string> note;
     in property <bool> urgent;
     in property <bool> important;
+    in property <Repeat> repeat;
+    in property <string> every-text;
     in property <string> start-text;
     in property <string> end-text;
     in property <bool> has-date;
     // Returns the error to show, empty when saved; the editor then stays open.
-    callback saved(int, string, string, bool, bool, string, string) -> string;
+    callback saved(int, string, string, bool, bool, string, string, Repeat, string) -> string;
     callback deleted(int);
 
     close-policy: close-on-click-outside;
@@ -242,8 +300,10 @@ export component TaskEditor inherits PopupWindow {
             start-text: root.start-text;
             end-text: root.end-text;
             has-date: root.has-date;
-            save(title, note, urgent, important, start-t, end-t) => {
-                let error = root.saved(root.task-id, title, note, urgent, important, start-t, end-t);
+            repeat: root.repeat;
+            every-text: root.every-text;
+            save(title, note, urgent, important, start-t, end-t, repeat, every) => {
+                let error = root.saved(root.task-id, title, note, urgent, important, start-t, end-t, repeat, every);
                 if error == "" {
                     root.close();
                 }

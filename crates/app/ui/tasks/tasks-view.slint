@@ -6,10 +6,11 @@ import { ListEntry } from "../list-entry.slint";
 import { Theme } from "../theme.slint";
 import { ListsPanel, ViewCounts } from "lists-panel.slint";
 import { DayHabit, DueKind, TaskColumn, TaskRow, TaskView } from "task-column.slint";
+import { Repeat } from "task-editor.slint";
 import { WeekDay, WeekView } from "week-view.slint";
 import { KanbanColumn, KanbanView, Stage } from "kanban-view.slint";
 import { MatrixView, Quadrant } from "matrix-view.slint";
-export { DayHabit, DueKind, KanbanColumn, Quadrant, Stage, TaskRow, TaskView, ViewCounts, WeekDay }
+export { DayHabit, DueKind, KanbanColumn, Quadrant, Repeat, Stage, TaskRow, TaskView, ViewCounts, WeekDay }
 
 // One per tab of the Tasks module.
 export enum TasksTab { today, week, lists, kanban, eisenhower }
@@ -90,7 +91,7 @@ export component TasksView inherits VerticalLayout {
     callback clear-due(int);
     callback set-list(int, int);
     callback delete-list(int);
-    callback update-task(int, string, string, bool, bool, string, string) -> string;
+    callback update-task(int, string, string, bool, bool, string, string, Repeat, string) -> string;
     callback delete-task(int);
     in property <[DayHabit]> day-habits;
     in property <int> habits-done;
@@ -187,8 +188,8 @@ export component TasksView inherits VerticalLayout {
         set-done(id, done) => {
             root.set-done(id, done);
         }
-        update-task(id, title, note, urgent, important, start, end) => {
-            return root.update-task(id, title, note, urgent, important, start, end);
+        update-task(id, title, note, urgent, important, start, end, repeat, every) => {
+            return root.update-task(id, title, note, urgent, important, start, end, repeat, every);
         }
         delete-task(id) => {
             root.delete-task(id);
@@ -210,8 +211,8 @@ export component TasksView inherits VerticalLayout {
         payload-task(data) => {
             return root.payload-task(data);
         }
-        update-task(id, title, note, urgent, important, start, end) => {
-            return root.update-task(id, title, note, urgent, important, start, end);
+        update-task(id, title, note, urgent, important, start, end, repeat, every) => {
+            return root.update-task(id, title, note, urgent, important, start, end, repeat, every);
         }
         delete-task(id) => {
             root.delete-task(id);
@@ -227,8 +228,8 @@ export component TasksView inherits VerticalLayout {
         set-priority(id, urgent, important) => {
             root.set-priority(id, urgent, important);
         }
-        update-task(id, title, note, urgent, important, start, end) => {
-            return root.update-task(id, title, note, urgent, important, start, end);
+        update-task(id, title, note, urgent, important, start, end, repeat, every) => {
+            return root.update-task(id, title, note, urgent, important, start, end, repeat, every);
         }
         delete-task(id) => {
             root.delete-task(id);
@@ -296,8 +297,8 @@ export component TasksView inherits VerticalLayout {
                 delete-list(id) => {
                     root.delete-list(id);
                 }
-                update-task(id, title, note, urgent, important, start, end) => {
-                    return root.update-task(id, title, note, urgent, important, start, end);
+                update-task(id, title, note, urgent, important, start, end, repeat, every) => {
+                    return root.update-task(id, title, note, urgent, important, start, end, repeat, every);
                 }
                 delete-task(id) => {
                     root.delete-task(id);

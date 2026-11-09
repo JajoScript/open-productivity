@@ -73,6 +73,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0007_task_priority.sql"),
     include_str!("../migrations/0008_habits.sql"),
     include_str!("../migrations/0009_task_time.sql"),
+    include_str!("../migrations/0010_task_recurrence.sql"),
 ];
 
 pub fn open(path: &Path) -> Result<Connection, DbError> {
@@ -321,7 +322,7 @@ mod tests {
         for f in [
             "test.db.bak-v1",
             "test.db.bak-v2",
-            "test.db.bak-v10",
+            "test.db.bak-v90",
             "other.db.bak-v1",
             "test.db.bak-vX",
         ] {
@@ -337,7 +338,7 @@ mod tests {
             .filter(|n| n.contains(".bak-v"))
             .collect();
         names.sort();
-        let mut want = vec!["other.db.bak-v1", "test.db.bak-v10", "test.db.bak-vX", &new];
+        let mut want = vec!["other.db.bak-v1", "test.db.bak-v90", "test.db.bak-vX", &new];
         want.sort();
         assert_eq!(names, want);
         let _ = std::fs::remove_dir_all(&dir);

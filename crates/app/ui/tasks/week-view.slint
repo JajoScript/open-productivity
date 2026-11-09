@@ -7,7 +7,7 @@ import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { DueKind, TaskRow } from "task-column.slint";
-import { TaskEditor } from "task-editor.slint";
+import { Repeat, TaskEditor } from "task-editor.slint";
 
 // One day of the week and the tasks due on it.
 export struct WeekDay {
@@ -85,7 +85,7 @@ export component WeekView inherits VerticalLayout {
     // -1 / +1 moves a week; 0 goes back to the current one.
     callback shift(int);
     callback set-done(int, bool);
-    callback update-task(int, string, string, bool, bool, string, string) -> string;
+    callback update-task(int, string, string, bool, bool, string, string, Repeat, string) -> string;
     callback delete-task(int);
 
     property <TaskRow> editing;
@@ -139,9 +139,11 @@ export component WeekView inherits VerticalLayout {
         important: root.editing.important;
         start-text: root.editing.start;
         end-text: root.editing.end;
+        repeat: root.editing.repeat;
+        every-text: root.editing.every;
         has-date: root.editing.due-kind != DueKind.none;
-        saved(id, title, note, urgent, important, start, end) => {
-            return root.update-task(id, title, note, urgent, important, start, end);
+        saved(id, title, note, urgent, important, start, end, repeat, every) => {
+            return root.update-task(id, title, note, urgent, important, start, end, repeat, every);
         }
         deleted(id) => {
             root.delete-task(id);

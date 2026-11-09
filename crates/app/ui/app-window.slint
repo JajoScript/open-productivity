@@ -16,8 +16,8 @@ import { QuickCreate } from "quick-create.slint";
 import { TaskCreator } from "tasks/task-creator.slint";
 import { ColorMode, Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
-import { DayHabit, DueKind, KanbanColumn, Quadrant, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { ArchivedRow, Calendar, CalendarDay, CalendarMode, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
+import { DayHabit, DueKind, KanbanColumn, Quadrant, Repeat, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
+export { ArchivedRow, Calendar, Repeat, CalendarDay, CalendarMode, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -91,7 +91,7 @@ export component AppWindow inherits Window {
     callback create-list(string) -> string;
     callback delete-list(int);
     callback set-list(int, int);
-    callback update-task(int, string, string, bool, bool, string, string) -> string;
+    callback update-task(int, string, string, bool, bool, string, string, Repeat, string) -> string;
     callback delete-task(int);
     in property <[HabitRow]> habits;
     in property <[[int]]> habit-day-numbers;
@@ -422,8 +422,8 @@ export component AppWindow inherits Window {
                     delete-list(id) => {
                         root.delete-list(id);
                     }
-                    update-task(id, title, note, urgent, important, start, end) => {
-                        return root.update-task(id, title, note, urgent, important, start, end);
+                    update-task(id, title, note, urgent, important, start, end, repeat, every) => {
+                        return root.update-task(id, title, note, urgent, important, start, end, repeat, every);
                     }
                     delete-task(id) => {
                         root.delete-task(id);

@@ -5,7 +5,7 @@ import { ListView } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 import { DragBoard, TaskCard } from "drag-board.slint";
 import { DueKind, TaskRow } from "task-column.slint";
-import { TaskEditor } from "task-editor.slint";
+import { Repeat, TaskEditor } from "task-editor.slint";
 
 // One quadrant: its marks and its pending tasks.
 export struct Quadrant {
@@ -21,7 +21,7 @@ export component MatrixView inherits DragBoard {
     in property <[Quadrant]> quadrants;
     callback set-done(int, bool);
     callback set-priority(int, bool, bool);
-    callback update-task(int, string, string, bool, bool, string, string) -> string;
+    callback update-task(int, string, string, bool, bool, string, string, Repeat, string) -> string;
     callback delete-task(int);
 
     property <TaskRow> editing;
@@ -40,9 +40,11 @@ export component MatrixView inherits DragBoard {
         important: root.editing.important;
         start-text: root.editing.start;
         end-text: root.editing.end;
+        repeat: root.editing.repeat;
+        every-text: root.editing.every;
         has-date: root.editing.due-kind != DueKind.none;
-        saved(id, title, note, urgent, important, start, end) => {
-            return root.update-task(id, title, note, urgent, important, start, end);
+        saved(id, title, note, urgent, important, start, end, repeat, every) => {
+            return root.update-task(id, title, note, urgent, important, start, end, repeat, every);
         }
         deleted(id) => {
             root.delete-task(id);

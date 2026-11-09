@@ -10,12 +10,13 @@ use std::time::Duration;
 use open_productivity_core::calendar;
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
+use open_productivity_core::recurrence::Frequency;
 use open_productivity_core::tasks::{self, DueLabel, Priority, Task, TaskError, TaskId, View};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::{
-    AppWindow, Date, DueKind, KanbanColumn, ListEntry, Quadrant, Strings, TaskRow, TaskView,
-    TasksTab, WeekDay, calendar_view, habits, kanban, lists, matrix, week,
+    AppWindow, Date, DueKind, KanbanColumn, ListEntry, Quadrant, Repeat, Strings, TaskRow,
+    TaskView, TasksTab, WeekDay, calendar_view, habits, kanban, lists, matrix, week,
 };
 
 pub struct State {
@@ -63,6 +64,26 @@ fn ui_kind(l: Option<DueLabel>) -> DueKind {
     }
 }
 
+fn ui_repeat(f: Option<Frequency>) -> Repeat {
+    match f {
+        None => Repeat::Never,
+        Some(Frequency::Daily) => Repeat::Daily,
+        Some(Frequency::Weekly) => Repeat::Weekly,
+        Some(Frequency::Monthly) => Repeat::Monthly,
+        Some(Frequency::Yearly) => Repeat::Yearly,
+    }
+}
+
+fn core_repeat(r: Repeat) -> Option<Frequency> {
+    match r {
+        Repeat::Never => None,
+        Repeat::Daily => Some(Frequency::Daily),
+        Repeat::Weekly => Some(Frequency::Weekly),
+        Repeat::Monthly => Some(Frequency::Monthly),
+        Repeat::Yearly => Some(Frequency::Yearly),
+    }
+}
+
 pub fn task_row(t: Task, today: NaiveDate, first_done: bool) -> Result<TaskRow, String> {
     let kind = ui_kind(tasks::due_label(&t, today));
     let (time, start, end) = (
@@ -89,6 +110,12 @@ pub fn task_row(t: Task, today: NaiveDate, first_done: bool) -> Result<TaskRow, 
         time: time.into(),
         start: start.into(),
         end: end.into(),
+        repeat: ui_repeat(t.repeat.map(|(f, _)| f)),
+        every: t
+            .repeat
+            .map(|(_, n)| n.to_string())
+            .unwrap_or_default()
+            .into(),
         first_done,
     })
 }
@@ -239,7 +266,10 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
 
     window.on_set_done({
         let (state, after) = (state.clone(), after.clone());
-        move |id, done| after(tasks::set_done(&state.conn, TaskId(id.into()), done))
+        move |id, done| {
+            let today = Local::now().date_naive();
+            after(tasks::set_done(&state.conn, TaskId(id.into()), done, today))
+        }
     });
 
     window.on_set_due({
@@ -275,7 +305,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
 
     window.on_update_task({
         let (state, after) = (state.clone(), after.clone());
-        move |id, title, note, urgent, important, start, end| {
+        move |id, title, note, urgent, important, start, end, repeat, every| {
             let Some(w) = state.window.upgrade() else {
                 return Default::default();
             };
@@ -289,6 +319,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
                 priority,
                 &start,
                 &end,
+                core_repeat(repeat).map(|f| (f, every.as_str())),
             );
             // The editor stays open with the typed text and shows the message itself.
             match res {
@@ -297,6 +328,8 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
                 Err(TaskError::TimeWithoutDate) => s.get_time_needs_date(),
                 Err(TaskError::EndWithoutStart) => s.get_end_needs_start(),
                 Err(TaskError::EndNotAfterStart) => s.get_end_not_after_start(),
+                Err(TaskError::RecurrenceWithoutDate) => s.get_repeat_needs_date(),
+                Err(TaskError::BadInterval(_)) => s.get_interval_invalid(),
                 res => {
                     after(res);
                     Default::default()

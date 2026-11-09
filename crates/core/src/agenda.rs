@@ -354,7 +354,7 @@ mod tests {
         let a = add(&conn, "a", Some("2026-11-10"));
         add(&conn, "b", Some("2026-11-10"));
         add(&conn, "c", Some("2026-11-10"));
-        tasks::set_done(&conn, a, true).unwrap();
+        tasks::set_done(&conn, a, true, d("2026-06-15")).unwrap();
         let w = month(&conn, d("2026-11-01"), d("2026-11-08")).unwrap();
         assert_eq!(titles(&w, "2026-11-10"), ["b", "c", "a"]);
         assert!(w.iter().flatten().any(|x| x.tasks.iter().any(|t| t.done)));
@@ -378,8 +378,8 @@ mod tests {
         at("early", Some("09:30"));
         let done_plain = at("done-plain", None);
         let done_timed = at("done-timed", Some("08:00"));
-        tasks::set_done(&conn, done_plain, true).unwrap();
-        tasks::set_done(&conn, done_timed, true).unwrap();
+        tasks::set_done(&conn, done_plain, true, d("2026-06-15")).unwrap();
+        tasks::set_done(&conn, done_timed, true, d("2026-06-15")).unwrap();
         let w = month(&conn, d("2026-11-01"), d("2026-11-08")).unwrap();
         assert_eq!(
             titles(&w, "2026-11-10"),
@@ -413,9 +413,9 @@ mod tests {
         let list = crate::lists::create(&conn, "L").unwrap();
         tasks::set_list(&conn, listed, Some(list)).unwrap();
         let old = add(&conn, "old-done", Some("2026-10-01"));
-        tasks::set_done(&conn, old, true).unwrap();
+        tasks::set_done(&conn, old, true, d("2026-06-15")).unwrap();
         let gone = add(&conn, "none-done", None);
-        tasks::set_done(&conn, gone, true).unwrap();
+        tasks::set_done(&conn, gone, true, d("2026-06-15")).unwrap();
         let b = backlog(&conn, today).unwrap();
         assert_eq!(names(&b.overdue), ["late1", "late2"]);
         assert_eq!(names(&b.undated), ["none1", "none2"]);

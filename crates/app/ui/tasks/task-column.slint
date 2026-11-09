@@ -14,7 +14,7 @@ import { Theme } from "../theme.slint";
 import { ListEntry } from "../list-entry.slint";
 import { DueButton, DueKind } from "due-button.slint";
 import { ListButton } from "list-button.slint";
-import { TaskEditor } from "task-editor.slint";
+import { Repeat, TaskEditor } from "task-editor.slint";
 export { DueKind }
 
 export enum TaskView { today, scheduled, inbox, overdue, all, list }
@@ -36,6 +36,9 @@ export struct TaskRow {
     // The start and end times alone, as the editor shows them.
     start: string,
     end: string,
+    // From core: how the task repeats and the "every N" count as text ("1" when not set).
+    repeat: Repeat,
+    every: string,
     // From core (`first_done`): this row opens the "Completed" section.
     first-done: bool,
 }
@@ -148,6 +151,19 @@ component TaskLine inherits Rectangle {
                 }
             }
 
+            Rectangle {
+                width: 16px;
+                if root.task.repeat != Repeat.never: Image {
+                    source: @image-url("../icons/repeat.svg");
+                    colorize: Theme.muted;
+                    width: 16px;
+                    height: 16px;
+                    y: (parent.height - self.height) / 2;
+                    accessible-role: image;
+                    accessible-label: @tr("Repeats");
+                }
+            }
+
             ListButton {
                 name: root.task.list-name;
                 lists: root.lists;
@@ -196,7 +212,7 @@ export component TaskColumn inherits VerticalLayout {
     callback clear-due(int);
     callback set-list(int, int);
     callback delete-list(int);
-    callback update-task(int, string, string, bool, bool, string, string) -> string;
+    callback update-task(int, string, string, bool, bool, string, string, Repeat, string) -> string;
     callback delete-task(int);
     // Today's habits; only the Today tab passes any.
     in property <[DayHabit]> day-habits;
@@ -356,9 +372,11 @@ export component TaskColumn inherits VerticalLayout {
         important: root.editing.important;
         start-text: root.editing.start;
         end-text: root.editing.end;
+        repeat: root.editing.repeat;
+        every-text: root.editing.every;
         has-date: root.editing.due-kind != DueKind.none;
-        saved(id, title, note, urgent, important, start, end) => {
-            return root.update-task(id, title, note, urgent, important, start, end);
+        saved(id, title, note, urgent, important, start, end, repeat, every) => {
+            return root.update-task(id, title, note, urgent, important, start, end, repeat, every);
         }
         deleted(id) => {
             root.delete-task(id);

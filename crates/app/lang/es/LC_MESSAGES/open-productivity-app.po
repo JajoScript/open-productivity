@@ -600,8 +600,8 @@ msgstr "Fin"
 msgid "HH:MM"
 msgstr "HH:MM"
 
-msgid "Give the task a due date to set a time."
-msgstr "Pon una fecha a la tarea para asignarle una hora."
+msgid "Give the task a due date to set a time or repeat it."
+msgstr "Pon una fecha a la tarea para asignarle una hora o repetirla."
 
 msgid "Enter the time as HH:MM, like 09:30."
 msgstr "Escribe la hora como HH:MM, por ejemplo 09:30."
@@ -617,3 +617,33 @@ msgstr "El fin debe ser posterior al inicio."
 
 msgid "No time"
 msgstr "Sin hora"
+
+msgid "Repeat"
+msgstr "Repite"
+
+msgid "Never"
+msgstr "Nunca"
+
+msgid "Daily"
+msgstr "Diaria"
+
+msgid "Weekly"
+msgstr "Semanal"
+
+msgid "Monthly"
+msgstr "Mensual"
+
+msgid "Yearly"
+msgstr "Anual"
+
+msgid "Every"
+msgstr "Cada"
+
+msgid "Repeats"
+msgstr "Se repite"
+
+msgid "A repeating task needs a due date."
+msgstr "Una tarea que se repite necesita una fecha."
+
+msgid "Enter a whole number from 1 to 999."
+msgstr "Escribe un número entero del 1 al 999."

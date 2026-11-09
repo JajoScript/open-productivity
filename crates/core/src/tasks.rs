@@ -6,10 +6,11 @@
 use std::fmt;
 
 use chrono::{DateTime, Days, FixedOffset, NaiveDate, NaiveTime, SecondsFormat, Utc};
-use rusqlite::{Connection, ffi};
+use rusqlite::{Connection, OptionalExtension, ffi};
 
 use crate::calendar;
 use crate::lists::ListId;
+use crate::recurrence::{self, Frequency};
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct TaskId(pub i64);
@@ -28,6 +29,8 @@ pub struct Task {
     /// The list id and its name.
     pub list: Option<(ListId, String)>,
     pub priority: Priority,
+    /// Repeats when completed: how often and every how many periods. Only with a due date.
+    pub repeat: Option<(Frequency, u32)>,
 }
 
 impl Task {
@@ -206,6 +209,12 @@ pub enum TaskError {
     /// The end must be later than the start, on the same day.
     EndNotAfterStart,
     ListNotFound,
+    /// A repeat rule needs a due date to count from.
+    RecurrenceWithoutDate,
+    /// Text that is not a whole number from 1 to 999.
+    BadInterval(String),
+    /// A stored frequency that is not one of ours.
+    BadFrequency(String),
     Sqlite(rusqlite::Error),
 }
 
@@ -221,6 +230,9 @@ impl fmt::Display for TaskError {
             TaskError::EndWithoutStart => write!(f, "an end time needs a start time"),
             TaskError::EndNotAfterStart => write!(f, "the end must be after the start"),
             TaskError::ListNotFound => write!(f, "list not found"),
+            TaskError::RecurrenceWithoutDate => write!(f, "a repeating task needs a due date"),
+            TaskError::BadInterval(t) => write!(f, "invalid repeat interval: {t}"),
+            TaskError::BadFrequency(t) => write!(f, "invalid stored frequency: {t}"),
             TaskError::Sqlite(e) => write!(f, "database error: {e}"),
         }
     }
@@ -360,13 +372,19 @@ pub enum Stage {
     Done,
 }
 
-/// Moves a task to a Kanban column in one statement. Done keeps an earlier completion time
-/// and the in-progress mark, so unchecking it later returns it to the column it came from.
-pub fn set_stage(conn: &Connection, id: TaskId, stage: Stage) -> Result<(), TaskError> {
+/// Moves a task to a Kanban column. Done is `set_done` (so a repeating task makes its next one);
+/// it keeps an earlier completion time and the in-progress mark, so unchecking it later returns
+/// it to the column it came from.
+pub fn set_stage(
+    conn: &Connection,
+    id: TaskId,
+    stage: Stage,
+    today: NaiveDate,
+) -> Result<(), TaskError> {
     let sql = match stage {
         Stage::Icebox => "UPDATE task SET in_progress = 0, done_at = NULL WHERE id = ?1",
         Stage::InProgress => "UPDATE task SET in_progress = 1, done_at = NULL WHERE id = ?1",
-        Stage::Done => return set_done(conn, id, true),
+        Stage::Done => return set_done(conn, id, true, today),
     };
     match conn.execute(sql, [id.0])? {
         0 => Err(TaskError::NotFound),
@@ -405,7 +423,8 @@ pub fn kanban(conn: &Connection, now: DateTime<Utc>) -> Result<[Vec<Task>; 3], T
 }
 
 pub(crate) const SELECT_TASKS: &str = "SELECT t.id, t.title, t.note, t.done_at IS NOT NULL, t.due_date, \
-     t.list_id, l.name, t.urgent, t.important, t.due_time, t.end_time FROM task t LEFT JOIN list l ON l.id = t.list_id";
+     t.list_id, l.name, t.urgent, t.important, t.due_time, t.end_time, r.frequency, r.interval FROM task t \
+     LEFT JOIN list l ON l.id = t.list_id LEFT JOIN task_recurrence r ON r.task_id = t.id";
 
 /// Runs a `SELECT_TASKS` query and parses the stored due dates.
 pub(crate) fn query(
@@ -432,15 +451,22 @@ pub(crate) fn query(
                     urgent: r.get(7)?,
                     important: r.get(8)?,
                 },
+                repeat: None,
             },
-            [r.get::<_, Option<String>>(4)?, r.get(9)?, r.get(10)?],
+            [
+                r.get::<_, Option<String>>(4)?,
+                r.get(9)?,
+                r.get(10)?,
+                r.get(11)?,
+            ],
+            r.get::<_, Option<u32>>(12)?,
         ))
     };
     conn.prepare(sql)?
         .query_map(params, map)?
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()
-        .map(|(mut t, [due, start, end])| {
+        .map(|(mut t, [due, start, end, freq], every)| {
             t.due = due
                 .map(|d| d.parse().map_err(|_| TaskError::BadDate(d)))
                 .transpose()?;
@@ -450,40 +476,156 @@ pub(crate) fn query(
             };
             t.start = time(start)?;
             t.end = time(end)?;
+            t.repeat = match (freq, every) {
+                (Some(f), Some(n)) => {
+                    let freq = Frequency::parse(&f).ok_or(TaskError::BadFrequency(f))?;
+                    Some((freq, n))
+                }
+                _ => None,
+            };
             Ok(t)
         })
         .collect()
 }
 
-/// Marking an already done task keeps its original completion time.
-pub fn set_done(conn: &Connection, id: TaskId, done: bool) -> Result<(), TaskError> {
+/// Marking an already done task keeps its original completion time. Completing a task that
+/// repeats creates the next one in the same transaction (see `complete`); unchecking only
+/// reopens the task. `today` is the user's local day.
+pub fn set_done(
+    conn: &Connection,
+    id: TaskId,
+    done: bool,
+    today: NaiveDate,
+) -> Result<(), TaskError> {
+    let tx = conn.unchecked_transaction()?;
     let sql = if done {
         "UPDATE task SET done_at = coalesce(done_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now')) \
          WHERE id = ?1"
     } else {
         "UPDATE task SET done_at = NULL WHERE id = ?1"
     };
-    match conn.execute(sql, [id.0])? {
-        0 => Err(TaskError::NotFound),
-        _ => Ok(()),
+    if tx.execute(sql, [id.0])? == 0 {
+        return Err(TaskError::NotFound);
+    }
+    if done {
+        complete(&tx, id, today)?;
+    }
+    Ok(tx.commit()?)
+}
+
+/// Makes the next task of a repeating one: same title, note, list, marks and times, pending and
+/// in the first stage, due on the first repeat date after `today`. The rule moves to it, so
+/// completing the old task again changes nothing.
+fn complete(conn: &Connection, id: TaskId, today: NaiveDate) -> Result<(), TaskError> {
+    let rule = conn
+        .query_row(
+            "SELECT r.frequency, r.interval, r.anchor_day, t.due_date FROM task_recurrence r \
+             JOIN task t ON t.id = r.task_id WHERE r.task_id = ?1 AND t.due_date IS NOT NULL",
+            [id.0],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, u32>(1)?,
+                    r.get::<_, u32>(2)?,
+                    r.get::<_, String>(3)?,
+                ))
+            },
+        )
+        .optional()?;
+    let Some((freq, interval, anchor, due)) = rule else {
+        return Ok(());
+    };
+    let freq = Frequency::parse(&freq).ok_or(TaskError::BadFrequency(freq))?;
+    let mut next: NaiveDate = due.parse().map_err(|_| TaskError::BadDate(due))?;
+    // Past repeats are skipped: a task left undone for months does not come back overdue.
+    loop {
+        next = recurrence::next_date(next, freq, interval, anchor)
+            .ok_or_else(|| TaskError::BadDate(next.to_string()))?;
+        if next > today {
+            break;
+        }
+    }
+    conn.execute(
+        "INSERT INTO task (title, note, due_date, list_id, urgent, important, due_time, end_time) \
+         SELECT title, note, ?1, list_id, urgent, important, due_time, end_time FROM task \
+         WHERE id = ?2",
+        (next.to_string(), id.0),
+    )?;
+    conn.execute(
+        "UPDATE task_recurrence SET task_id = ?1 WHERE task_id = ?2",
+        (conn.last_insert_rowid(), id.0),
+    )?;
+    Ok(())
+}
+
+/// The user's text for "every N": blank means 1, otherwise a whole number from 1 to 999.
+pub fn parse_interval(text: &str) -> Result<u32, TaskError> {
+    let text = text.trim();
+    if text.is_empty() {
+        return Ok(1);
+    }
+    text.parse()
+        .ok()
+        .filter(|n| (1..=999).contains(n))
+        .ok_or_else(|| TaskError::BadInterval(text.to_string()))
+}
+
+/// Sets (`Some((frequency, every))`, `every` being the user's text, see `parse_interval`) or
+/// clears the repeat rule. It needs a due date; an existing rule keeps its anchor day.
+pub fn set_recurrence(
+    conn: &Connection,
+    id: TaskId,
+    repeat: Option<(Frequency, &str)>,
+) -> Result<(), TaskError> {
+    let Some((freq, every)) = repeat else {
+        conn.execute("DELETE FROM task_recurrence WHERE task_id = ?1", [id.0])?;
+        return Ok(());
+    };
+    let every = parse_interval(every)?;
+    let changed = conn.execute(
+        "INSERT INTO task_recurrence (task_id, frequency, interval, anchor_day) \
+         SELECT id, ?1, ?2, CAST(strftime('%d', due_date) AS INTEGER) FROM task \
+         WHERE id = ?3 AND due_date IS NOT NULL \
+         ON CONFLICT (task_id) DO UPDATE SET frequency = excluded.frequency, \
+         interval = excluded.interval",
+        (freq.as_str(), every, id.0),
+    )?;
+    if changed > 0 {
+        return Ok(());
+    }
+    match conn.query_row("SELECT 1 FROM task WHERE id = ?1", [id.0], |_| Ok(())) {
+        Ok(()) => Err(TaskError::RecurrenceWithoutDate),
+        Err(rusqlite::Error::QueryReturnedNoRows) => Err(TaskError::NotFound),
+        Err(e) => Err(e.into()),
     }
 }
 
+/// Without a date the times and the repeat rule go too; a new date is the rule's new anchor day.
 pub fn set_due_date(
     conn: &Connection,
     id: TaskId,
     due: Option<NaiveDate>,
 ) -> Result<(), TaskError> {
-    // Without a date there is no day for the times, so they go in the same statement.
-    match conn.execute(
+    let tx = conn.unchecked_transaction()?;
+    let due = due.map(|d| d.to_string());
+    if tx.execute(
         "UPDATE task SET due_date = ?1, \
          due_time = CASE WHEN ?1 IS NULL THEN NULL ELSE due_time END, \
          end_time = CASE WHEN ?1 IS NULL THEN NULL ELSE end_time END WHERE id = ?2",
-        (due.map(|d| d.to_string()), id.0),
-    )? {
-        0 => Err(TaskError::NotFound),
-        _ => Ok(()),
+        (&due, id.0),
+    )? == 0
+    {
+        return Err(TaskError::NotFound);
     }
+    tx.execute(
+        "UPDATE task_recurrence SET anchor_day = CAST(strftime('%d', ?1) AS INTEGER) \
+         WHERE task_id = ?2 AND ?1 IS NOT NULL",
+        (&due, id.0),
+    )?;
+    if due.is_none() {
+        set_recurrence(&tx, id, None)?;
+    }
+    Ok(tx.commit()?)
 }
 
 /// `None` removes the task from its list. An unknown list is `ListNotFound`.
@@ -538,7 +680,9 @@ pub fn set_time(
 
 /// Saves the editor in one statement, so nothing is half saved. The title is trimmed and must
 /// not be empty; the note keeps inner newlines but loses trailing whitespace; `start` and `end`
-/// are the user's text (see `parse_time`).
+/// are the user's text (see `parse_time`); `repeat` is the rule with the user's "every" text (see
+/// `set_recurrence`). The task and its rule are saved in one transaction.
+#[allow(clippy::too_many_arguments)]
 pub fn update(
     conn: &Connection,
     id: TaskId,
@@ -547,13 +691,15 @@ pub fn update(
     priority: Priority,
     start: &str,
     end: &str,
+    repeat: Option<(Frequency, &str)>,
 ) -> Result<(), TaskError> {
     let title = title.trim();
     if title.is_empty() {
         return Err(TaskError::EmptyTitle);
     }
     let [s, e] = check_times(parse_time(start)?, parse_time(end)?)?;
-    match conn.execute(
+    let tx = conn.unchecked_transaction()?;
+    match tx.execute(
         "UPDATE task SET title = ?1, note = ?2, urgent = ?3, important = ?4, \
          due_time = ?5, end_time = ?6 \
          WHERE id = ?7 AND (?5 IS NULL OR due_date IS NOT NULL)",
@@ -567,9 +713,10 @@ pub fn update(
             id.0,
         ),
     )? {
-        0 => Err(no_row(conn, id)),
-        _ => Ok(()),
+        0 => return Err(no_row(&tx, id)),
+        _ => set_recurrence(&tx, id, repeat)?,
     }
+    Ok(tx.commit()?)
 }
 
 /// Moves a task to an Eisenhower quadrant.
@@ -735,6 +882,7 @@ mod tests {
             end: None,
             list: None,
             priority: Priority::default(),
+            repeat: None,
         }
     }
 
@@ -805,7 +953,7 @@ mod tests {
         let id = mk(&conn, "a").unwrap();
         conn.execute("UPDATE task SET done_at = '2026-01-01T00:00:00Z'", [])
             .unwrap();
-        set_done(&conn, id, true).unwrap();
+        set_done(&conn, id, true, d("2026-06-15")).unwrap();
         assert_eq!(done_at(&conn, id).as_deref(), Some("2026-01-01T00:00:00Z"));
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
@@ -815,10 +963,10 @@ mod tests {
     fn set_done_sets_and_clears() {
         let (dir, conn) = setup("toggle");
         let id = mk(&conn, "a").unwrap();
-        set_done(&conn, id, true).unwrap();
+        set_done(&conn, id, true, d("2026-06-15")).unwrap();
         assert!(done_at(&conn, id).is_some());
         assert!(ls(&conn)[0].done);
-        set_done(&conn, id, false).unwrap();
+        set_done(&conn, id, false, d("2026-06-15")).unwrap();
         assert!(done_at(&conn, id).is_none());
         assert!(!ls(&conn)[0].done);
         drop(conn);
@@ -844,6 +992,7 @@ line 3
             },
             "",
             "",
+            None,
         )
         .unwrap();
         let t = &ls(&conn)[0];
@@ -861,7 +1010,17 @@ line 3
 
 line 3"
         );
-        update(&conn, id, "new title", "", Priority::default(), "", "").unwrap();
+        update(
+            &conn,
+            id,
+            "new title",
+            "",
+            Priority::default(),
+            "",
+            "",
+            None,
+        )
+        .unwrap();
         assert_eq!(ls(&conn)[0].note, "");
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
@@ -871,7 +1030,7 @@ line 3"
     fn update_with_empty_title_changes_nothing() {
         let (dir, conn) = setup("update-empty");
         let id = mk(&conn, "a").unwrap();
-        update(&conn, id, "a", "keep", Priority::default(), "", "").unwrap();
+        update(&conn, id, "a", "keep", Priority::default(), "", "", None).unwrap();
         assert!(matches!(
             update(
                 &conn,
@@ -881,7 +1040,8 @@ line 3"
                 "other",
                 Priority::default(),
                 "",
-                ""
+                "",
+                None
             ),
             Err(TaskError::EmptyTitle)
         ));
@@ -983,7 +1143,7 @@ line 3"
         let (dir, conn) = setup("update-times");
         let id = mk(&conn, "a").unwrap();
         let go = |title: &str, s: &str, e: &str| {
-            update(&conn, id, title, "n", Priority::default(), s, e)
+            update(&conn, id, title, "n", Priority::default(), s, e, None)
         };
         // Undated: a start is refused and nothing else changes.
         assert!(matches!(
@@ -1018,7 +1178,16 @@ line 3"
     fn update_and_delete_unknown_id_are_not_found() {
         let (dir, conn) = setup("edit-missing");
         assert!(matches!(
-            update(&conn, TaskId(42), "a", "", Priority::default(), "", ""),
+            update(
+                &conn,
+                TaskId(42),
+                "a",
+                "",
+                Priority::default(),
+                "",
+                "",
+                None
+            ),
             Err(TaskError::NotFound)
         ));
         assert!(matches!(
@@ -1047,11 +1216,11 @@ line 3"
     fn unknown_id_is_not_found() {
         let (dir, conn) = setup("missing");
         assert!(matches!(
-            set_done(&conn, TaskId(42), true),
+            set_done(&conn, TaskId(42), true, d("2026-06-15")),
             Err(TaskError::NotFound)
         ));
         assert!(matches!(
-            set_done(&conn, TaskId(42), false),
+            set_done(&conn, TaskId(42), false, d("2026-06-15")),
             Err(TaskError::NotFound)
         ));
         drop(conn);
@@ -1091,7 +1260,7 @@ line 3"
         ] {
             let id = mk(&conn, title).unwrap();
             set_due_date(&conn, id, due.map(d)).unwrap();
-            set_done(&conn, id, done).unwrap();
+            set_done(&conn, id, done, d("2026-06-15")).unwrap();
         }
         let w = week(&conn, d("2026-11-02")).unwrap();
         let titles: Vec<Vec<&str>> = w
@@ -1136,7 +1305,7 @@ line 3"
         set_due_date(&conn, b, Some(d("2026-06-20"))).unwrap();
         // Dated before undated in the icebox.
         assert_eq!(kanban_titles(&conn), [vec!["b", "a", "c"], vec![], vec![]]);
-        set_stage(&conn, a, Stage::InProgress).unwrap();
+        set_stage(&conn, a, Stage::InProgress, d("2026-06-15")).unwrap();
         // Finished within the last 7 days.
         conn.execute(
             "UPDATE task SET done_at = '2026-06-10T00:00:00.000Z' WHERE id = ?1",
@@ -1145,13 +1314,13 @@ line 3"
         .unwrap();
         assert_eq!(kanban_titles(&conn), [vec!["b"], vec!["a"], vec!["c"]]);
         // Done then unchecked: back to the column it came from.
-        set_stage(&conn, a, Stage::Done).unwrap();
-        set_done(&conn, a, false).unwrap();
+        set_stage(&conn, a, Stage::Done, d("2026-06-15")).unwrap();
+        set_done(&conn, a, false, d("2026-06-15")).unwrap();
         assert_eq!(kanban_titles(&conn)[1], ["a"]);
-        set_stage(&conn, a, Stage::Icebox).unwrap();
+        set_stage(&conn, a, Stage::Icebox, d("2026-06-15")).unwrap();
         assert_eq!(kanban_titles(&conn)[0], ["b", "a"]);
         assert!(matches!(
-            set_stage(&conn, TaskId(42), Stage::InProgress),
+            set_stage(&conn, TaskId(42), Stage::InProgress, d("2026-06-15")),
             Err(TaskError::NotFound)
         ));
         drop(conn);
@@ -1197,7 +1366,7 @@ line 3"
         ] {
             let id = mk(&conn, title).unwrap();
             set_priority(&conn, id, priority).unwrap();
-            set_done(&conn, id, done).unwrap();
+            set_done(&conn, id, done, d("2026-06-15")).unwrap();
         }
         let titles = |conn: &Connection| -> Vec<Vec<String>> {
             eisenhower(conn)
@@ -1275,7 +1444,7 @@ line 3"
             let id = mk(&conn, "t").unwrap();
             set_due_date(&conn, id, due.map(d)).unwrap();
             set_list(&conn, id, list).unwrap();
-            set_done(&conn, id, done).unwrap();
+            set_done(&conn, id, done, d("2026-06-15")).unwrap();
         }
         let c = counts(&conn, at(NOW)).unwrap();
         for view in [
@@ -1471,7 +1640,7 @@ line 3"
             set_list(&conn, id, list).unwrap();
             set_due_date(&conn, id, due.map(d)).unwrap();
             if done {
-                set_done(&conn, id, true).unwrap();
+                set_done(&conn, id, true, d("2026-06-15")).unwrap();
             }
         }
         let c = counts(&conn, at(NOW)).unwrap();
@@ -1497,5 +1666,290 @@ line 3"
         assert_eq!(l("2026-06-15", true), Some(DueLabel::Today));
         assert_eq!(l("2026-06-16", false), Some(DueLabel::Tomorrow));
         assert_eq!(l("2026-06-17", false), Some(DueLabel::On(d("2026-06-17"))));
+    }
+
+    // --- repeat ---
+
+    /// Every task, oldest first (the list puts pending ones before done ones).
+    fn byid(conn: &Connection) -> Vec<Task> {
+        let mut all = ls(conn);
+        all.sort_by_key(|t| t.id.0);
+        all
+    }
+
+    const TODAY: &str = "2026-06-15";
+
+    /// A task due on `due`, repeating every 2 months, with every copied field set.
+    fn repeating(conn: &Connection, due: &str) -> TaskId {
+        let id = create_on(conn, "Pay rent", d(due)).unwrap();
+        let list = lists::create(conn, "Home").unwrap();
+        set_list(conn, id, Some(list)).unwrap();
+        update(
+            conn,
+            id,
+            "Pay rent",
+            "bank transfer",
+            Priority {
+                urgent: true,
+                important: true,
+            },
+            "09:00",
+            "10:30",
+            Some((Frequency::Monthly, "2")),
+        )
+        .unwrap();
+        id
+    }
+
+    fn rules(conn: &Connection) -> Vec<(i64, String, u32, u32)> {
+        conn.prepare("SELECT task_id, frequency, interval, anchor_day FROM task_recurrence")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap()
+    }
+
+    #[test]
+    fn completing_creates_the_next_task_with_every_field_and_moves_the_rule() {
+        let (dir, conn) = setup("rec-create");
+        let id = repeating(&conn, "2026-06-20");
+        set_stage(&conn, id, Stage::InProgress, d(TODAY)).unwrap();
+        set_done(&conn, id, true, d(TODAY)).unwrap();
+        let tasks = byid(&conn);
+        assert_eq!(tasks.len(), 2);
+        let (old, next) = (&tasks[0], &tasks[1]);
+        assert_eq!((old.id, old.done, old.repeat), (id, true, None));
+        assert_eq!(next.due, Some(d("2026-08-20")));
+        assert!(!next.done);
+        assert_eq!(next.title, "Pay rent");
+        assert_eq!(next.note, "bank transfer");
+        assert_eq!(next.list.as_ref().map(|l| l.1.as_str()), Some("Home"));
+        assert_eq!(
+            next.priority,
+            Priority {
+                urgent: true,
+                important: true
+            }
+        );
+        assert_eq!(next.time_label(), "09:00\u{2013}10:30");
+        assert_eq!(next.repeat, Some((Frequency::Monthly, 2)));
+        assert_eq!(rules(&conn), [(next.id.0, "monthly".into(), 2, 20)]);
+        let in_progress: bool = conn
+            .query_row(
+                "SELECT in_progress FROM task WHERE id = ?1",
+                [next.id.0],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert!(!in_progress);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn anchor_day_survives_a_short_month() {
+        let (dir, conn) = setup("rec-anchor");
+        let id = create_on(&conn, "x", d("2027-01-31")).unwrap();
+        set_recurrence(&conn, id, Some((Frequency::Monthly, ""))).unwrap();
+        set_done(&conn, id, true, d("2027-01-31")).unwrap();
+        let second = byid(&conn)[1].id;
+        assert_eq!(byid(&conn)[1].due, Some(d("2027-02-28")));
+        set_done(&conn, second, true, d("2027-02-28")).unwrap();
+        assert_eq!(byid(&conn)[2].due, Some(d("2027-03-31")));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unchecking_and_completing_again_never_duplicates() {
+        let (dir, conn) = setup("rec-twice");
+        let id = repeating(&conn, "2026-06-20");
+        set_done(&conn, id, true, d(TODAY)).unwrap();
+        set_done(&conn, id, false, d(TODAY)).unwrap();
+        assert_eq!(byid(&conn).len(), 2);
+        assert!(!byid(&conn)[0].done);
+        set_done(&conn, id, true, d(TODAY)).unwrap();
+        set_done(&conn, id, true, d(TODAY)).unwrap();
+        assert_eq!(byid(&conn).len(), 2);
+        assert_eq!(rules(&conn).len(), 1);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_very_late_task_does_not_come_back_overdue() {
+        let (dir, conn) = setup("rec-late");
+        let id = create_on(&conn, "x", d("2026-01-10")).unwrap();
+        set_recurrence(&conn, id, Some((Frequency::Weekly, "1"))).unwrap();
+        set_done(&conn, id, true, d(TODAY)).unwrap();
+        // 10 Jan + 7n: the first one after 15 Jun 2026 (a Monday) is Saturday 20 Jun.
+        assert_eq!(byid(&conn)[1].due, Some(d("2026-06-20")));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_task_without_a_rule_creates_nothing() {
+        let (dir, conn) = setup("rec-none");
+        let id = create_on(&conn, "x", d("2026-06-10")).unwrap();
+        set_done(&conn, id, true, d(TODAY)).unwrap();
+        assert_eq!(byid(&conn).len(), 1);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_kanban_done_column_makes_the_next_task_too() {
+        let (dir, conn) = setup("rec-kanban");
+        let id = repeating(&conn, "2026-06-20");
+        set_stage(&conn, id, Stage::Done, d(TODAY)).unwrap();
+        assert_eq!(byid(&conn).len(), 2);
+        assert_eq!(byid(&conn)[1].due, Some(d("2026-08-20")));
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn deleting_a_task_deletes_its_rule() {
+        let (dir, conn) = setup("rec-delete");
+        let id = repeating(&conn, "2026-06-20");
+        delete(&conn, id).unwrap();
+        assert!(rules(&conn).is_empty());
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_rule_needs_a_date_and_a_valid_interval() {
+        let (dir, conn) = setup("rec-rules");
+        let id = mk(&conn, "x").unwrap();
+        assert!(matches!(
+            set_recurrence(&conn, id, Some((Frequency::Daily, "1"))),
+            Err(TaskError::RecurrenceWithoutDate)
+        ));
+        assert!(matches!(
+            update(
+                &conn,
+                id,
+                "x",
+                "",
+                Priority::default(),
+                "",
+                "",
+                Some((Frequency::Daily, ""))
+            ),
+            Err(TaskError::RecurrenceWithoutDate)
+        ));
+        assert!(matches!(
+            set_recurrence(&conn, TaskId(99), Some((Frequency::Daily, "1"))),
+            Err(TaskError::NotFound)
+        ));
+        set_due_date(&conn, id, Some(d("2026-06-20"))).unwrap();
+        for bad in ["0", "-1", "x", "1.5", "1000"] {
+            assert!(
+                matches!(
+                    set_recurrence(&conn, id, Some((Frequency::Daily, bad))),
+                    Err(TaskError::BadInterval(_))
+                ),
+                "{bad}"
+            );
+        }
+        assert!(rules(&conn).is_empty());
+        set_recurrence(&conn, id, Some((Frequency::Daily, " 3 "))).unwrap();
+        assert_eq!(byid(&conn)[0].repeat, Some((Frequency::Daily, 3)));
+        set_recurrence(&conn, id, None).unwrap();
+        assert_eq!(byid(&conn)[0].repeat, None);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn clearing_the_date_clears_the_rule_and_a_new_date_moves_the_anchor() {
+        let (dir, conn) = setup("rec-date");
+        let id = create_on(&conn, "x", d("2026-06-30")).unwrap();
+        set_recurrence(&conn, id, Some((Frequency::Monthly, "1"))).unwrap();
+        set_due_date(&conn, id, Some(d("2026-07-12"))).unwrap();
+        assert_eq!(rules(&conn), [(id.0, "monthly".into(), 1, 12)]);
+        set_due_date(&conn, id, None).unwrap();
+        assert!(rules(&conn).is_empty());
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_failed_save_or_completion_rolls_everything_back() {
+        let (dir, conn) = setup("rec-rollback");
+        let id = create_on(&conn, "x", d("2026-06-20")).unwrap();
+        // The new title must not stay when the interval is bad.
+        assert!(matches!(
+            update(
+                &conn,
+                id,
+                "y",
+                "",
+                Priority::default(),
+                "",
+                "",
+                Some((Frequency::Daily, "0"))
+            ),
+            Err(TaskError::BadInterval(_))
+        ));
+        assert_eq!(byid(&conn)[0].title, "x");
+        // A rule that cannot advance fails after the task was marked done: nothing stays.
+        conn.execute(
+            "UPDATE task SET due_date = '9999-12-31' WHERE id = ?1",
+            [id.0],
+        )
+        .unwrap();
+        conn.execute(
+            "INSERT INTO task_recurrence VALUES (?1, 'daily', 1, 31)",
+            [id.0],
+        )
+        .unwrap();
+        assert!(set_done(&conn, id, true, d(TODAY)).is_err());
+        assert!(!byid(&conn)[0].done);
+        assert_eq!(byid(&conn).len(), 1);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn migration_keeps_existing_tasks() {
+        let dir = std::env::temp_dir().join(format!("op-tasks-{}-rec-migrate", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        let path = dir.join("old.db");
+        {
+            let conn = Connection::open(&path).unwrap();
+            for sql in [
+                include_str!("../migrations/0001_baseline.sql"),
+                include_str!("../migrations/0002_tasks.sql"),
+                include_str!("../migrations/0003_task_due_date.sql"),
+                include_str!("../migrations/0004_lists.sql"),
+                include_str!("../migrations/0005_task_note.sql"),
+                include_str!("../migrations/0006_task_in_progress.sql"),
+                include_str!("../migrations/0007_task_priority.sql"),
+                include_str!("../migrations/0008_habits.sql"),
+                include_str!("../migrations/0009_task_time.sql"),
+            ] {
+                conn.execute_batch(sql).unwrap();
+            }
+            conn.pragma_update(None, "user_version", 9).unwrap();
+            conn.execute(
+                "INSERT INTO task (title, due_date) VALUES ('old', '2026-06-20')",
+                [],
+            )
+            .unwrap();
+        }
+        let conn = db::open(&path).unwrap();
+        let t = &byid(&conn)[0];
+        assert_eq!(
+            (t.title.as_str(), t.due, t.repeat),
+            ("old", Some(d("2026-06-20")), None)
+        );
+        set_recurrence(&conn, t.id, Some((Frequency::Yearly, "1"))).unwrap();
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
