@@ -368,15 +368,7 @@ pub fn month(
             let days = (0..len)
                 .map(|i| {
                     let date = first + TimeDelta::days(i.into());
-                    if weekdays & weekday_bit(date) == 0 || date < start {
-                        DayState::Skipped
-                    } else if date > today {
-                        DayState::Future
-                    } else if done.contains(&date) {
-                        DayState::Done
-                    } else {
-                        DayState::Open
-                    }
+                    day_state(weekdays, start, date, today, done.contains(&date))
                 })
                 .collect();
             MonthHabit {
@@ -431,6 +423,69 @@ pub fn month(
         day_totals,
         week_totals,
     })
+}
+
+/// What a habit shows on `date`: the one rule for which days apply, shared by every view.
+fn day_state(
+    weekdays: i64,
+    start: NaiveDate,
+    date: NaiveDate,
+    today: NaiveDate,
+    done: bool,
+) -> DayState {
+    if weekdays & weekday_bit(date) == 0 || date < start {
+        DayState::Skipped
+    } else if date > today {
+        DayState::Future
+    } else if done {
+        DayState::Done
+    } else {
+        DayState::Open
+    }
+}
+
+/// For each of `len` days from `from`, the active habits that apply that day (`done` is the mark;
+/// future days are pending), in the order of the grid. One query over the range.
+pub fn range(
+    conn: &Connection,
+    from: NaiveDate,
+    len: u32,
+    today: NaiveDate,
+) -> Result<Vec<Vec<DayHabit>>, HabitError> {
+    let to = from + TimeDelta::days(i64::from(len.max(1)) - 1);
+    let mut stmt = conn.prepare(
+        "SELECT h.id, h.name, h.weekdays, h.start_date, l.date FROM habit h
+         LEFT JOIN habit_log l ON l.habit_id = h.id AND l.date BETWEEN ?1 AND ?2
+         WHERE h.archived = 0 ORDER BY h.id",
+    )?;
+    // (id, name, weekdays, start, done dates in range) per habit.
+    let mut raw: Vec<(HabitId, String, i64, NaiveDate, HashSet<NaiveDate>)> = Vec::new();
+    let mut rows = stmt.query((from.to_string(), to.to_string()))?;
+    while let Some(r) = rows.next()? {
+        let id = HabitId(r.get(0)?);
+        if raw.last().is_none_or(|h| h.0 != id) {
+            let start = parse_date(r.get(3)?)?;
+            raw.push((id, r.get(1)?, r.get(2)?, start, HashSet::new()));
+        }
+        if let (Some(date), Some(h)) = (r.get::<_, Option<String>>(4)?, raw.last_mut()) {
+            h.4.insert(parse_date(date)?);
+        }
+    }
+    Ok((0..len)
+        .map(|i| {
+            let date = from + TimeDelta::days(i.into());
+            raw.iter()
+                .filter_map(|(id, name, weekdays, start, done)| {
+                    let state = day_state(*weekdays, *start, date, today, done.contains(&date));
+                    (state != DayState::Skipped).then(|| DayHabit {
+                        id: *id,
+                        name: name.clone(),
+                        done: state == DayState::Done,
+                    })
+                })
+                .collect()
+        })
+        .collect())
 }
 
 /// Per day: habits done and habits that apply (a done mark only counts on an applicable day).
@@ -1130,6 +1185,46 @@ mod tests {
         let m = month(&conn, day("2026-10-10"), today).unwrap();
         assert!(m.heat.iter().all(|h| *h == Heat::None));
         assert_eq!(m.lead, 3);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn range_lists_applicable_habits_per_day() {
+        let (dir, conn) = setup("range");
+        let today = day("2026-11-04");
+        // Gym: Mon, Wed, Fri since Wed the 4th. Read: daily since the 1st. Gone: archived.
+        let mwf = [true, false, true, false, true, false, false];
+        let gym = create(&conn, "Gym", mwf, day("2026-11-04"), today).unwrap();
+        let read = create(&conn, "Read", [true; 7], day("2026-11-01"), today).unwrap();
+        let gone = create(&conn, "Gone", [true; 7], day("2026-11-01"), today).unwrap();
+        archive(&conn, gone).unwrap();
+        set_done(&conn, read, day("2026-11-01"), today, true).unwrap();
+        set_done(&conn, gym, day("2026-11-04"), today, true).unwrap();
+        // Seven days from Sunday the 1st.
+        let r = range(&conn, day("2026-11-01"), 7, today).unwrap();
+        let v = |d: usize| -> Vec<(&str, bool)> {
+            r[d].iter().map(|h| (h.name.as_str(), h.done)).collect()
+        };
+        assert_eq!(v(0), [("Read", true)]);
+        // Monday the 2nd: Gym had not started.
+        assert_eq!(v(1), [("Read", false)]);
+        // Today: both, in grid order, both done where marked.
+        assert_eq!(v(3), [("Gym", true), ("Read", false)]);
+        // Thursday: Gym not scheduled. Friday is in the future: pending.
+        assert_eq!(v(4), [("Read", false)]);
+        assert_eq!(v(5), [("Gym", false), ("Read", false)]);
+        // Same days as the grid of the month.
+        let m = month(&conn, day("2026-11-01"), today).unwrap();
+        for (i, hs) in r.iter().enumerate() {
+            let want: Vec<_> = m
+                .habits
+                .iter()
+                .filter(|h| h.days[i] != DayState::Skipped)
+                .map(|h| h.id)
+                .collect();
+            assert_eq!(hs.iter().map(|h| h.id).collect::<Vec<_>>(), want);
+        }
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

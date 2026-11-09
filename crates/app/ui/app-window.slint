@@ -10,14 +10,14 @@ import { ListCreator } from "tasks/list-creator.slint";
 import { HabitCreator } from "habits/habit-creator.slint";
 import { ArchivedHabits } from "habits/archived-habits.slint";
 import { ArchivedRow, DayState, HabitRow, HabitsView, HeatCell, HeatLevel, WeekTotal } from "habits/habits-view.slint";
-import { CalendarDay, CalendarMode, CalendarTask, CalendarView, WeekBlock, WeekColumn } from "calendar/calendar-view.slint";
+import { CalendarDay, CalendarHabit, CalendarMode, CalendarTask, CalendarView, WeekBlock, WeekColumn } from "calendar/calendar-view.slint";
 import { Module, Rail } from "rail.slint";
 import { QuickCreate } from "quick-create.slint";
 import { TaskCreator } from "tasks/task-creator.slint";
 import { ColorMode, Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
 import { DayHabit, DueKind, KanbanColumn, Quadrant, Repeat, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { ArchivedRow, Calendar, Repeat, CalendarDay, CalendarMode, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
+export { ArchivedRow, Calendar, Repeat, CalendarDay, CalendarHabit, CalendarMode, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -45,6 +45,8 @@ export component AppWindow inherits Window {
     in property <[InstanceRow]> instances;
     in-out property <string> instances-status;
     callback instances-opened;
+    // Habits changed in another view: the calendar reloads.
+    callback refresh-calendar();
     callback open-instance(string);
     callback remove-instance(string);
     callback new-instance;

@@ -455,6 +455,9 @@ msgstr "Mes siguiente"
 msgid "HABITS · {}/{}"
 msgstr "HÁBITOS · {}/{}"
 
+msgid "Habits {}/{}"
+msgstr "Hábitos {}/{}"
+
 msgid "Streak {} · Best {}"
 msgstr "Racha {} · Mejor {}"
 
@@ -647,3 +650,9 @@ msgstr "Una tarea que se repite necesita una fecha."
 
 msgid "Enter a whole number from 1 to 999."
 msgstr "Escribe un número entero del 1 al 999."
+
+msgid "{}, done"
+msgstr "{}, cumplido"
+
+msgid "{}, pending"
+msgstr "{}, pendiente"

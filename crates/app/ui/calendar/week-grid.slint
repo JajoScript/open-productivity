@@ -8,6 +8,7 @@
 import { Date, Palette } from "std-widgets.slint";
 import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
+import { CalendarHabit, HabitLine } from "habit-row.slint";
 import { CalendarTask, TaskChip } from "task-chip.slint";
 
 // A task with a time: where it starts, how long it is drawn and which lane of its overlap
@@ -26,6 +27,8 @@ export struct WeekColumn {
     // Due that day without a time.
     untimed: [CalendarTask],
     blocks: [WeekBlock],
+    // The habits that apply that day; shown after the tasks without a time.
+    habits: [CalendarHabit],
 }
 
 // A task block of the grid. Dragging it moves it; pressing it does nothing.
@@ -84,8 +87,9 @@ component UntimedCell inherits Rectangle {
 
     property <length> row-h: 22px;
     property <int> fit: 2;
-    property <bool> overflow: root.day.untimed.length > root.fit;
-    property <int> shown: root.overflow ? root.fit - 1 : root.day.untimed.length;
+    property <int> total: root.day.untimed.length + root.day.habits.length;
+    property <bool> overflow: root.total > root.fit;
+    property <int> shown: root.overflow ? root.fit - 1 : root.total;
 
     preferred-width: 0px;
     horizontal-stretch: 1;
@@ -115,12 +119,21 @@ component UntimedCell inherits Rectangle {
             }
         }
 
+        for h[j] in root.day.habits: HabitLine {
+            visible: root.day.untimed.length + j < root.shown;
+            x: 3px;
+            y: 3px + (root.day.untimed.length + j) * root.row-h;
+            width: parent.width - 6px;
+            height: root.row-h;
+            habit: h;
+        }
+
         if root.overflow: Text {
             x: 5px;
             y: 3px + root.shown * root.row-h;
             width: parent.width - 10px;
             height: root.row-h;
-            text: Strings.more-tasks(root.day.untimed.length - root.shown);
+            text: Strings.more-tasks(root.total - root.shown);
             font-size: 12px;
             color: Theme.muted;
             overflow: elide;

@@ -1,0 +1,43 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// A habit that applies on a day; the calendar only shows it.
+export struct CalendarHabit {
+    id: int,
+    name: string,
+    done: bool,
+}
+
+// One habit in a day: the repeat icon marks it as a habit, not a task. It has no input handling,
+// so a press falls through to the day beneath it.
+export component HabitLine inherits Rectangle {
+    in property <CalendarHabit> habit;
+    in property <color> ink: Palette.foreground;
+
+    accessible-role: text;
+    accessible-label: root.habit.done ? @tr("{}, done", root.habit.name) : @tr("{}, pending", root.habit.name);
+
+    HorizontalLayout {
+        padding-left: 2px;
+        spacing: 4px;
+        Image {
+            source: @image-url("../icons/repeat.svg");
+            colorize: root.habit.done ? Theme.done : Theme.muted;
+            width: 12px;
+            y: (parent.height - self.height) / 2;
+            height: 12px;
+        }
+
+        Text {
+            text: root.habit.name;
+            font-size: 12px;
+            overflow: elide;
+            vertical-alignment: center;
+            color: root.habit.done ? Theme.done : root.ink;
+            accessible-role: none;
+        }
+    }
+}

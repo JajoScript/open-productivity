@@ -124,6 +124,7 @@ impl State {
             w.set_habits_can_next(m.can_next);
             w.set_archived_habits(ModelRc::new(VecModel::from(archived)));
             w.set_habit_day_numbers(blocks((1..=m.days as i32).collect()));
+            w.invoke_refresh_calendar();
         }
         self.rows.set_vec(rows);
         Ok(())

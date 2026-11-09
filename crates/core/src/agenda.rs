@@ -7,6 +7,7 @@ use chrono::{Datelike, NaiveDate, NaiveTime, Timelike};
 use rusqlite::Connection;
 
 use crate::calendar;
+use crate::habits::{self, DayHabit};
 use crate::tasks::{SELECT_TASKS, Task, TaskError, TaskId, View, query};
 
 /// One cell of the month grid.
@@ -18,6 +19,15 @@ pub struct Day {
     pub today: bool,
     /// Pending first, then done; each with a time first (by time), then oldest created first.
     pub tasks: Vec<Task>,
+    /// The habits that apply that day, after the tasks, in the order of the habit grid.
+    pub habits: Vec<DayHabit>,
+}
+
+impl Day {
+    /// How many of the day's habits are done.
+    pub fn habits_done(&self) -> usize {
+        self.habits.iter().filter(|h| h.done).count()
+    }
 }
 
 /// The 6 weeks (Monday first) of the month that starts on `first`, filler days included, with
@@ -38,6 +48,7 @@ pub fn month(
                 in_month: grid.cells[i].is_some(),
                 today: date == today,
                 tasks: Vec::new(),
+                habits: Vec::new(),
             })
         })
         .collect::<Option<Vec<_>>>()
@@ -52,11 +63,23 @@ pub fn month(
         let i = t.due.map_or(0, |d| (d - start).num_days()) as usize;
         days[i].tasks.push(t);
     }
+    let found = habits::range(conn, start, 42, today).map_err(habit_err)?;
+    for (day, h) in days.iter_mut().zip(found) {
+        day.habits = h;
+    }
     let mut weeks = Vec::with_capacity(6);
     while !days.is_empty() {
         weeks.push(days.drain(..7).collect());
     }
     Ok(weeks)
+}
+
+fn habit_err(e: habits::HabitError) -> TaskError {
+    match e {
+        habits::HabitError::Sqlite(e) => e.into(),
+        habits::HabitError::BadDate(d) => TaskError::BadDate(d),
+        e => TaskError::BadDate(e.to_string()),
+    }
 }
 
 const DAY_END: u32 = 24 * 60;
@@ -135,6 +158,8 @@ pub struct WeekDay {
     pub untimed: Vec<Task>,
     /// Tasks with a time, by start.
     pub blocks: Vec<Block>,
+    /// The habits that apply that day, in the order of the habit grid.
+    pub habits: Vec<DayHabit>,
 }
 
 /// The 7 days (Monday first) of the week that holds `date`, with the tasks due on each. One
@@ -154,6 +179,7 @@ pub fn week(
                 today: date == today,
                 untimed: Vec::new(),
                 blocks: Vec::new(),
+                habits: Vec::new(),
             })
         })
         .collect::<Option<Vec<_>>>()
@@ -182,6 +208,10 @@ pub fn week(
                 });
             }
         }
+    }
+    let found = habits::range(conn, start, 7, today).map_err(habit_err)?;
+    for (day, h) in days.iter_mut().zip(found) {
+        day.habits = h;
     }
     for day in &mut days {
         let spans: Vec<_> = day
@@ -334,6 +364,34 @@ mod tests {
         assert!(!all[day(&w, "2026-12-01")].in_month);
         assert!(all[day(&w, "2026-11-08")].today);
         assert_eq!(all.iter().filter(|x| x.today).count(), 1);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn habits_show_per_day_and_leave_tasks_alone() {
+        let (dir, conn) = setup("habits");
+        let today = d("2026-11-09");
+        add(&conn, "t", Some("2026-11-10"));
+        let h = habits::create(&conn, "Read", [true; 7], today, today).unwrap();
+        habits::set_done(&conn, h, today, today, true).unwrap();
+        let w = month(&conn, d("2026-11-01"), today).unwrap();
+        let all: Vec<&Day> = w.iter().flatten().collect();
+        let at = |s: &str| all[day(&w, s)];
+        // Not before the start; done on its day; pending on a future day; tasks unchanged.
+        assert!(at("2026-11-08").habits.is_empty());
+        assert!(at("2026-11-09").habits[0].done);
+        assert_eq!(at("2026-11-10").habits.len(), 1);
+        assert!(!at("2026-11-10").habits[0].done);
+        assert_eq!(at("2026-11-09").habits_done(), 1);
+        assert_eq!(at("2026-11-10").habits_done(), 0);
+        assert_eq!(titles(&w, "2026-11-10"), ["t"]);
+        let wk = week(&conn, d("2026-11-10"), today).unwrap();
+        assert_eq!(wk[1].habits.len(), 1);
+        assert_eq!(wk[1].untimed.len(), 1);
+        assert!(wk[0].habits[0].done);
+        let before = week(&conn, d("2026-11-03"), today).unwrap();
+        assert!(before.iter().all(|x| x.habits.is_empty()));
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -11,12 +11,14 @@ use open_productivity_core::agenda;
 use open_productivity_core::calendar;
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
+use open_productivity_core::habits::DayHabit;
 use open_productivity_core::tasks::{self, Task, TaskError, TaskId};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::tasks::{State, ui_id};
 use crate::{
-    AppWindow, CalendarDay, CalendarMode, CalendarTask, Date, Strings, WeekBlock, WeekColumn,
+    AppWindow, CalendarDay, CalendarHabit, CalendarMode, CalendarTask, Date, Strings, WeekBlock,
+    WeekColumn,
 };
 
 fn row(t: &Task) -> Result<CalendarTask, String> {
@@ -29,6 +31,20 @@ fn row(t: &Task) -> Result<CalendarTask, String> {
 
 fn rows(tasks: Vec<Task>) -> Result<ModelRc<CalendarTask>, String> {
     let rows = tasks.iter().map(row).collect::<Result<Vec<_>, String>>()?;
+    Ok(ModelRc::new(VecModel::from(rows)))
+}
+
+fn habit_rows(habits: Vec<DayHabit>) -> Result<ModelRc<CalendarHabit>, String> {
+    let rows = habits
+        .into_iter()
+        .map(|h| {
+            Ok(CalendarHabit {
+                id: ui_id(h.id.0)?,
+                name: h.name.into(),
+                done: h.done,
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
     Ok(ModelRc::new(VecModel::from(rows)))
 }
 
@@ -61,6 +77,7 @@ fn week_columns(days: Vec<agenda::WeekDay>) -> Result<ModelRc<WeekColumn>, Strin
                 date: ui_date(d.date),
                 today: d.today,
                 untimed: rows(d.untimed)?,
+                habits: habit_rows(d.habits)?,
                 blocks: ModelRc::new(VecModel::from(blocks)),
             })
         })
@@ -96,6 +113,8 @@ fn load(
                             day: d.date.day() as i32,
                             in_month: d.in_month,
                             today: d.today,
+                            habits_done: d.habits_done() as i32,
+                            habits_total: d.habits.len() as i32,
                             tasks: rows(d.tasks)?,
                         })
                     })
@@ -142,6 +161,12 @@ pub fn init(window: &AppWindow, state: &Rc<State>) -> Timer {
         let reload = reload.clone();
         move || reload()
     }));
+
+    // Habits are marked or created in their own view; the calendar only reads them.
+    window.on_refresh_calendar({
+        let reload = reload.clone();
+        move || reload()
+    });
 
     window.on_create_task_on({
         let (state, weak) = (state.clone(), window.as_weak());

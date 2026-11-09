@@ -8,9 +8,10 @@ import { Theme } from "../theme.slint";
 import { DragBoard } from "../tasks/drag-board.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
 import { CalendarTask, TaskChip } from "task-chip.slint";
+import { CalendarHabit, HabitLine } from "habit-row.slint";
 import { WeekBlock, WeekColumn, WeekGrid } from "week-grid.slint";
 
-export { CalendarTask, WeekBlock, WeekColumn }
+export { CalendarHabit, CalendarTask, WeekBlock, WeekColumn }
 
 export enum CalendarMode { month, week }
 
@@ -22,6 +23,9 @@ export struct CalendarDay {
     in-month: bool,
     today: bool,
     tasks: [CalendarTask],
+    // The habits that apply that day and those done; one summary row after the tasks.
+    habits-done: int,
+    habits-total: int,
 }
 
 component CalendarCell inherits Rectangle {
@@ -34,10 +38,13 @@ component CalendarCell inherits Rectangle {
     callback chip-dragging(bool, CalendarTask, Point, length, Point);
 
     property <length> row-h: 20px;
-    // Rows that fit under the day number; when the tasks do not all fit, the last one is "+N".
+    // Rows that fit under the day number. The habit summary keeps its row unless a single row is
+    // left and there are tasks; when the tasks do not fit, the last of theirs is "+N".
     property <int> fit: max(1, Math.floor((root.height - 38px) / root.row-h));
-    property <bool> overflow: root.cell.tasks.length > root.fit;
-    property <int> shown: root.overflow ? root.fit - 1 : root.cell.tasks.length;
+    property <bool> summary: root.cell.habits-total > 0 && (root.fit > 1 || root.cell.tasks.length == 0);
+    property <int> room: root.summary ? root.fit - 1 : root.fit;
+    property <bool> overflow: root.cell.tasks.length > root.room;
+    property <int> shown: root.overflow ? root.room - 1 : root.cell.tasks.length;
 
     // Equal cells whatever their content.
     preferred-width: 0px;
@@ -108,6 +115,18 @@ component CalendarCell inherits Rectangle {
             clicked => {
                 root.chosen();
             }
+        }
+
+        if root.summary: HabitLine {
+            x: 6px;
+            y: 32px + (root.shown + (root.overflow ? 1 : 0)) * root.row-h;
+            width: parent.width - 12px;
+            height: root.row-h;
+            habit: {
+                name: Strings.habits-day(root.cell.habits-done, root.cell.habits-total),
+                done: root.cell.habits-done == root.cell.habits-total,
+            };
+            ink: root.cell.in-month ? Palette.foreground : Theme.muted;
         }
 
         if root.overflow: Text {

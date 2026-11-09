@@ -129,6 +129,11 @@ export global Strings {
         return @tr("HABITS · {}/{}", done, total);
     }
 
+    // Habits done out of those that apply on a day of the month calendar.
+    public pure function habits-day(done: int, total: int) -> string {
+        return @tr("Habits {}/{}", done, total);
+    }
+
     public pure function tasks-today(done: int, total: int) -> string {
         return @tr("TASKS · {}/{}", done, total);
     }
