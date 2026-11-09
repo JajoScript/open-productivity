@@ -659,3 +659,63 @@ msgstr "{}, cumplido"
 
 msgid "{}, pending"
 msgstr "{}, pendiente"
+
+msgid "Study"
+msgstr "Estudio"
+
+msgid "Your subjects and study sessions."
+msgstr "Tus materias y sesiones de estudio."
+
+msgid "New subject"
+msgstr "Nueva materia"
+
+msgid "Log session"
+msgstr "Registrar sesión"
+
+msgid "Create your first subject"
+msgstr "Crea tu primera materia"
+
+msgid "Group what you study by subject. Every session you log adds hours to its subject, so you can see how much time each one gets."
+msgstr "Agrupa lo que estudias por materia. Cada sesión que registras suma horas a su materia, así ves cuánto tiempo le dedicas a cada una."
+
+msgid "Subject name"
+msgstr "Nombre de la materia"
+
+msgid "Subject"
+msgstr "Materia"
+
+msgid "Date"
+msgstr "Fecha"
+
+msgid "Minutes"
+msgstr "Minutos"
+
+msgid "Description (optional)"
+msgstr "Descripción (opcional)"
+
+msgid "Log"
+msgstr "Registrar"
+
+msgid "Give the subject a name."
+msgstr "Ponle un nombre a la materia."
+
+msgid "Enter the minutes as a whole number, like 45."
+msgstr "Escribe los minutos como un número entero, por ejemplo 45."
+
+msgid "The date can't be in the future."
+msgstr "La fecha no puede ser futura."
+
+msgid "Choose a subject."
+msgstr "Elige una materia."
+
+msgid "Could not save the study session: {}"
+msgstr "No se pudo guardar la sesión de estudio: {}"
+
+msgid "Could not load the subjects: {}"
+msgstr "No se pudieron cargar las materias: {}"
+
+msgid "Subjects · {}"
+msgstr "Materias · {}"
+
+msgid "{} · {}×"
+msgstr "{} · {}×"

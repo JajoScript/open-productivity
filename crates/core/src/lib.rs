@@ -12,4 +12,5 @@ pub mod instances;
 pub mod lists;
 pub mod recurrence;
 pub mod settings;
+pub mod study;
 pub mod tasks;

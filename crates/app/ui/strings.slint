@@ -36,6 +36,29 @@ export global Strings {
         return @tr("Could not save the habit: {}", error);
     }
 
+    out property <string> study-empty-name: @tr("Give the subject a name.");
+    out property <string> study-bad-minutes: @tr("Enter the minutes as a whole number, like 45.");
+    out property <string> study-future-date: @tr("The date can't be in the future.");
+    out property <string> study-no-subject: @tr("Choose a subject.");
+
+    public pure function study-failed(error: string) -> string {
+        return @tr("Could not save the study session: {}", error);
+    }
+
+    public pure function study-load-failed(error: string) -> string {
+        return @tr("Could not load the subjects: {}", error);
+    }
+
+    // Header of the subjects list.
+    public pure function subjects-count(n: int) -> string {
+        return @tr("Subjects · {}", n);
+    }
+
+    // Time studied and number of sessions on a subject, e.g. "1h 30m · 3×".
+    public pure function subject-stats(duration: string, sessions: int) -> string {
+        return @tr("{} · {}×", duration, sessions);
+    }
+
     public pure function task-failed(error: string) -> string {
         return @tr("Could not save the task: {}", error);
     }

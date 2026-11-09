@@ -1,0 +1,235 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette, ScrollView } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkDatePopup } from "../ink-date-popup.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { SubjectRow } from "study-view.slint";
+
+// One subject in the chooser: an ink wash when chosen, like a navigation entry.
+component SubjectChoice inherits Rectangle {
+    in property <SubjectRow> subject;
+    in property <bool> chosen;
+    callback picked;
+
+    height: 32px;
+    border-radius: 6px;
+    background: root.chosen ? Theme.selected : touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    forward-focus: focus;
+    accessible-role: list-item;
+    accessible-label: root.subject.name;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.chosen;
+    accessible-action-default => {
+        root.picked();
+    }
+
+    HorizontalLayout {
+        padding-left: 10px;
+        padding-right: 10px;
+        spacing: 8px;
+        Image {
+            source: @image-url("../icons/notebook-text.svg");
+            colorize: Theme.muted;
+            width: 16px;
+            image-fit: contain;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.subject.name;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+            font-weight: root.chosen ? 600 : 400;
+            accessible-role: none;
+        }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.picked();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.picked();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component LoggerBody inherits FocusScope {
+    in property <[SubjectRow]> subjects;
+    // The modal gives the initial subject and day; the user changes them here.
+    in-out property <int> subject-id;
+    in-out property <Date> date;
+    callback save(int, Date, string, string) -> string;
+    callback cancel;
+
+    property <string> minutes;
+    property <string> description;
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.subject-id, root.date, root.minutes, root.description);
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: @tr("Log session");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        Text {
+            text: @tr("Subject");
+            color: Theme.muted;
+        }
+
+        ScrollView {
+            height: min(root.subjects.length * 32px, 128px);
+            VerticalLayout {
+                for subject in root.subjects: SubjectChoice {
+                    subject: subject;
+                    chosen: subject.id == root.subject-id;
+                    picked => {
+                        root.subject-id = subject.id;
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: @tr("Date");
+            color: Theme.muted;
+        }
+
+        HorizontalLayout {
+            height: 36px;
+            alignment: start;
+            picker := InkDatePopup {
+                y: 36px;
+                day: root.date.day;
+                month: root.date.month;
+                year: root.date.year;
+                picked(date) => {
+                    root.date = date;
+                }
+            }
+
+            SubtleButton {
+                text: Strings.date(root.date.day, root.date.month, root.date.year);
+                icon: @image-url("../icons/calendar.svg");
+                color: Palette.foreground;
+                clicked => {
+                    picker.show();
+                }
+            }
+        }
+
+        InkField {
+            text <=> root.minutes;
+            placeholder-text: @tr("Minutes");
+            init => {
+                self.focus();
+            }
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        InkField {
+            text <=> root.description;
+            placeholder-text: @tr("Description (optional)");
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Log");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+}
+
+// Logs a session on a subject. Closing by clicking outside discards it.
+export component SessionLogger inherits PopupWindow {
+    // Returns the error to show; empty means it worked and the modal closes.
+    callback log(int, Date, string, string) -> string;
+
+    // Set by the opener before show().
+    in property <[SubjectRow]> subjects;
+    in property <int> subject-id;
+    in property <Date> date;
+
+    close-policy: close-on-click-outside;
+    width: 360px;
+
+    PopupSurface {
+        LoggerBody {
+            subjects: root.subjects;
+            subject-id: root.subject-id;
+            date: root.date;
+            save(id, date, minutes, description) => {
+                let error = root.log(id, date, minutes, description);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

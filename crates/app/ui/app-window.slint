@@ -9,6 +9,9 @@ import { ListEntry } from "list-entry.slint";
 import { ListCreator } from "tasks/list-creator.slint";
 import { HabitCreator } from "habits/habit-creator.slint";
 import { ArchivedHabits } from "habits/archived-habits.slint";
+import { SessionLogger } from "study/session-logger.slint";
+import { SubjectCreator } from "study/subject-creator.slint";
+import { StudyView, SubjectRow } from "study/study-view.slint";
 import { ArchivedRow, DayState, HabitRow, HabitsView, HeatCell, HeatLevel, WeekTotal } from "habits/habits-view.slint";
 import { CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource, CalendarTask, CalendarView, WeekBlock, WeekColumn } from "calendar/calendar-view.slint";
 import { Module, Rail } from "rail.slint";
@@ -17,7 +20,7 @@ import { TaskCreator } from "tasks/task-creator.slint";
 import { ColorMode, Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
 import { DayHabit, DueKind, KanbanColumn, Quadrant, Repeat, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { ArchivedRow, Calendar, Repeat, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, Strings, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
+export { ArchivedRow, Calendar, Repeat, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, Strings, SubjectRow, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -117,6 +120,11 @@ export component AppWindow inherits Window {
     in property <[DayHabit]> day-habits;
     in property <int> habits-done;
     callback set-day-habit-done(int, bool);
+    in property <[SubjectRow]> subjects;
+    in property <string> study-error;
+    // Both return the error to show; empty means it worked.
+    callback create-subject(string) -> string;
+    callback log-study-session(int, Date, string, string) -> string;
 
     title: "Open Productivity — " + instance-name;
     preferred-width: 1280px;
@@ -134,6 +142,15 @@ export component AppWindow inherits Window {
     property <string> habit-edit-name;
     property <[bool]> habit-edit-days;
     property <Date> habit-edit-start;
+    // What the session modal opens with.
+    property <int> log-subject;
+    property <Date> log-date;
+    function open-log-session() {
+        root.log-subject = root.subjects[0].id;
+        root.log-date = Calendar.today();
+        session-logger.show();
+    }
+
     // The only place that forces Palette; `unknown` hands it back to the system.
     function open-new-habit() {
         root.habit-editing = false;
@@ -196,6 +213,25 @@ export component AppWindow inherits Window {
             }
             archive(id) => {
                 root.archive-habit(id);
+            }
+        }
+
+        subject-creator := SubjectCreator {
+            x: (root.width - self.width) / 2;
+            y: 120px;
+            create(name) => {
+                return root.create-subject(name);
+            }
+        }
+
+        session-logger := SessionLogger {
+            subjects: root.subjects;
+            subject-id: root.log-subject;
+            date: root.log-date;
+            x: (root.width - self.width) / 2;
+            y: 120px;
+            log(id, date, minutes, description) => {
+                return root.log-study-session(id, date, minutes, description);
             }
         }
 
@@ -360,6 +396,19 @@ export component AppWindow inherits Window {
                     }
                     set-habit-done(id, day, done) => {
                         root.set-habit-done(id, day, done);
+                    }
+                }
+
+                if root.module == Module.study: StudyView {
+                    width: parent.width;
+                    height: parent.height;
+                    subjects: root.subjects;
+                    error: root.study-error;
+                    new-subject => {
+                        subject-creator.show();
+                    }
+                    log-session => {
+                        root.open-log-session();
                     }
                 }
 

@@ -7,14 +7,17 @@ import { Theme } from "theme.slint";
 // Primary action in the monochrome system: an ink plate instead of Fluent's accent fill.
 export component InkButton {
     in property <string> text;
+    in property <bool> enabled: true;
     callback clicked;
 
     min-width: label.preferred-width + 32px;
     min-height: 32px;
     horizontal-stretch: 0;
+    opacity: root.enabled ? 1 : 0.4;
     forward-focus: focus;
     accessible-role: button;
     accessible-label: root.text;
+    accessible-enabled: root.enabled;
     accessible-action-default => {
         root.clicked();
     }
@@ -36,12 +39,14 @@ export component InkButton {
     }
 
     touch := TouchArea {
+        enabled: root.enabled;
         clicked => {
             root.clicked();
         }
     }
 
     focus := FocusScope {
+        enabled: root.enabled;
         width: 0px; // keyboard only; clicks go to the TouchArea
         key-pressed(event) => {
             if event.text == Key.Space || event.text == Key.Return {

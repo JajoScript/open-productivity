@@ -5,7 +5,7 @@ import { Palette } from "std-widgets.slint";
 import { Theme } from "theme.slint";
 
 // One per built module; a module joins the rail when its first slice ships.
-export enum Module { tasks, habits, calendar, settings }
+export enum Module { tasks, habits, calendar, study, settings }
 
 // Label beside a rail icon: fades in over the second half of the rail's opening and slides in 8px.
 component RailLabel inherits Text {
@@ -90,7 +90,7 @@ export component Rail inherits Rectangle {
 
     property <length> collapsed: 56px;
     property <length> open: 200px;
-    property <bool> expanded: hover.has-hover || tasks.focused || habits.focused || calendar.focused || settings.focused;
+    property <bool> expanded: hover.has-hover || tasks.focused || habits.focused || calendar.focused || study.focused || settings.focused;
     // Derived from the animated width, so the labels move in step with the panel.
     property <float> reveal: (root.width - root.collapsed) / (root.open - root.collapsed);
 
@@ -170,6 +170,16 @@ export component Rail inherits Rectangle {
                 selected: root.module == Module.calendar;
                 clicked => {
                     root.module = Module.calendar;
+                }
+            }
+
+            study := RailButton {
+                icon: @image-url("icons/graduation-cap.svg");
+                label: @tr("Study");
+                reveal: root.reveal;
+                selected: root.module == Module.study;
+                clicked => {
+                    root.module = Module.study;
                 }
             }
 

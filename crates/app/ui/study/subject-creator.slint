@@ -1,0 +1,100 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component CreatorBody inherits FocusScope {
+    callback save(string) -> string;
+    callback cancel;
+
+    property <string> name;
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.name);
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: @tr("New subject");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        InkField {
+            text <=> root.name;
+            placeholder-text: @tr("Subject name");
+            init => {
+                self.focus();
+            }
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Create");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+}
+
+// Creates a subject. Closing by clicking outside discards it.
+export component SubjectCreator inherits PopupWindow {
+    // Returns the error to show; empty means it worked and the modal closes.
+    callback create(string) -> string;
+
+    close-policy: close-on-click-outside;
+    width: 360px;
+
+    PopupSurface {
+        CreatorBody {
+            save(name) => {
+                let error = root.create(name);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}
