@@ -31,6 +31,7 @@ jobs:
           fi
           echo "TAG=$TAG" >> "$GITHUB_ENV"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+      - run: cargo test --locked
       - run: cargo build --release --locked
       - name: Publish release
         shell: bash
