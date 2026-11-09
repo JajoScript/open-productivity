@@ -6,7 +6,7 @@
 use std::rc::Rc;
 
 use open_productivity_core::chrono::NaiveDate;
-use open_productivity_core::tasks::{self, Priority, TaskId};
+use open_productivity_core::tasks::{self, Priority, TaskError, TaskId};
 use slint::{ModelRc, VecModel};
 
 use crate::tasks::{State, task_row};
@@ -35,16 +35,17 @@ impl State {
 pub fn init(
     window: &AppWindow,
     state: &Rc<State>,
-    finish: &Rc<impl Fn(Result<(), String>) + 'static>,
+    after: impl Fn(Result<(), TaskError>) + 'static,
 ) {
     window.on_set_priority({
-        let (state, finish) = (state.clone(), finish.clone());
+        let state = state.clone();
         move |id, urgent, important| {
             let priority = Priority { urgent, important };
-            // Reload even on failure so the matrix shows what is really stored.
-            let res = tasks::set_priority(&state.conn, TaskId(id.into()), priority);
-            let reloaded = state.reload();
-            finish(res.map_err(|e| e.to_string()).and(reloaded));
+            after(tasks::set_priority(
+                &state.conn,
+                TaskId(id.into()),
+                priority,
+            ));
         }
     });
 }

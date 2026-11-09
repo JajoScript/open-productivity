@@ -85,6 +85,12 @@ pub fn open(path: &Path) -> Result<Connection, DbError> {
     Ok(conn)
 }
 
+/// A migrated in-memory database for tests that do not exercise files.
+#[cfg(test)]
+pub(crate) fn test_conn() -> Connection {
+    open(Path::new(":memory:")).unwrap()
+}
+
 /// Writes a consistent copy of the database to `dest`, replacing any file there.
 pub fn export(conn: &Connection, dest: &Path) -> Result<(), DbError> {
     if let Some(src) = conn.path().filter(|p| !p.is_empty()) {

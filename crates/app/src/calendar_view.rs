@@ -17,6 +17,7 @@ use open_productivity_core::settings::{self, CalendarSource as CoreSource, Setti
 use open_productivity_core::tasks::{self, Task, TaskError, TaskId};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
+use crate::dates::{core_date, ui_date};
 use crate::tasks::{State, ui_id};
 use crate::{
     AppWindow, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource,
@@ -34,6 +35,13 @@ fn source_from_ui(s: CalendarSource) -> CoreSource {
     match s {
         CalendarSource::Tasks => CoreSource::Tasks,
         CalendarSource::Habits => CoreSource::Habits,
+    }
+}
+
+fn period(m: CalendarMode) -> calendar::Period {
+    match m {
+        CalendarMode::Month => calendar::Period::Month,
+        CalendarMode::Week => calendar::Period::Week,
     }
 }
 
@@ -62,14 +70,6 @@ fn habit_rows(habits: Vec<DayHabit>) -> Result<ModelRc<CalendarHabit>, String> {
         })
         .collect::<Result<Vec<_>, String>>()?;
     Ok(ModelRc::new(VecModel::from(rows)))
-}
-
-fn ui_date(d: NaiveDate) -> Date {
-    Date {
-        year: d.year(),
-        month: d.month() as i32,
-        day: d.day() as i32,
-    }
 }
 
 fn week_columns(days: Vec<agenda::WeekDay>) -> Result<ModelRc<WeekColumn>, String> {
@@ -119,7 +119,8 @@ fn load(
         agenda::filter_week(&mut days, shown);
         w.set_calendar_week(week_columns(days)?);
     } else {
-        let mut weeks = agenda::month(conn, first_of(anchor), today).map_err(|e| e.to_string())?;
+        let mut weeks =
+            agenda::month(conn, calendar::month_start(anchor), today).map_err(|e| e.to_string())?;
         agenda::filter_month(&mut weeks, shown);
         let weeks = weeks
             .into_iter()
@@ -144,10 +145,7 @@ fn load(
         w.set_calendar_weeks(ModelRc::new(VecModel::from(weeks)));
     }
     w.set_calendar_mode(mode);
-    w.set_calendar_month(Date {
-        day: 1,
-        ..ui_date(first_of(anchor))
-    });
+    w.set_calendar_month(ui_date(calendar::month_start(anchor)));
     w.set_calendar_now(now_minutes());
     w.set_calendar_overdue(rows(backlog.overdue)?);
     w.set_calendar_undated(rows(backlog.undated)?);
@@ -222,9 +220,9 @@ pub fn init(window: &AppWindow, state: &Rc<State>, app_dir: &Path) -> Timer {
                 return Default::default();
             };
             let strings = w.global::<Strings>();
-            let Some(due) = NaiveDate::from_ymd_opt(d.year, d.month as u32, d.day as u32) else {
-                return strings
-                    .invoke_task_failed(format!("{}-{}-{}", d.year, d.month, d.day).into());
+            let due = match core_date(d) {
+                Ok(due) => due,
+                Err(e) => return strings.invoke_task_failed(e.into()),
             };
             match tasks::create_on(&state.conn, &title, due) {
                 Err(TaskError::EmptyTitle) => strings.get_task_title_empty(),
@@ -248,9 +246,9 @@ pub fn init(window: &AppWindow, state: &Rc<State>, app_dir: &Path) -> Timer {
               op: &dyn Fn(&Connection, TaskId, NaiveDate) -> Result<(), TaskError>| {
             let Some(w) = weak.upgrade() else { return };
             let failed = |e: String| w.global::<Strings>().invoke_task_failed(e.into());
-            let res = match NaiveDate::from_ymd_opt(d.year, d.month as u32, d.day as u32) {
-                Some(due) => op(&state.conn, TaskId(id.into()), due).map_err(|e| e.to_string()),
-                None => Err(format!("{}-{}-{}", d.year, d.month, d.day)),
+            let res = match core_date(d) {
+                Ok(due) => op(&state.conn, TaskId(id.into()), due).map_err(|e| e.to_string()),
+                Err(e) => Err(e),
             };
             // Reload even on failure so the grid shows what is really stored; it also clears
             // the error line, so the message is set after.
@@ -281,11 +279,11 @@ pub fn init(window: &AppWindow, state: &Rc<State>, app_dir: &Path) -> Timer {
     window.on_calendar_set_mode({
         let (anchor, mode, reload) = (anchor.clone(), mode.clone(), reload.clone());
         move |m| {
-            let today = Local::now().date_naive();
-            // Into the week of today when the month shown holds it.
-            if m == CalendarMode::Week && first_of(anchor.get()) == first_of(today) {
-                anchor.set(today);
-            }
+            anchor.set(calendar::enter(
+                anchor.get(),
+                period(m),
+                Local::now().date_naive(),
+            ));
             mode.set(m);
             reload();
         }
@@ -297,13 +295,7 @@ pub fn init(window: &AppWindow, state: &Rc<State>, app_dir: &Path) -> Timer {
         move |n| {
             let today = Local::now().date_naive();
             let cur = anchor.get();
-            let target = if n == 0 {
-                Some(today)
-            } else if mode.get() == CalendarMode::Week {
-                calendar::shift(cur, 7 * i64::from(n))
-            } else {
-                calendar::month_grid(cur.year(), cur.month(), n, today).map(|g| g.first)
-            };
+            let target = calendar::navigate(cur, period(mode.get()), n, today);
             match (target, weak.upgrade()) {
                 (Some(date), _) => {
                     anchor.set(date);
@@ -330,8 +322,4 @@ pub fn init(window: &AppWindow, state: &Rc<State>, app_dir: &Path) -> Timer {
         }
     });
     timer
-}
-
-fn first_of(date: NaiveDate) -> NaiveDate {
-    date.with_day(1).unwrap_or(date)
 }

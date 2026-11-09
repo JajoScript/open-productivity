@@ -56,6 +56,39 @@ pub fn shift(date: NaiveDate, days: i64) -> Option<NaiveDate> {
     date.checked_add_signed(TimeDelta::try_days(days)?)
 }
 
+/// First day of the month that holds `date`.
+pub fn month_start(date: NaiveDate) -> NaiveDate {
+    date.with_day(1).expect("day 1 exists in every month")
+}
+
+/// What the calendar shows: a month grid or one week.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Period {
+    Month,
+    Week,
+}
+
+/// The date to show after switching to `period`: into the week of `today` when the month shown
+/// (the one holding `anchor`) holds it.
+pub fn enter(anchor: NaiveDate, period: Period, today: NaiveDate) -> NaiveDate {
+    if period == Period::Week && month_start(anchor) == month_start(today) {
+        today
+    } else {
+        anchor
+    }
+}
+
+/// The date to show `n` periods from `anchor`; 0 goes back to `today`. `None` out of range.
+pub fn navigate(anchor: NaiveDate, period: Period, n: i32, today: NaiveDate) -> Option<NaiveDate> {
+    if n == 0 {
+        return Some(today);
+    }
+    match period {
+        Period::Week => shift(anchor, 7 * i64::from(n)),
+        Period::Month => month_grid(anchor.year(), anchor.month(), n, today).map(|g| g.first),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -137,5 +170,28 @@ mod tests {
         assert_eq!(shift(d("2026-12-28"), 7), Some(d("2027-01-04")));
         assert_eq!(shift(d("2026-03-01"), -1), Some(d("2026-02-28")));
         assert_eq!(shift(NaiveDate::MAX, 1), None);
+    }
+
+    #[test]
+    fn entering_week_goes_to_today_only_in_its_month() {
+        let today = d("2026-11-03");
+        assert_eq!(enter(d("2026-11-20"), Period::Week, today), today);
+        assert_eq!(enter(d("2026-10-20"), Period::Week, today), d("2026-10-20"));
+        assert_eq!(
+            enter(d("2026-11-20"), Period::Month, today),
+            d("2026-11-20")
+        );
+    }
+
+    #[test]
+    fn navigate_goes_to_today_or_moves_by_period() {
+        let today = d("2026-11-03");
+        let a = d("2026-12-15");
+        assert_eq!(navigate(a, Period::Week, 0, today), Some(today));
+        assert_eq!(navigate(a, Period::Week, 1, today), Some(d("2026-12-22")));
+        assert_eq!(navigate(a, Period::Week, -1, today), Some(d("2026-12-08")));
+        assert_eq!(navigate(a, Period::Month, 1, today), Some(d("2027-01-01")));
+        assert_eq!(navigate(NaiveDate::MAX, Period::Week, 1, today), None);
+        assert_eq!(navigate(NaiveDate::MAX, Period::Month, 1, today), None);
     }
 }

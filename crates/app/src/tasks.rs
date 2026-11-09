@@ -14,6 +14,7 @@ use open_productivity_core::recurrence::Frequency;
 use open_productivity_core::tasks::{self, DueLabel, Priority, Task, TaskError, TaskId, View};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
+use crate::dates::{core_date, ui_date};
 use crate::{
     AppWindow, Date, DueKind, KanbanColumn, ListEntry, Quadrant, Repeat, Strings, TaskRow,
     TaskView, TasksTab, WeekDay, calendar_view, habits, kanban, lists, matrix, week,
@@ -122,11 +123,7 @@ pub fn task_row(t: Task, today: NaiveDate, first_done: bool) -> Result<TaskRow, 
 
 /// Publishes the day the window shows; the Tasks and Habits views read it.
 pub fn show_today(w: &AppWindow, today: NaiveDate) {
-    w.set_today(Date {
-        year: today.year(),
-        month: today.month() as i32,
-        day: today.day() as i32,
-    });
+    w.set_today(ui_date(today));
     w.set_today_weekday(today.weekday().num_days_from_monday() as i32);
 }
 
@@ -276,13 +273,13 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &std::path::Path)
         let (state, after, finish) = (state.clone(), after.clone(), finish.clone());
         move |id, d: Date| {
             // A date the picker cannot produce is an error, never "clear the date".
-            match NaiveDate::from_ymd_opt(d.year, d.month as u32, d.day as u32) {
-                Some(due) => after(tasks::set_due_date(
+            match core_date(d) {
+                Ok(due) => after(tasks::set_due_date(
                     &state.conn,
                     TaskId(id.into()),
                     Some(due),
                 )),
-                None => finish(Err(format!("{}-{}-{}", d.year, d.month, d.day))),
+                Err(e) => finish(Err(e)),
             }
         }
     });
@@ -361,8 +358,8 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &std::path::Path)
 
     lists::init(window, &state, &finish);
     week::init(window, &state, &finish);
-    kanban::init(window, &state, &finish);
-    matrix::init(window, &state, &finish);
+    kanban::init(window, &state, after.clone());
+    matrix::init(window, &state, after.clone());
 
     let timer = Timer::default();
     timer.start(TimerMode::Repeated, Duration::from_secs(60), move || {

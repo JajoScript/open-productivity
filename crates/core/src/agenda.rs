@@ -9,7 +9,7 @@ use rusqlite::Connection;
 use crate::calendar;
 use crate::habits::{self, DayHabit};
 use crate::settings::{CalendarSource, Settings};
-use crate::tasks::{SELECT_TASKS, Task, TaskError, TaskId, View, query};
+use crate::tasks::{SELECT_TASKS, Task, TaskError, TaskId, View, move_anchor, query};
 
 /// One cell of the month grid.
 #[derive(Debug)]
@@ -27,7 +27,7 @@ pub struct Day {
 impl Day {
     /// How many of the day's habits are done.
     pub fn habits_done(&self) -> usize {
-        self.habits.iter().filter(|h| h.done).count()
+        habits::done_count(&self.habits)
     }
 }
 
@@ -288,19 +288,24 @@ pub fn reschedule_at(
         "UPDATE task SET due_date = ?1, due_time = ?2, end_time = ?3 WHERE id = ?4",
         (date.to_string(), text(from), end.map(text), id.0),
     )?;
+    move_anchor(&tx, id, Some(&date.to_string()))?;
     tx.commit()?;
     Ok(())
 }
 
 /// Moves a task to `date` and drops its times, so it sits in the day's "no time" strip.
 pub fn reschedule_untimed(conn: &Connection, id: TaskId, date: NaiveDate) -> Result<(), TaskError> {
-    match conn.execute(
+    let tx = conn.unchecked_transaction()?;
+    let due = date.to_string();
+    if tx.execute(
         "UPDATE task SET due_date = ?1, due_time = NULL, end_time = NULL WHERE id = ?2",
-        (date.to_string(), id.0),
-    )? {
-        0 => Err(TaskError::NotFound),
-        _ => Ok(()),
+        (&due, id.0),
+    )? == 0
+    {
+        return Err(TaskError::NotFound);
     }
+    move_anchor(&tx, id, Some(&due))?;
+    Ok(tx.commit()?)
 }
 
 /// The calendar's side panel: pending tasks that have no place in the month grid.
@@ -332,18 +337,11 @@ pub fn backlog(conn: &Connection, today: NaiveDate) -> Result<Backlog, TaskError
 mod tests {
     use super::*;
     use crate::db;
+    use crate::recurrence::Frequency;
     use crate::tasks::{self, View};
 
     fn d(s: &str) -> NaiveDate {
         s.parse().unwrap()
-    }
-
-    fn setup(name: &str) -> (std::path::PathBuf, Connection) {
-        let dir = std::env::temp_dir().join(format!("op-agenda-{}-{name}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let conn = db::open(&dir.join("test.db")).unwrap();
-        (dir, conn)
     }
 
     fn add(conn: &Connection, title: &str, due: Option<&str>) -> tasks::TaskId {
@@ -371,7 +369,7 @@ mod tests {
 
     #[test]
     fn tasks_fall_on_their_day_and_fillers_too() {
-        let (dir, conn) = setup("fall");
+        let conn = db::test_conn();
         add(&conn, "in", Some("2026-11-15"));
         add(&conn, "lead", Some("2026-10-30"));
         add(&conn, "trail", Some("2026-12-06"));
@@ -390,13 +388,11 @@ mod tests {
         assert!(!all[day(&w, "2026-12-01")].in_month);
         assert!(all[day(&w, "2026-11-08")].today);
         assert_eq!(all.iter().filter(|x| x.today).count(), 1);
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn unchecked_sources_are_filtered_out_one_by_one() {
-        let (dir, conn) = setup("filter");
+        let conn = db::test_conn();
         let today = d("2026-11-09");
         add(&conn, "t", Some("2026-11-09"));
         habits::create(&conn, "Read", [true; 7], today, today).unwrap();
@@ -421,13 +417,11 @@ mod tests {
         s.set_shown(CalendarSource::Tasks, true);
         s.set_shown(CalendarSource::Habits, false);
         assert_eq!(counts(&s), (1, 0, 1, 0));
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn habits_show_per_day_and_leave_tasks_alone() {
-        let (dir, conn) = setup("habits");
+        let conn = db::test_conn();
         let today = d("2026-11-09");
         add(&conn, "t", Some("2026-11-10"));
         let h = habits::create(&conn, "Read", [true; 7], today, today).unwrap();
@@ -449,23 +443,19 @@ mod tests {
         assert!(wk[0].habits[0].done);
         let before = week(&conn, d("2026-11-03"), today).unwrap();
         assert!(before.iter().all(|x| x.habits.is_empty()));
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn created_on_a_day_shows_in_that_cell() {
-        let (dir, conn) = setup("created-on");
+        let conn = db::test_conn();
         tasks::create_on(&conn, "past", d("2026-10-28")).unwrap();
         let w = month(&conn, d("2026-11-01"), d("2026-11-08")).unwrap();
         assert_eq!(titles(&w, "2026-10-28"), ["past"]);
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn pending_before_done_then_creation() {
-        let (dir, conn) = setup("order");
+        let conn = db::test_conn();
         let a = add(&conn, "a", Some("2026-11-10"));
         add(&conn, "b", Some("2026-11-10"));
         add(&conn, "c", Some("2026-11-10"));
@@ -473,13 +463,11 @@ mod tests {
         let w = month(&conn, d("2026-11-01"), d("2026-11-08")).unwrap();
         assert_eq!(titles(&w, "2026-11-10"), ["b", "c", "a"]);
         assert!(w.iter().flatten().any(|x| x.tasks.iter().any(|t| t.done)));
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn timed_tasks_come_first_within_pending_and_done() {
-        let (dir, conn) = setup("timed");
+        let conn = db::test_conn();
         let at = |title: &str, time: Option<&str>| {
             let id = add(&conn, title, Some("2026-11-10"));
             if let Some(t) = time {
@@ -507,8 +495,6 @@ mod tests {
                 "done-plain"
             ]
         );
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn names(ts: &[Task]) -> Vec<&str> {
@@ -517,7 +503,7 @@ mod tests {
 
     #[test]
     fn backlog_sections() {
-        let (dir, conn) = setup("backlog");
+        let conn = db::test_conn();
         let today = d("2026-11-08");
         add(&conn, "late2", Some("2026-11-05"));
         add(&conn, "late1", Some("2026-11-01"));
@@ -534,13 +520,11 @@ mod tests {
         let b = backlog(&conn, today).unwrap();
         assert_eq!(names(&b.overdue), ["late1", "late2"]);
         assert_eq!(names(&b.undated), ["none1", "none2"]);
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn rescheduling_an_overdue_task_moves_it_to_the_day() {
-        let (dir, conn) = setup("resched");
+        let conn = db::test_conn();
         let today = d("2026-11-08");
         let id = add(&conn, "late", Some("2026-11-01"));
         let undated = add(&conn, "none", None);
@@ -551,8 +535,6 @@ mod tests {
         let w = month(&conn, d("2026-11-01"), today).unwrap();
         assert_eq!(titles(&w, "2026-11-20"), ["late"]);
         assert_eq!(titles(&w, "2026-11-21"), ["none"]);
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     fn t(s: &str) -> NaiveTime {
@@ -618,7 +600,7 @@ mod tests {
 
     #[test]
     fn week_places_untimed_and_blocks_in_lanes() {
-        let (dir, conn) = setup("week");
+        let conn = db::test_conn();
         let today = d("2026-11-08");
         let timed = |title: &str, day: &str, s: &str, e: Option<&str>| {
             let id = add(&conn, title, Some(day));
@@ -655,13 +637,11 @@ mod tests {
         );
         let n: usize = w.iter().map(|x| x.blocks.len() + x.untimed.len()).sum();
         assert_eq!(n, 5);
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn reschedule_at_keeps_duration_or_pulls_back_from_midnight() {
-        let (dir, conn) = setup("resched-at");
+        let conn = db::test_conn();
         let id = add(&conn, "x", Some("2026-11-02"));
         tasks::set_time(&conn, id, Some(t("14:15")), Some(t("16:00"))).unwrap();
         reschedule_at(&conn, id, d("2026-11-05"), t("09:00")).unwrap();
@@ -683,13 +663,11 @@ mod tests {
             reschedule_at(&conn, tasks::TaskId(999), d("2026-11-06"), t("08:00")),
             Err(TaskError::NotFound)
         ));
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn reschedule_untimed_moves_the_day_and_drops_the_times() {
-        let (dir, conn) = setup("resched-untimed");
+        let conn = db::test_conn();
         let id = add(&conn, "x", Some("2026-11-02"));
         tasks::set_time(&conn, id, Some(t("14:15")), Some(t("16:00"))).unwrap();
         reschedule_untimed(&conn, id, d("2026-11-04")).unwrap();
@@ -702,13 +680,35 @@ mod tests {
             reschedule_untimed(&conn, tasks::TaskId(999), d("2026-11-04")),
             Err(TaskError::NotFound)
         ));
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn dragging_a_repeating_task_moves_its_anchor_day() {
+        let conn = db::test_conn();
+        let monthly = |title: &str| {
+            let id = add(&conn, title, Some("2026-01-31"));
+            tasks::set_recurrence(&conn, id, Some((Frequency::Monthly, "1"))).unwrap();
+            id
+        };
+        let (a, b) = (monthly("a"), monthly("b"));
+        reschedule_at(&conn, a, d("2026-02-12"), t("09:00")).unwrap();
+        reschedule_untimed(&conn, b, d("2026-02-12")).unwrap();
+        for id in [a, b] {
+            tasks::set_done(&conn, id, true, d("2026-02-12")).unwrap();
+        }
+        let due: Vec<String> = conn
+            .prepare("SELECT due_date FROM task WHERE done_at IS NULL ORDER BY id")
+            .unwrap()
+            .query_map([], |r| r.get(0))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(due, ["2026-03-12", "2026-03-12"]);
     }
 
     #[test]
     fn month_shapes() {
-        let (dir, conn) = setup("shapes");
+        let conn = db::test_conn();
         let today = d("2026-11-08");
         let count = |first: &str| {
             let w = month(&conn, d(first), today).unwrap();
@@ -722,7 +722,5 @@ mod tests {
         assert_eq!(count("2027-02-01"), (28, d("2027-02-01")));
         // November 2026 starts on a Sunday: six leading fillers.
         assert_eq!(count("2026-11-01"), (30, d("2026-10-26")));
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

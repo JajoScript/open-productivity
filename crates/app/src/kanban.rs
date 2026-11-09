@@ -6,7 +6,7 @@
 use std::rc::Rc;
 
 use open_productivity_core::chrono::{NaiveDate, Utc};
-use open_productivity_core::tasks::{self, TaskId};
+use open_productivity_core::tasks::{self, TaskError, TaskId};
 use slint::{DataTransfer, ModelRc, SharedString, VecModel};
 
 use crate::tasks::{State, task_row};
@@ -53,24 +53,26 @@ fn payload_task(data: &DataTransfer) -> i32 {
 pub fn init(
     window: &AppWindow,
     state: &Rc<State>,
-    finish: &Rc<impl Fn(Result<(), String>) + 'static>,
+    after: impl Fn(Result<(), TaskError>) + 'static,
 ) {
     window.on_task_payload(task_payload);
     window.on_payload_task(|data| payload_task(&data));
 
     window.on_move_task({
-        let (state, finish) = (state.clone(), finish.clone());
+        let state = state.clone();
         move |id, stage| {
             let stage = match stage {
                 Stage::Icebox => tasks::Stage::Icebox,
                 Stage::InProgress => tasks::Stage::InProgress,
                 Stage::Done => tasks::Stage::Done,
             };
-            // Reload even on failure so the board shows what is really stored.
             let today = open_productivity_core::chrono::Local::now().date_naive();
-            let res = tasks::set_stage(&state.conn, TaskId(id.into()), stage, today);
-            let reloaded = state.reload();
-            finish(res.map_err(|e| e.to_string()).and(reloaded));
+            after(tasks::set_stage(
+                &state.conn,
+                TaskId(id.into()),
+                stage,
+                today,
+            ));
         }
     });
 }

@@ -95,40 +95,28 @@ mod tests {
     use super::*;
     use crate::{db, tasks};
 
-    fn setup(name: &str) -> (std::path::PathBuf, Connection) {
-        let dir = std::env::temp_dir().join(format!("op-lists-{}-{name}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        std::fs::create_dir_all(&dir).unwrap();
-        let conn = db::open(&dir.join("test.db")).unwrap();
-        (dir, conn)
-    }
-
     fn names(conn: &Connection) -> Vec<String> {
         all(conn).unwrap().into_iter().map(|l| l.name).collect()
     }
 
     #[test]
     fn create_trims_name() {
-        let (dir, conn) = setup("trim");
+        let conn = db::test_conn();
         create(&conn, "  Work \n").unwrap();
         assert_eq!(names(&conn), ["Work"]);
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn empty_name_is_rejected() {
-        let (dir, conn) = setup("empty");
+        let conn = db::test_conn();
         assert!(matches!(create(&conn, ""), Err(ListError::EmptyName)));
         assert!(matches!(create(&conn, " \t\n"), Err(ListError::EmptyName)));
         assert!(names(&conn).is_empty());
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn duplicate_name_is_rejected_ignoring_case_and_spaces() {
-        let (dir, conn) = setup("dup");
+        let conn = db::test_conn();
         create(&conn, "Work").unwrap();
         assert!(matches!(
             create(&conn, "work"),
@@ -139,24 +127,20 @@ mod tests {
             Err(ListError::DuplicateName)
         ));
         assert_eq!(names(&conn), ["Work"]);
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn all_is_alphabetical_ignoring_case() {
-        let (dir, conn) = setup("order");
+        let conn = db::test_conn();
         for n in ["beta", "Alpha", "gamma", "Delta"] {
             create(&conn, n).unwrap();
         }
         assert_eq!(names(&conn), ["Alpha", "beta", "Delta", "gamma"]);
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn delete_keeps_tasks_without_a_list() {
-        let (dir, conn) = setup("delete");
+        let conn = db::test_conn();
         let work = create(&conn, "Work").unwrap();
         let today = "2026-06-15".parse().unwrap();
         let t = tasks::create(&conn, "a", tasks::View::List(work), today).unwrap();
@@ -167,18 +151,14 @@ mod tests {
         assert_eq!(l.len(), 1);
         assert_eq!(l[0].id, t);
         assert!(l[0].list.is_none());
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 
     #[test]
     fn delete_unknown_is_not_found() {
-        let (dir, conn) = setup("missing");
+        let conn = db::test_conn();
         assert!(matches!(
             delete(&conn, ListId(42)),
             Err(ListError::NotFound)
         ));
-        drop(conn);
-        let _ = std::fs::remove_dir_all(&dir);
     }
 }

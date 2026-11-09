@@ -7,11 +7,13 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::time::Duration;
 
+use open_productivity_core::calendar;
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
 use open_productivity_core::habits::{self, DayState as CoreState, HabitError, HabitId, Heat};
 use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
 
+use crate::dates::{core_date, ui_date};
 use crate::tasks::ui_id;
 use crate::{
     AppWindow, ArchivedRow, Date, DayHabit, DayState, HabitRow, HeatCell, HeatLevel, Strings,
@@ -77,11 +79,7 @@ impl State {
                     best: h.stats.best as i32,
                     month_pct: h.stats.month_pct as i32,
                     weekdays: ModelRc::new(VecModel::from(h.weekdays.to_vec())),
-                    start: Date {
-                        year: h.start.year(),
-                        month: h.start.month() as i32,
-                        day: h.start.day() as i32,
-                    },
+                    start: ui_date(h.start),
                     weeks: blocks(h.days.into_iter().map(day_state).collect()),
                 })
             })
@@ -97,11 +95,7 @@ impl State {
             .collect();
         if let Some(w) = self.window.upgrade() {
             w.set_habit_week_totals(ModelRc::new(VecModel::from(totals)));
-            w.set_habits_month(Date {
-                year: m.first.year(),
-                month: m.first.month() as i32,
-                day: 1,
-            });
+            w.set_habits_month(ui_date(m.first));
             let t = m.month_total;
             w.set_habit_month_total(WeekTotal {
                 done: t.done as i32,
@@ -161,11 +155,9 @@ impl State {
             return s.invoke_habit_failed("weekdays".into());
         };
         // A date the picker cannot produce is an error, never "start today".
-        let Some(start) = NaiveDate::from_ymd_opt(start.year, start.month as u32, start.day as u32)
-        else {
-            return s.invoke_habit_failed(
-                format!("{}-{}-{}", start.year, start.month, start.day).into(),
-            );
+        let start = match core_date(start) {
+            Ok(d) => d,
+            Err(e) => return s.invoke_habit_failed(e.into()),
         };
         match op(&self.conn, flags, start, Local::now().date_naive()) {
             Err(HabitError::EmptyName) => s.get_habit_empty_name(),
@@ -223,7 +215,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         conn,
         rows: Rc::default(),
         day: Cell::new(Local::now().date_naive()),
-        shown: Cell::new(habits::month_start(Local::now().date_naive())),
+        shown: Cell::new(calendar::month_start(Local::now().date_naive())),
         window: window.as_weak(),
     });
     window.set_habits(ModelRc::from(state.rows.clone()));
@@ -292,7 +284,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         move |months| {
             let today = Local::now().date_naive();
             let target = if months == 0 {
-                Ok(habits::month_start(today))
+                Ok(calendar::month_start(today))
             } else {
                 habits::shift_month(state.shown.get(), months, today)
             };

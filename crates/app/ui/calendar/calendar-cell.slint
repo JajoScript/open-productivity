@@ -1,0 +1,153 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+import { CalendarTask, TaskChip } from "task-chip.slint";
+import { HabitLine } from "habit-row.slint";
+
+// One cell of the month grid: the day and the tasks due on it.
+export struct CalendarDay {
+    date: Date,
+    day: int,
+    // False for the filler days of the neighbouring months.
+    in-month: bool,
+    today: bool,
+    tasks: [CalendarTask],
+    // The habits that apply that day and those done; one summary row after the tasks.
+    habits-done: int,
+    habits-total: int,
+}
+
+export component CalendarCell inherits Rectangle {
+    in property <CalendarDay> cell;
+    callback chosen;
+    pure callback payload(int) -> data-transfer;
+    // A drag is over the cell: returns whether it is one of our tasks.
+    callback drag-over(Point, Point, data-transfer) -> bool;
+    callback dropped(data-transfer);
+    callback chip-dragging(bool, CalendarTask, Point, length, Point);
+
+    property <length> row-h: 20px;
+    // Rows that fit under the day number. The habit summary keeps its row unless a single row is
+    // left and there are tasks; when the tasks do not fit, the last of theirs is "+N".
+    property <int> fit: max(1, Math.floor((root.height - 38px) / root.row-h));
+    property <bool> summary: root.cell.habits-total > 0 && (root.fit > 1 || root.cell.tasks.length == 0);
+    property <int> room: root.summary ? root.fit - 1 : root.fit;
+    property <bool> overflow: root.cell.tasks.length > root.room;
+    property <int> shown: root.overflow ? root.room - 1 : root.cell.tasks.length;
+
+    // Equal cells whatever their content.
+    preferred-width: 0px;
+    preferred-height: 0px;
+    horizontal-stretch: 1;
+    vertical-stretch: 1;
+    clip: true;
+    border-radius: 6px;
+    background: drop.has-drag ? Theme.selected : touch.has-hover ? Theme.hover : root.cell.today ? Theme.field : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    border-width: 1px;
+    border-color: Theme.hairline;
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: @tr("New task on {0}", Strings.date(root.cell.date.day, root.cell.date.month, root.cell.date.year));
+    accessible-action-default => {
+        root.chosen();
+    }
+
+    drop := DropArea {
+        // Only our own task chips; text dragged from other apps is refused.
+        can-drop(event) => {
+            root.drag-over(self.absolute-position, event.position, event.data) ? DragAction.move : DragAction.none
+        }
+        dropped(event) => {
+            root.dropped(event.data);
+            return event.proposed-action;
+        }
+
+        // Placed by hand, not in a layout: the rows that fit depend on the cell's height, and a
+        // layout would feed its own content size back into it.
+        Rectangle {
+            x: 6px;
+            y: 6px;
+            width: max(24px, number.preferred-width + 8px);
+            height: 24px;
+            border-radius: 5px;
+            background: root.cell.today ? Theme.ink : transparent;
+            number := Text {
+                text: root.cell.day;
+                font-size: 12px;
+                font-weight: root.cell.today ? 700 : 400;
+                color: root.cell.today ? Theme.on-ink : root.cell.in-month ? Palette.foreground : Theme.muted;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+            }
+        }
+
+        // The cell's own click sits under the chips, so it comes before them.
+        touch := TouchArea {
+            clicked => {
+                root.chosen();
+            }
+        }
+
+        for t[i] in root.cell.tasks: TaskChip {
+            visible: i < root.shown;
+            x: 6px;
+            y: 32px + i * root.row-h;
+            width: parent.width - 12px;
+            height: root.row-h;
+            task: t;
+            payload: root.payload(t.id);
+            ink: root.cell.in-month ? Palette.foreground : Theme.muted;
+            changed dragging => {
+                root.chip-dragging(self.dragging, t, self.absolute-position, self.width, { x: self.grab-x, y: self.grab-y });
+            }
+            clicked => {
+                root.chosen();
+            }
+        }
+
+        if root.summary: HabitLine {
+            x: 6px;
+            y: 32px + (root.shown + (root.overflow ? 1 : 0)) * root.row-h;
+            width: parent.width - 12px;
+            height: root.row-h;
+            habit: {
+                name: Strings.habits-day(root.cell.habits-done, root.cell.habits-total),
+                done: root.cell.habits-done == root.cell.habits-total,
+            };
+            ink: root.cell.in-month ? Palette.foreground : Theme.muted;
+        }
+
+        if root.overflow: Text {
+            x: 6px;
+            y: 32px + root.shown * root.row-h;
+            width: parent.width - 12px;
+            height: root.row-h;
+            text: Strings.more-tasks(root.cell.tasks.length - root.shown);
+            font-size: 12px;
+            color: Theme.muted;
+            overflow: elide;
+            vertical-alignment: center;
+        }
+
+        focus := FocusScope {
+            width: 0px; // keyboard only; clicks go to the TouchArea
+            key-pressed(event) => {
+                if event.text == Key.Space || event.text == Key.Return {
+                    root.chosen();
+                    return accept;
+                }
+                reject
+            }
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: 6px;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
