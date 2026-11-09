@@ -3,6 +3,7 @@
 
 import { Date, ListView, Palette } from "std-widgets.slint";
 import { Strings } from "../strings.slint";
+import { InkCheck } from "../ink-check.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { DragBoard } from "../tasks/drag-board.slint";
@@ -14,6 +15,14 @@ import { WeekBlock, WeekColumn, WeekGrid } from "week-grid.slint";
 export { CalendarHabit, CalendarTask, WeekBlock, WeekColumn }
 
 export enum CalendarMode { month, week }
+
+export enum CalendarSource { tasks, habits }
+
+// One checkbox of the "Calendars" section.
+export struct CalendarEntry {
+    source: CalendarSource,
+    shown: bool,
+}
 
 // One cell of the month grid: the day and the tasks due on it.
 export struct CalendarDay {
@@ -216,6 +225,10 @@ export component CalendarView inherits DragBoard {
     // The week view: seven days, and the minutes since midnight of the current time.
     in property <[WeekColumn]> week;
     in property <int> now;
+    // The checkboxes of the side panel, and whether its task lists show.
+    in property <[CalendarEntry]> sources;
+    in property <bool> show-backlog: true;
+    callback set-source(CalendarSource, bool);
     // -1 / +1 moves a month (or a week); 0 goes back to the current one.
     callback shift(int);
     callback set-mode(CalendarMode);
@@ -230,6 +243,10 @@ export component CalendarView inherits DragBoard {
 
     // A narrow window gives the whole width to the grid.
     property <bool> show-panel: root.width >= 800px;
+
+    pure function source-name(s: CalendarSource) -> string {
+        return s == CalendarSource.tasks ? @tr("Tasks") : @tr("Habits");
+    }
 
     HorizontalLayout {
         padding: 24px;
@@ -382,7 +399,44 @@ export component CalendarView inherits DragBoard {
                 border-radius: 6px;
                 background: Theme.field;
                 VerticalLayout {
-                    PanelSection {
+                    VerticalLayout {
+                        padding: 8px;
+                        vertical-stretch: 0;
+                        Text {
+                            x: 4px;
+                            height: 28px;
+                            text: @tr("Calendars");
+                            font-weight: 600;
+                            vertical-alignment: center;
+                            overflow: elide;
+                        }
+
+                        for s in root.sources: HorizontalLayout {
+                            height: 32px;
+                            InkCheck {
+                                checked: s.shown;
+                                label: root.source-name(s.source);
+                                toggled(shown) => {
+                                    root.set-source(s.source, shown);
+                                }
+                            }
+
+                            Text {
+                                text: root.source-name(s.source);
+                                vertical-alignment: center;
+                                overflow: elide;
+                                accessible-role: none;
+                                // The name toggles too, as in any checkbox.
+                                TouchArea {
+                                    clicked => {
+                                        root.set-source(s.source, !s.shown);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    if root.show-backlog: PanelSection {
                         title: @tr("smart list" => "Overdue");
                         tasks: root.overdue;
                         payload(id) => {
@@ -393,7 +447,7 @@ export component CalendarView inherits DragBoard {
                         }
                     }
 
-                    PanelSection {
+                    if root.show-backlog: PanelSection {
                         title: @tr("No date");
                         tasks: root.undated;
                         payload(id) => {
@@ -402,6 +456,11 @@ export component CalendarView inherits DragBoard {
                         chip-dragging(dragging, t, at, width, grab) => {
                             root.card-dragging(dragging, { id: t.id, title: t.title }, at, width, grab);
                         }
+                    }
+
+                    // Keeps the checkboxes at the top when the lists are gone.
+                    if !root.show-backlog: Rectangle {
+                        vertical-stretch: 1;
                     }
                 }
             }

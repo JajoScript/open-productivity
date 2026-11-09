@@ -458,6 +458,9 @@ msgstr "HÁBITOS · {}/{}"
 msgid "Habits {}/{}"
 msgstr "Hábitos {}/{}"
 
+msgid "Calendars"
+msgstr "Calendarios"
+
 msgid "Streak {} · Best {}"
 msgstr "Racha {} · Mejor {}"
 

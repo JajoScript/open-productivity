@@ -50,6 +50,40 @@ pub enum ColorMode {
 pub struct Settings {
     pub language: Language,
     pub color_mode: ColorMode,
+    /// Ids of the unchecked calendar sources. Text, so an id from a newer version does not make
+    /// the whole file unreadable and survives each save.
+    pub hidden_calendars: Vec<String>,
+}
+
+/// What the Calendar can show; each source has its own checkbox.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CalendarSource {
+    Tasks,
+    Habits,
+}
+
+impl CalendarSource {
+    pub const ALL: [CalendarSource; 2] = [CalendarSource::Tasks, CalendarSource::Habits];
+
+    fn id(self) -> &'static str {
+        match self {
+            CalendarSource::Tasks => "tasks",
+            CalendarSource::Habits => "habits",
+        }
+    }
+}
+
+impl Settings {
+    pub fn shows(&self, source: CalendarSource) -> bool {
+        !self.hidden_calendars.iter().any(|h| h == source.id())
+    }
+
+    pub fn set_shown(&mut self, source: CalendarSource, shown: bool) {
+        self.hidden_calendars.retain(|h| h != source.id());
+        if !shown {
+            self.hidden_calendars.push(source.id().to_string());
+        }
+    }
 }
 
 /// Reads the settings. A missing, unreadable or corrupt file gives the defaults and is
@@ -179,6 +213,7 @@ mod tests {
         let s = Settings {
             language: Language::English,
             color_mode: ColorMode::Dark,
+            ..Default::default()
         };
         save(&path, &s).unwrap();
         let mut s = load(&path);
@@ -189,6 +224,26 @@ mod tests {
         s.language = Language::Spanish;
         save(&path, &s).unwrap();
         assert_eq!(load(&path).color_mode, ColorMode::Light);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn calendar_sources_are_shown_until_unchecked_and_remembered() {
+        let dir = setup("sources");
+        let path = dir.join("settings.json");
+        std::fs::write(&path, r#"{"hidden_calendars":["future"]}"#).unwrap();
+        let mut s = load(&path);
+        assert!(CalendarSource::ALL.iter().all(|c| s.shows(*c)));
+        s.set_shown(CalendarSource::Habits, false);
+        s.set_shown(CalendarSource::Habits, false);
+        save(&path, &s).unwrap();
+        let mut s = load(&path);
+        assert!(!s.shows(CalendarSource::Habits));
+        assert!(s.shows(CalendarSource::Tasks));
+        s.set_shown(CalendarSource::Habits, true);
+        assert!(s.shows(CalendarSource::Habits));
+        // An id this version does not know is kept.
+        assert_eq!(s.hidden_calendars, ["future"]);
         let _ = std::fs::remove_dir_all(&dir);
     }
 

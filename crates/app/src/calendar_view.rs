@@ -4,6 +4,7 @@
 //! Glue between the Calendar view and `core::agenda`.
 
 use std::cell::Cell;
+use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
 
@@ -12,14 +13,29 @@ use open_productivity_core::calendar;
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
 use open_productivity_core::habits::DayHabit;
+use open_productivity_core::settings::{self, CalendarSource as CoreSource, Settings};
 use open_productivity_core::tasks::{self, Task, TaskError, TaskId};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::tasks::{State, ui_id};
 use crate::{
-    AppWindow, CalendarDay, CalendarHabit, CalendarMode, CalendarTask, Date, Strings, WeekBlock,
-    WeekColumn,
+    AppWindow, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource,
+    CalendarTask, Date, Strings, WeekBlock, WeekColumn,
 };
+
+fn source_to_ui(s: CoreSource) -> CalendarSource {
+    match s {
+        CoreSource::Tasks => CalendarSource::Tasks,
+        CoreSource::Habits => CalendarSource::Habits,
+    }
+}
+
+fn source_from_ui(s: CalendarSource) -> CoreSource {
+    match s {
+        CalendarSource::Tasks => CoreSource::Tasks,
+        CalendarSource::Habits => CoreSource::Habits,
+    }
+}
 
 fn row(t: &Task) -> Result<CalendarTask, String> {
     Ok(CalendarTask {
@@ -94,14 +110,17 @@ fn load(
     conn: &Connection,
     anchor: NaiveDate,
     mode: CalendarMode,
+    shown: &Settings,
 ) -> Result<(), String> {
     let today = Local::now().date_naive();
     let backlog = agenda::backlog(conn, today).map_err(|e| e.to_string())?;
     if mode == CalendarMode::Week {
-        let days = agenda::week(conn, anchor, today).map_err(|e| e.to_string())?;
+        let mut days = agenda::week(conn, anchor, today).map_err(|e| e.to_string())?;
+        agenda::filter_week(&mut days, shown);
         w.set_calendar_week(week_columns(days)?);
     } else {
-        let weeks = agenda::month(conn, first_of(anchor), today).map_err(|e| e.to_string())?;
+        let mut weeks = agenda::month(conn, first_of(anchor), today).map_err(|e| e.to_string())?;
+        agenda::filter_month(&mut weeks, shown);
         let weeks = weeks
             .into_iter()
             .map(|week| {
@@ -132,21 +151,32 @@ fn load(
     w.set_calendar_now(now_minutes());
     w.set_calendar_overdue(rows(backlog.overdue)?);
     w.set_calendar_undated(rows(backlog.undated)?);
+    w.set_calendar_show_backlog(shown.shows(CoreSource::Tasks));
+    let sources: Vec<_> = CoreSource::ALL
+        .iter()
+        .map(|&s| CalendarEntry {
+            source: source_to_ui(s),
+            shown: shown.shows(s),
+        })
+        .collect();
+    w.set_calendar_sources(ModelRc::new(VecModel::from(sources)));
     Ok(())
 }
 
 /// Registers the navigation and makes every reload of the tasks refresh the calendar too. The
 /// returned timer moves the line of the current time and must be kept alive.
-pub fn init(window: &AppWindow, state: &Rc<State>) -> Timer {
+pub fn init(window: &AppWindow, state: &Rc<State>, app_dir: &Path) -> Timer {
+    let settings_path = app_dir.join("settings.json");
     // The month shown is the one holding `anchor`; the week shown, the one holding it too.
     let anchor = Rc::new(Cell::new(Local::now().date_naive()));
     let mode = Rc::new(Cell::new(CalendarMode::Month));
     let reload = Rc::new({
         let (conn, weak) = (state.conn.clone(), window.as_weak());
-        let (anchor, mode) = (anchor.clone(), mode.clone());
+        let (anchor, mode, path) = (anchor.clone(), mode.clone(), settings_path.clone());
         move || {
             let Some(w) = weak.upgrade() else { return };
-            let msg = match load(&w, &conn, anchor.get(), mode.get()) {
+            let shown = settings::load(&path);
+            let msg = match load(&w, &conn, anchor.get(), mode.get(), &shown) {
                 Ok(()) => String::new(),
                 Err(e) => w
                     .global::<Strings>()
@@ -166,6 +196,23 @@ pub fn init(window: &AppWindow, state: &Rc<State>) -> Timer {
     window.on_refresh_calendar({
         let reload = reload.clone();
         move || reload()
+    });
+
+    window.on_calendar_set_source({
+        let (weak, reload) = (window.as_weak(), reload.clone());
+        move |source, shown| {
+            let mut current = settings::load(&settings_path);
+            current.set_shown(source_from_ui(source), shown);
+            let saved = settings::save(&settings_path, &current);
+            reload();
+            // After the reload, which clears the error line.
+            if let (Err(e), Some(w)) = (saved, weak.upgrade()) {
+                let msg = w
+                    .global::<Strings>()
+                    .invoke_settings_failed(e.to_string().into());
+                w.set_calendar_error(msg);
+            }
+        }
     });
 
     window.on_create_task_on({

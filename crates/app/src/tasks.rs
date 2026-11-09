@@ -173,7 +173,7 @@ impl State {
 }
 
 /// The returned timer must be kept alive for the periodic reload to run.
-pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
+pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &std::path::Path) -> Timer {
     let state = Rc::new(State {
         conn,
         rows: Rc::default(),
@@ -208,7 +208,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         }
     });
 
-    let calendar_timer = calendar_view::init(window, &state);
+    let calendar_timer = calendar_view::init(window, &state, app_dir);
     finish(state.reload());
 
     window.on_select_view({

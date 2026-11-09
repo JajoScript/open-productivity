@@ -8,6 +8,7 @@ use rusqlite::Connection;
 
 use crate::calendar;
 use crate::habits::{self, DayHabit};
+use crate::settings::{CalendarSource, Settings};
 use crate::tasks::{SELECT_TASKS, Task, TaskError, TaskId, View, query};
 
 /// One cell of the month grid.
@@ -72,6 +73,31 @@ pub fn month(
         weeks.push(days.drain(..7).collect());
     }
     Ok(weeks)
+}
+
+/// Empties from a month what the unchecked calendar sources would show.
+pub fn filter_month(weeks: &mut [Vec<Day>], settings: &Settings) {
+    for day in weeks.iter_mut().flatten() {
+        if !settings.shows(CalendarSource::Tasks) {
+            day.tasks.clear();
+        }
+        if !settings.shows(CalendarSource::Habits) {
+            day.habits.clear();
+        }
+    }
+}
+
+/// Empties from a week what the unchecked calendar sources would show.
+pub fn filter_week(days: &mut [WeekDay], settings: &Settings) {
+    for day in days {
+        if !settings.shows(CalendarSource::Tasks) {
+            day.untimed.clear();
+            day.blocks.clear();
+        }
+        if !settings.shows(CalendarSource::Habits) {
+            day.habits.clear();
+        }
+    }
 }
 
 fn habit_err(e: habits::HabitError) -> TaskError {
@@ -364,6 +390,37 @@ mod tests {
         assert!(!all[day(&w, "2026-12-01")].in_month);
         assert!(all[day(&w, "2026-11-08")].today);
         assert_eq!(all.iter().filter(|x| x.today).count(), 1);
+        drop(conn);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn unchecked_sources_are_filtered_out_one_by_one() {
+        let (dir, conn) = setup("filter");
+        let today = d("2026-11-09");
+        add(&conn, "t", Some("2026-11-09"));
+        habits::create(&conn, "Read", [true; 7], today, today).unwrap();
+        let counts = |s: &Settings| {
+            let mut m = month(&conn, d("2026-11-01"), today).unwrap();
+            filter_month(&mut m, s);
+            let mut w = week(&conn, today, today).unwrap();
+            filter_week(&mut w, s);
+            let i = day(&m, "2026-11-09");
+            let cell = m.iter().flatten().nth(i).unwrap();
+            (
+                cell.tasks.len(),
+                cell.habits.len(),
+                w[0].untimed.len(),
+                w[0].habits.len(),
+            )
+        };
+        let mut s = Settings::default();
+        assert_eq!(counts(&s), (1, 1, 1, 1));
+        s.set_shown(CalendarSource::Tasks, false);
+        assert_eq!(counts(&s), (0, 1, 0, 1));
+        s.set_shown(CalendarSource::Tasks, true);
+        s.set_shown(CalendarSource::Habits, false);
+        assert_eq!(counts(&s), (1, 0, 1, 0));
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
     }

@@ -153,7 +153,7 @@ fn main() {
     instances_ui::init(&window, &app_dir, &instance, &switching);
     // Shared by the modules; the window's callbacks hold the only references.
     let conn = Rc::new(conn);
-    let tasks_timer = tasks::init(&window, conn.clone());
+    let tasks_timer = tasks::init(&window, conn.clone(), &app_dir);
     let habits_timer = habits::init(&window, conn.clone());
     data::init(&window, conn);
 
@@ -306,7 +306,7 @@ mod tests {
         let conn = db::open(&dir.join("test.db")).unwrap();
         core_tasks::create(&conn, title, View::All, Local::now().date_naive()).unwrap();
         let w = window();
-        let timer = tasks::init(&w, Rc::new(conn));
+        let timer = tasks::init(&w, Rc::new(conn), &dir);
         (dir, w, timer)
     }
 
