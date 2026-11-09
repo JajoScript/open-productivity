@@ -3194,7 +3194,7 @@ dependencies = [
 
 [[package]]
 name = "open-productivity-app"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "dirs",
  "i-slint-backend-testing",
@@ -3208,7 +3208,7 @@ dependencies = [
 
 [[package]]
 name = "open-productivity-core"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "chrono",
  "rusqlite",
