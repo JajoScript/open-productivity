@@ -81,6 +81,9 @@ const MIGRATIONS: &[&str] = &[
 pub fn open(path: &Path) -> Result<Connection, DbError> {
     let mut conn = Connection::open(path)?;
     conn.pragma_update(None, "foreign_keys", "ON")?;
+    // An instance is any folder the user picks, so its file may come from someone else: its
+    // views, triggers and defaults may only call SQLite's own harmless functions.
+    conn.pragma_update(None, "trusted_schema", "OFF")?;
     conn.pragma_update_and_check(None, "journal_mode", "WAL", |_| Ok(()))?;
     conn.busy_timeout(Duration::from_secs(5))?;
     migrate(&mut conn, MIGRATIONS)?;
@@ -236,6 +239,10 @@ mod tests {
             .pragma_query_value(None, "foreign_keys", |r| r.get(0))
             .unwrap();
         assert_eq!(fk, 1);
+        let trusted: i64 = conn
+            .pragma_query_value(None, "trusted_schema", |r| r.get(0))
+            .unwrap();
+        assert_eq!(trusted, 0);
         assert_eq!(backups(&dir), 0);
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);

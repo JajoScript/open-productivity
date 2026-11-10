@@ -3,6 +3,8 @@
 
 //! Domain logic and storage, independent of the UI.
 
+#![forbid(unsafe_code)]
+
 pub use chrono;
 pub mod agenda;
 pub mod calendar;
