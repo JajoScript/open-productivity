@@ -9,8 +9,8 @@ use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
-use std::time::{SystemTime, UNIX_EPOCH};
 
+use open_productivity_core::chrono::Local;
 use open_productivity_core::db::{self, DbError};
 use open_productivity_core::instances::{self, Error};
 use rfd::{FileDialog, MessageButtons, MessageDialog, MessageLevel};
@@ -36,17 +36,14 @@ slint::include_modules!();
 const TITLE: &str = "Open Productivity";
 
 fn log(app_dir: &Path, level: &str, msg: &str) {
-    // shortcut: unix timestamps, switch to readable dates once chrono is a dependency
-    let secs = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs());
+    let now = Local::now().format("%Y-%m-%d %H:%M:%S");
     // A failing log must not hide the dialog, so write errors are ignored.
     if let Ok(mut f) = OpenOptions::new()
         .create(true)
         .append(true)
         .open(app_dir.join("open-productivity.log"))
     {
-        let _ = writeln!(f, "{secs} {level} {msg}");
+        let _ = writeln!(f, "{now} {level} {msg}");
     }
 }
 
@@ -113,6 +110,12 @@ fn main() {
     let app_dir = dirs::config_dir()
         .unwrap_or_else(|| PathBuf::from("."))
         .join("open-productivity");
+    // A release build has no console: without this a panic would leave no trace at all.
+    let (log_dir, default_hook) = (app_dir.clone(), std::panic::take_hook());
+    std::panic::set_hook(Box::new(move |info| {
+        log(&log_dir, "PANIC", &info.to_string());
+        default_hook(info);
+    }));
     // The strings live in the window, so a failure here has nothing to translate with yet.
     let window = match AppWindow::new() {
         Ok(w) => w,
