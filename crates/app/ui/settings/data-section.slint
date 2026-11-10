@@ -40,7 +40,7 @@ export component DataSection inherits VerticalLayout {
     }
 
     VerticalLayout {
-        spacing: 2px;
+        spacing: 8px;
         accessible-role: list;
         accessible-label: @tr("Instances");
         for row in root.instances: HorizontalLayout {
@@ -99,6 +99,7 @@ export component DataSection inherits VerticalLayout {
         SubtleButton {
             text: @tr("New instance…");
             color: Palette.foreground;
+            outlined: true;
             clicked => {
                 root.new-instance();
             }
@@ -107,6 +108,7 @@ export component DataSection inherits VerticalLayout {
         SubtleButton {
             text: @tr("Open folder…");
             color: Palette.foreground;
+            outlined: true;
             clicked => {
                 root.open-folder();
             }
@@ -135,6 +137,7 @@ export component DataSection inherits VerticalLayout {
         SubtleButton {
             text: @tr("Export a copy…");
             color: Palette.foreground;
+            outlined: true;
             clicked => {
                 root.export-copy();
             }

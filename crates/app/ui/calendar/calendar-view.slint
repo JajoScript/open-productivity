@@ -34,6 +34,8 @@ component PanelSection inherits VerticalLayout {
 
     spacing: 4px;
     padding: 8px;
+    // An empty section keeps only its title, so the other one gets the room.
+    vertical-stretch: root.tasks.length > 0 ? 1 : 0;
 
     HorizontalLayout {
         padding-left: 4px;
@@ -54,7 +56,7 @@ component PanelSection inherits VerticalLayout {
         }
     }
 
-    ListView {
+    if root.tasks.length > 0: ListView {
         for t in root.tasks: TaskChip {
             height: 28px;
             task: t;
@@ -324,8 +326,8 @@ export component CalendarView inherits DragBoard {
                         }
                     }
 
-                    // Keeps the checkboxes at the top when the lists are gone.
-                    if !root.show-backlog: Rectangle {
+                    // Keeps everything at the top when the lists are gone or both are empty.
+                    if !root.show-backlog || (root.overdue.length == 0 && root.undated.length == 0): Rectangle {
                         vertical-stretch: 1;
                     }
                 }
