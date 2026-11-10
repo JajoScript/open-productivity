@@ -46,11 +46,10 @@ pub fn init(
     window.on_week_shift({
         let (state, finish) = (state.clone(), finish.clone());
         move |weeks| {
-            let monday = if weeks == 0 {
-                Some(calendar::week_start(Local::now().date_naive()))
-            } else {
-                calendar::shift(state.monday.get(), i64::from(weeks) * 7)
-            };
+            let today = Local::now().date_naive();
+            let from = state.monday.get();
+            let monday = calendar::navigate(from, calendar::Period::Week, weeks, today)
+                .map(calendar::week_start);
             match monday {
                 Some(m) => {
                     state.monday.set(m);

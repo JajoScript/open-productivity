@@ -273,13 +273,16 @@ pub fn archived(conn: &Connection) -> Result<Vec<(HabitId, String)>, HabitError>
     Ok(rows.collect::<Result<_, _>>()?)
 }
 
-/// The month `delta` months from the one holding `shown`, as its first day. Never past the
-/// month of `today`.
+/// The month `delta` months from the one holding `shown`, as its first day; 0 goes back to the
+/// month of `today`. Never past the month of `today`.
 pub fn shift_month(
     shown: NaiveDate,
     delta: i32,
     today: NaiveDate,
 ) -> Result<NaiveDate, HabitError> {
+    if delta == 0 {
+        return Ok(calendar::month_start(today));
+    }
     let first = calendar::month_start(shown);
     let step = Months::new(delta.unsigned_abs());
     let target = if delta >= 0 {

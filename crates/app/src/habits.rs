@@ -283,12 +283,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Timer {
         let state = state.clone();
         move |months| {
             let today = Local::now().date_naive();
-            let target = if months == 0 {
-                Ok(calendar::month_start(today))
-            } else {
-                habits::shift_month(state.shown.get(), months, today)
-            };
-            match target {
+            match habits::shift_month(state.shown.get(), months, today) {
                 Ok(first) => {
                     state.shown.set(first);
                     state.after(Ok(()));

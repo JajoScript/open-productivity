@@ -314,6 +314,10 @@ fn month_reports_today_and_whether_next_is_allowed() {
 fn shift_month_crosses_years_and_stops_at_the_current_month() {
     let today = day("2026-11-07");
     assert_eq!(
+        shift_month(day("2025-03-10"), 0, today).unwrap(),
+        calendar::month_start(today)
+    );
+    assert_eq!(
         shift_month(day("2026-11-01"), -1, today).unwrap(),
         day("2026-10-01")
     );
