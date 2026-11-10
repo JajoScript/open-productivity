@@ -11,6 +11,7 @@ export component SubtleButton {
     in property <brush> color: Theme.muted;
     // A thin outline, for a button that sits among tabs or plain text and must read as a button.
     in property <bool> outlined;
+    in property <bool> enabled: true;
     // Required when there is no text, so screen readers can name the button.
     in property <string> label: root.text;
     out property <bool> focused: focus.has-focus;
@@ -19,9 +20,11 @@ export component SubtleButton {
     min-width: 28px;
     min-height: 28px;
     horizontal-stretch: 0;
+    opacity: root.enabled ? 1 : 0.4;
     forward-focus: focus;
     accessible-role: button;
     accessible-label: root.label;
+    accessible-enabled: root.enabled;
     accessible-action-default => {
         root.clicked();
     }
@@ -62,12 +65,14 @@ export component SubtleButton {
     }
 
     touch := TouchArea {
+        enabled: root.enabled;
         clicked => {
             root.clicked();
         }
     }
 
     focus := FocusScope {
+        enabled: root.enabled;
         width: 0px; // keyboard only; clicks go to the TouchArea
         key-pressed(event) => {
             if event.text == Key.Space || event.text == Key.Return {
