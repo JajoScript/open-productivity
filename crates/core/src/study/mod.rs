@@ -72,6 +72,15 @@ impl fmt::Display for StudyError {
     }
 }
 
+impl std::error::Error for StudyError {
+    fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
+        match self {
+            StudyError::Sqlite(e) => Some(e),
+            _ => None,
+        }
+    }
+}
+
 impl From<rusqlite::Error> for StudyError {
     fn from(e: rusqlite::Error) -> Self {
         StudyError::Sqlite(e)
