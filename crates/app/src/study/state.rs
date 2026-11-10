@@ -5,19 +5,21 @@
 
 use std::rc::Rc;
 
+use open_productivity_core::chrono::Local;
 use open_productivity_core::db::Connection;
 use open_productivity_core::study::{self, StudyError, Subject, SubjectFilter, SubjectId};
 use slint::{ComponentHandle, SharedString, VecModel};
 
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
-use crate::{AppWindow, SessionRow, Strings, SubjectRow, SubjectTab};
+use crate::{AppWindow, SessionRow, Strings, SubjectRow, SubjectTab, TopicRow};
 
 pub struct State {
     pub conn: Rc<Connection>,
     pub rows: Rc<VecModel<SubjectRow>>,
     pub active: Rc<VecModel<SubjectRow>>,
     pub sessions: Rc<VecModel<SessionRow>>,
+    pub topics: Rc<VecModel<TopicRow>>,
     pub window: slint::Weak<AppWindow>,
 }
 
@@ -28,6 +30,17 @@ fn subject_row(s: Subject) -> Result<SubjectRow, String> {
         duration: study::format_duration(s.total_minutes).into(),
         sessions: ui_id(s.sessions)?,
         archived: s.archived,
+    })
+}
+
+fn topic_row(t: study::Topic) -> Result<TopicRow, String> {
+    Ok(TopicRow {
+        id: ui_id(t.id.0)?,
+        title: t.title.into(),
+        subject: t.subject_name.into(),
+        has_due: t.due.is_some(),
+        due: t.due.map(ui_date).unwrap_or_default(),
+        done: t.done,
     })
 }
 
@@ -73,6 +86,13 @@ impl State {
             .set_vec(self.subject_rows(filter(w.get_subject_tab()))?);
         self.active
             .set_vec(self.subject_rows(SubjectFilter::Active)?);
+        self.topics.set_vec(
+            study::list_topics(&self.conn, Local::now().fixed_offset())
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .map(topic_row)
+                .collect::<Result<Vec<_>, _>>()?,
+        );
         w.set_any_subject(!self.subject_rows(SubjectFilter::All)?.is_empty());
         // The open subject stays open even if it left the current tab.
         if w.get_subject_open() {
@@ -97,6 +117,7 @@ impl State {
         let s = w.global::<Strings>();
         match e {
             StudyError::EmptyName => s.get_study_empty_name(),
+            StudyError::EmptyTitle => s.get_study_empty_title(),
             StudyError::BadMinutes => s.get_study_bad_minutes(),
             StudyError::FutureDate => s.get_study_future_date(),
             StudyError::SubjectNotFound => s.get_study_no_subject(),

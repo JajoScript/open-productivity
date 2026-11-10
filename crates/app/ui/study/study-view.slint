@@ -4,13 +4,14 @@
 import { Palette, ListView } from "std-widgets.slint";
 import { EmptyState } from "../empty-state.slint";
 import { InkButton } from "../ink-button.slint";
+import { InkCheck } from "../ink-check.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { SubjectDetail, SessionRow } from "subject-detail.slint";
 import { SubjectPreview } from "subject-preview.slint";
-import { SubjectRow, SubjectTab } from "subject-row.slint";
+import { SubjectRow, SubjectTab, TopicRow } from "subject-row.slint";
 
 component SubjectLine inherits Rectangle {
     in property <SubjectRow> subject;
@@ -88,6 +89,56 @@ component SubjectLine inherits Rectangle {
     }
 }
 
+component TopicLine inherits Rectangle {
+    in property <TopicRow> topic;
+    callback toggled(bool);
+
+    height: 36px;
+    border-radius: 6px;
+    background: touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+
+    // Wraps the controls, so the row keeps its hover while the pointer is over them.
+    touch := TouchArea {
+        HorizontalLayout {
+            padding-left: 4px;
+            padding-right: 8px;
+            spacing: 8px;
+            InkCheck {
+                checked: root.topic.done;
+                label: root.topic.title;
+                toggled(done) => {
+                    root.toggled(done);
+                }
+            }
+
+            Text {
+                text: root.topic.title;
+                color: root.topic.done ? Theme.done : Palette.foreground;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+                accessible-role: none;
+            }
+
+            Text {
+                text: root.topic.subject;
+                color: Theme.muted;
+                vertical-alignment: center;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            if root.topic.has-due: Text {
+                text: Strings.date(root.topic.due.day, root.topic.due.month, root.topic.due.year);
+                color: Theme.muted;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+        }
+    }
+}
+
 // Active / Archived / All; the owner reads `tab` when `changed` fires.
 component SubjectTabs inherits HorizontalLayout {
     in-out property <SubjectTab> tab;
@@ -160,13 +211,17 @@ export component StudyView inherits VerticalLayout {
     in property <bool> any-subject;
     // Whether there is an active subject to log a session on.
     in property <bool> can-log;
+    // Pending topics and those done today, of active subjects.
+    in property <[TopicRow]> topics;
     in property <SubjectRow> detail;
     in property <[SessionRow]> sessions;
     in property <string> error;
     in-out property <SubjectTab> tab;
     in-out property <bool> detail-open;
     callback new-subject();
+    callback new-topic();
     callback log-session();
+    callback set-topic-done(int, bool);
     callback tab-changed();
     callback open-subject(int);
     callback rename-subject();
@@ -196,6 +251,15 @@ export component StudyView inherits VerticalLayout {
             color: Palette.foreground;
             clicked => {
                 root.new-subject();
+            }
+        }
+
+        SubtleButton {
+            text: @tr("New topic");
+            color: Palette.foreground;
+            enabled: root.can-log;
+            clicked => {
+                root.new-topic();
             }
         }
 
@@ -263,10 +327,33 @@ export component StudyView inherits VerticalLayout {
     }
 
     if root.any-subject && !root.detail-open && root.subjects.length > 0: ListView {
+        vertical-stretch: 1;
         for subject in root.subjects: SubjectLine {
             subject: subject;
             opened => {
                 root.open-subject(subject.id);
+            }
+        }
+    }
+
+    if root.any-subject && !root.detail-open: Text {
+        text: @tr("Topics");
+        font-weight: 700;
+        color: Palette.foreground.with-alpha(0.7);
+    }
+
+    if root.any-subject && !root.detail-open && root.topics.length == 0: Text {
+        text: @tr("No topics yet. Add what you need to study on a subject with New topic.");
+        color: Theme.muted;
+        wrap: word-wrap;
+    }
+
+    if root.any-subject && !root.detail-open && root.topics.length > 0: ListView {
+        vertical-stretch: 1;
+        for topic in root.topics: TopicLine {
+            topic: topic;
+            toggled(done) => {
+                root.set-topic-done(topic.id, done);
             }
         }
     }

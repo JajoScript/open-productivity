@@ -10,6 +10,9 @@ use rusqlite::Connection;
 
 #[cfg(test)]
 mod tests;
+mod topics;
+
+pub use topics::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SubjectId(pub i64);
@@ -44,6 +47,7 @@ pub enum SubjectFilter {
 #[derive(Debug)]
 pub enum StudyError {
     EmptyName,
+    EmptyTitle,
     /// Minutes are not a positive whole number.
     BadMinutes,
     /// The session day is after today.
@@ -61,6 +65,7 @@ impl fmt::Display for StudyError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             StudyError::EmptyName => write!(f, "the name is empty"),
+            StudyError::EmptyTitle => write!(f, "the title is empty"),
             StudyError::BadMinutes => write!(f, "minutes must be a positive whole number"),
             StudyError::FutureDate => write!(f, "that day has not happened yet"),
             StudyError::SubjectNotFound => write!(f, "subject not found"),
@@ -223,14 +228,7 @@ pub fn log_manual_session(
         (subject.0, date.to_string(), minutes, description.trim()),
     )?;
     if rows == 0 {
-        let exists = conn.query_row("SELECT 1 FROM subject WHERE id = ?1", [subject.0], |_| {
-            Ok(())
-        });
-        return Err(match exists {
-            Ok(()) => StudyError::SubjectArchived,
-            Err(rusqlite::Error::QueryReturnedNoRows) => StudyError::SubjectNotFound,
-            Err(e) => e.into(),
-        });
+        return Err(missing_or_archived(conn, subject));
     }
     Ok(())
 }
@@ -241,5 +239,16 @@ pub fn format_duration(minutes: i64) -> String {
         (0, m) => format!("{m}m"),
         (h, 0) => format!("{h}h"),
         (h, m) => format!("{h}h {m}m"),
+    }
+}
+
+/// Why an insert on an active subject touched no row.
+fn missing_or_archived(conn: &Connection, subject: SubjectId) -> StudyError {
+    match conn.query_row("SELECT 1 FROM subject WHERE id = ?1", [subject.0], |_| {
+        Ok(())
+    }) {
+        Ok(()) => StudyError::SubjectArchived,
+        Err(rusqlite::Error::QueryReturnedNoRows) => StudyError::SubjectNotFound,
+        Err(e) => e.into(),
     }
 }

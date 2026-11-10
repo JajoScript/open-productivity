@@ -12,7 +12,7 @@ import { Theme } from "../theme.slint";
 import { SubjectRow } from "subject-row.slint";
 
 // One subject in the chooser: an ink wash when chosen, like a navigation entry.
-component SubjectChoice inherits Rectangle {
+export component SubjectChoice inherits Rectangle {
     in property <SubjectRow> subject;
     in property <bool> chosen;
     callback picked;

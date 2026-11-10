@@ -18,7 +18,7 @@ mod repeat;
 mod tests;
 
 pub use queries::*;
-pub(crate) use queries::{SELECT_TASKS, query};
+pub(crate) use queries::{SELECT_TASKS, local_midnight, query};
 use repeat::complete;
 pub use repeat::{parse_interval, set_recurrence};
 
@@ -124,7 +124,7 @@ pub enum View {
     Today,
     /// Due after today.
     Scheduled,
-    /// Without a list and without a due date.
+    /// Without a list, a due date or a subject (topics are not inbox).
     Inbox,
     /// Due before today.
     Overdue,
@@ -139,7 +139,9 @@ impl View {
         match self {
             View::Today => "t.due_date = p.today".into(),
             View::Scheduled => "t.due_date > p.today".into(),
-            View::Inbox => "t.list_id IS NULL AND t.due_date IS NULL".into(),
+            View::Inbox => {
+                "t.list_id IS NULL AND t.due_date IS NULL AND t.subject_id IS NULL".into()
+            }
             View::Overdue => "t.due_date < p.today".into(),
             View::All => "1".into(),
             // An integer, so formatting it into the SQL cannot inject anything.

@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::db;
+use chrono::{DateTime, FixedOffset, Utc};
 
 fn day(s: &str) -> NaiveDate {
     s.parse().unwrap()
@@ -198,4 +199,93 @@ fn get_subject_finds_archived_and_reports_missing() {
         get_subject(&conn, SubjectId(99)),
         Err(StudyError::SubjectNotFound)
     ));
+}
+
+fn at(s: &str) -> DateTime<FixedOffset> {
+    DateTime::parse_from_rfc3339(s).unwrap()
+}
+
+fn topic_titles(conn: &Connection, now: &str) -> Vec<String> {
+    list_topics(conn, at(now))
+        .unwrap()
+        .into_iter()
+        .map(|t| t.title)
+        .collect()
+}
+
+const NOW: &str = "2026-06-15T12:00:00+00:00";
+
+#[test]
+fn create_topic_trims_and_rejects_empty_title() {
+    let conn = db::test_conn();
+    let math = create_subject(&conn, "Math").unwrap();
+    create_topic(&conn, math, "  Limits  ", Some(day("2026-01-01"))).unwrap();
+    let t = &list_topics(&conn, at(NOW)).unwrap()[0];
+    assert_eq!(
+        (t.title.as_str(), t.subject, t.subject_name.as_str()),
+        ("Limits", math, "Math")
+    );
+    assert_eq!((t.due, t.done), (Some(day("2026-01-01")), false));
+    assert!(matches!(
+        create_topic(&conn, math, "   ", None),
+        Err(StudyError::EmptyTitle)
+    ));
+    assert_eq!(topic_titles(&conn, NOW), ["Limits"]);
+}
+
+#[test]
+fn create_topic_needs_an_active_subject() {
+    let conn = db::test_conn();
+    let math = create_subject(&conn, "Math").unwrap();
+    set_subject_archived(&conn, math, true).unwrap();
+    assert!(matches!(
+        create_topic(&conn, math, "x", None),
+        Err(StudyError::SubjectArchived)
+    ));
+    assert!(matches!(
+        create_topic(&conn, SubjectId(999), "x", None),
+        Err(StudyError::SubjectNotFound)
+    ));
+    let rows: i64 = conn
+        .query_row("SELECT COUNT(*) FROM task", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(rows, 0);
+}
+
+#[test]
+fn list_topics_orders_pending_then_done_and_dated_first() {
+    let conn = db::test_conn();
+    let s = create_subject(&conn, "S").unwrap();
+    let today = day("2026-06-15");
+    let undated = create_topic(&conn, s, "undated", None).unwrap();
+    create_topic(&conn, s, "late", Some(day("2026-07-01"))).unwrap();
+    create_topic(&conn, s, "early", Some(day("2026-06-20"))).unwrap();
+    let done = create_topic(&conn, s, "done", Some(day("2026-06-01"))).unwrap();
+    crate::tasks::set_done(&conn, done, true, today).unwrap();
+    assert_eq!(
+        topic_titles(&conn, NOW),
+        ["early", "late", "undated", "done"]
+    );
+    crate::tasks::set_done(&conn, undated, true, today).unwrap();
+    assert_eq!(
+        topic_titles(&conn, NOW),
+        ["early", "late", "done", "undated"]
+    );
+}
+
+#[test]
+fn list_topics_hides_old_done_and_archived_subjects() {
+    let conn = db::test_conn();
+    let s = create_subject(&conn, "S").unwrap();
+    let old = create_topic(&conn, s, "old", None).unwrap();
+    crate::tasks::set_done(&conn, old, true, day("2026-06-15")).unwrap();
+    // Done now (UTC) is "today" at NOW's day, and "yesterday" a day later.
+    let today = Utc::now().to_rfc3339();
+    assert_eq!(topic_titles(&conn, &today), ["old"]);
+    let tomorrow = (Utc::now() + chrono::TimeDelta::days(1)).to_rfc3339();
+    assert!(topic_titles(&conn, &tomorrow).is_empty());
+    let other = create_subject(&conn, "O").unwrap();
+    create_topic(&conn, other, "hidden", None).unwrap();
+    set_subject_archived(&conn, other, true).unwrap();
+    assert_eq!(topic_titles(&conn, &today), ["old"]);
 }

@@ -15,16 +15,7 @@ pub fn list(
     now: DateTime<FixedOffset>,
 ) -> Result<Vec<Task>, TaskError> {
     let today = now.date_naive();
-    // done_at is UTC text in SQLite's own format, so text comparison orders instants.
-    // shortcut: the fixed offset of `now` is used for midnight, so on a DST-change day the
-    // boundary can be off by an hour; upgrade with a tz-aware type if it matters.
-    let midnight = today
-        .and_time(NaiveTime::MIN)
-        .and_local_timezone(*now.offset())
-        .single()
-        .ok_or_else(|| TaskError::BadDate(today.to_string()))?
-        .with_timezone(&Utc)
-        .to_rfc3339_opts(SecondsFormat::Millis, true);
+    let midnight = local_midnight(now)?;
     let (done, order) = if view.is_smart() {
         (
             "AND (t.done_at IS NULL OR t.done_at >= p.midnight)",
@@ -40,6 +31,21 @@ pub fn list(
         view.rule()
     );
     query(conn, &sql, (today.to_string(), midnight))
+}
+
+/// Start of the local day of `now`, in the UTC text format of `done_at`, so text comparison
+/// orders instants.
+// shortcut: the fixed offset of `now` is used for midnight, so on a DST-change day the
+// boundary can be off by an hour; upgrade with a tz-aware type if it matters.
+pub(crate) fn local_midnight(now: DateTime<FixedOffset>) -> Result<String, TaskError> {
+    let today = now.date_naive();
+    Ok(today
+        .and_time(NaiveTime::MIN)
+        .and_local_timezone(*now.offset())
+        .single()
+        .ok_or_else(|| TaskError::BadDate(today.to_string()))?
+        .with_timezone(&Utc)
+        .to_rfc3339_opts(SecondsFormat::Millis, true))
 }
 
 /// Tasks due on each of the 7 days from `monday`, pending first, then oldest created first.

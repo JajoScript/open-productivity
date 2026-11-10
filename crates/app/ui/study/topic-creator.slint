@@ -1,0 +1,168 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette, ScrollView } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkDatePopup } from "../ink-date-popup.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { SubjectChoice } from "session-logger.slint";
+import { SubjectRow } from "subject-row.slint";
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component CreatorBody inherits FocusScope {
+    in property <[SubjectRow]> subjects;
+    // The modal gives the initial subject and day; the user changes them here.
+    in-out property <int> subject-id;
+    in-out property <Date> date;
+    callback save(int, string, bool, Date) -> string;
+    callback cancel;
+
+    property <string> title;
+    property <bool> has-date;
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.subject-id, root.title, root.has-date, root.date);
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: @tr("New topic");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        Text {
+            text: @tr("Subject");
+            color: Theme.muted;
+        }
+
+        ScrollView {
+            height: min(root.subjects.length * 32px, 128px);
+            VerticalLayout {
+                for subject in root.subjects: SubjectChoice {
+                    subject: subject;
+                    chosen: subject.id == root.subject-id;
+                    picked => {
+                        root.subject-id = subject.id;
+                    }
+                }
+            }
+        }
+
+        InkField {
+            text <=> root.title;
+            placeholder-text: @tr("Topic");
+            init => {
+                self.focus();
+            }
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        HorizontalLayout {
+            height: 36px;
+            alignment: start;
+            spacing: 4px;
+            picker := InkDatePopup {
+                y: 36px;
+                day: root.has-date ? root.date.day : 0;
+                month: root.date.month;
+                year: root.date.year;
+                picked(date) => {
+                    root.date = date;
+                    root.has-date = true;
+                }
+            }
+
+            SubtleButton {
+                text: root.has-date ? Strings.date(root.date.day, root.date.month, root.date.year) : @tr("Add date");
+                icon: @image-url("../icons/calendar.svg");
+                color: root.has-date ? Palette.foreground : Theme.muted;
+                clicked => {
+                    picker.show();
+                }
+            }
+
+            if root.has-date: SubtleButton {
+                icon: @image-url("../icons/x.svg");
+                label: @tr("Remove date");
+                clicked => {
+                    root.has-date = false;
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Create");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+}
+
+// Creates a topic on a subject, optionally with a due date. Closing by clicking outside discards it.
+export component TopicCreator inherits PopupWindow {
+    // Returns the error to show; empty means it worked and the modal closes.
+    callback create(int, string, bool, Date) -> string;
+
+    // Set by the opener before show().
+    in property <[SubjectRow]> subjects;
+    in property <int> subject-id;
+    in property <Date> date;
+
+    close-policy: close-on-click-outside;
+    width: 360px;
+
+    PopupSurface {
+        CreatorBody {
+            subjects: root.subjects;
+            subject-id: root.subject-id;
+            date: root.date;
+            save(id, title, has-date, date) => {
+                let error = root.create(id, title, has-date, date);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

@@ -10,10 +10,11 @@ import { ListCreator } from "tasks/list-creator.slint";
 import { HabitCreator } from "habits/habit-creator.slint";
 import { ArchivedHabits } from "habits/archived-habits.slint";
 import { SessionLogger } from "study/session-logger.slint";
+import { TopicCreator } from "study/topic-creator.slint";
 import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
 import { SessionRow } from "study/subject-detail.slint";
-import { SubjectRow, SubjectTab } from "study/subject-row.slint";
+import { SubjectRow, SubjectTab, TopicRow } from "study/subject-row.slint";
 import { ArchivedRow, DayState, HabitRow, HabitsView, HeatCell, HeatLevel, WeekTotal } from "habits/habits-view.slint";
 import { CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource, CalendarTask, CalendarView, WeekBlock, WeekColumn } from "calendar/calendar-view.slint";
 import { Module, Rail } from "rail.slint";
@@ -22,7 +23,7 @@ import { TaskCreator } from "tasks/task-creator.slint";
 import { ColorMode, Language, SettingsView } from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
 import { DayHabit, DueKind, KanbanColumn, Quadrant, Repeat, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { ArchivedRow, Calendar, Repeat, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, SessionRow, Strings, SubjectRow, SubjectTab, TaskRow, TasksTab, TaskView, ViewCounts, WeekDay, WeekTotal }
+export { ArchivedRow, Calendar, Repeat, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, SessionRow, Strings, SubjectRow, SubjectTab, TaskRow, TasksTab, TaskView, TopicRow, ViewCounts, WeekDay, WeekTotal }
 
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
@@ -131,9 +132,12 @@ export component AppWindow inherits Window {
     in-out property <SubjectTab> subject-tab;
     in-out property <bool> subject-open;
     in property <string> study-error;
+    in property <[TopicRow]> study-topics;
     // Both return the error to show; empty means it worked.
     callback create-subject(string) -> string;
     callback log-study-session(int, Date, string, string) -> string;
+    callback create-topic(int, string, bool, Date) -> string;
+    callback set-topic-done(int, bool);
     callback rename-subject(int, string) -> string;
     callback subject-tab-changed();
     callback open-subject(int);
@@ -162,6 +166,13 @@ export component AppWindow inherits Window {
     // What the subject modal opens with: a new subject, or the one being renamed.
     property <bool> subject-editing;
     property <string> subject-edit-name;
+    function open-new-topic() {
+        // Same starting subject as the session modal.
+        root.log-subject = root.subject-open && !root.subject-detail.archived ? root.subject-detail.id : root.active-subjects[0].id;
+        root.log-date = Calendar.today();
+        topic-creator.show();
+    }
+
     function open-log-session() {
         // The open subject if it can take sessions, else the first active one.
         root.log-subject = root.subject-open && !root.subject-detail.archived ? root.subject-detail.id : root.active-subjects[0].id;
@@ -245,6 +256,17 @@ export component AppWindow inherits Window {
             y: 120px;
             create(name) => {
                 return root.create-subject(name);
+            }
+        }
+
+        topic-creator := TopicCreator {
+            subjects: root.active-subjects;
+            subject-id: root.log-subject;
+            date: root.log-date;
+            x: (root.width - self.width) / 2;
+            y: 120px;
+            create(id, title, has-date, date) => {
+                return root.create-topic(id, title, has-date, date);
             }
         }
 
@@ -429,6 +451,7 @@ export component AppWindow inherits Window {
                     subjects: root.subjects;
                     any-subject: root.any-subject;
                     can-log: root.active-subjects.length > 0;
+                    topics: root.study-topics;
                     detail: root.subject-detail;
                     sessions: root.subject-sessions;
                     error: root.study-error;
@@ -458,6 +481,12 @@ export component AppWindow inherits Window {
                     }
                     log-session => {
                         root.open-log-session();
+                    }
+                    new-topic => {
+                        root.open-new-topic();
+                    }
+                    set-topic-done(id, done) => {
+                        root.set-topic-done(id, done);
                     }
                 }
 

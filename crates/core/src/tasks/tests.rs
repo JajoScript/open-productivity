@@ -1059,3 +1059,15 @@ fn migration_keeps_existing_tasks() {
     drop(conn);
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+#[test]
+fn topics_are_not_inbox_but_dated_ones_show_in_today() {
+    let conn = db::test_conn();
+    mk(&conn, "plain").unwrap();
+    let math = crate::study::create_subject(&conn, "Math").unwrap();
+    crate::study::create_topic(&conn, math, "undated", None).unwrap();
+    crate::study::create_topic(&conn, math, "dated", Some(d("2026-06-15"))).unwrap();
+    assert_eq!(view_titles(&conn, View::Inbox, NOW), ["plain"]);
+    assert_eq!(counts(&conn, at(NOW)).unwrap().inbox, 1);
+    assert_eq!(view_titles(&conn, View::Today, NOW), ["dated"]);
+}

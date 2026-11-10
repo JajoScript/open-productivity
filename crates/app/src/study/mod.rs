@@ -10,6 +10,7 @@ use std::rc::Rc;
 use open_productivity_core::chrono::Local;
 use open_productivity_core::db::Connection;
 use open_productivity_core::study::{self, SessionId, SubjectId};
+use open_productivity_core::tasks::{self, TaskId};
 use slint::{ComponentHandle, ModelRc};
 
 use crate::dates::core_date;
@@ -22,11 +23,13 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         rows: Rc::default(),
         active: Rc::default(),
         sessions: Rc::default(),
+        topics: Rc::default(),
         window: window.as_weak(),
     });
     window.set_subjects(ModelRc::from(state.rows.clone()));
     window.set_active_subjects(ModelRc::from(state.active.clone()));
     window.set_subject_sessions(ModelRc::from(state.sessions.clone()));
+    window.set_study_topics(ModelRc::from(state.topics.clone()));
     state.show_load();
 
     window.on_create_subject({
@@ -107,6 +110,42 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
                 )
             });
             state.finish(res)
+        }
+    });
+
+    window.on_create_topic({
+        let state = state.clone();
+        move |id, title, has_date, date: Date| {
+            let Some(w) = state.window.upgrade() else {
+                return Default::default();
+            };
+            // A date the picker cannot produce is an error, never "no date".
+            let due = match has_date.then(|| core_date(date)).transpose() {
+                Ok(d) => d,
+                Err(e) => return w.global::<Strings>().invoke_study_failed(e.into()),
+            };
+            state.finish(
+                study::create_topic(&state.conn, SubjectId(id.into()), &title, due).map(|_| ()),
+            )
+        }
+    });
+
+    window.on_set_topic_done({
+        let state = state.clone();
+        move |id, done| {
+            let res = tasks::set_done(
+                &state.conn,
+                TaskId(id.into()),
+                done,
+                Local::now().date_naive(),
+            );
+            state.show_load();
+            if let (Err(e), Some(w)) = (res, state.window.upgrade()) {
+                let msg = w
+                    .global::<Strings>()
+                    .invoke_task_failed(e.to_string().into());
+                w.set_study_error(msg);
+            }
         }
     });
 }

@@ -678,6 +678,18 @@ msgstr "Nueva materia"
 msgid "Log session"
 msgstr "Registrar sesión"
 
+msgid "New topic"
+msgstr "Nuevo tema"
+
+msgid "Topic"
+msgstr "Tema"
+
+msgid "Topics"
+msgstr "Temas"
+
+msgid "No topics yet. Add what you need to study on a subject with New topic."
+msgstr "Aún no hay temas. Añade lo que debes estudiar de una materia con Nuevo tema."
+
 msgid "Create your first subject"
 msgstr "Crea tu primera materia"
 
@@ -704,6 +716,9 @@ msgstr "Registrar"
 
 msgid "Give the subject a name."
 msgstr "Ponle un nombre a la materia."
+
+msgid "Give the topic a title."
+msgstr "Ponle un título al tema."
 
 msgid "Enter the minutes as a whole number, like 45."
 msgstr "Escribe los minutos como un número entero, por ejemplo 45."

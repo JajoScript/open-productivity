@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
+import { Date } from "std-widgets.slint";
+
 // A subject with what has been studied on it; `duration` arrives already formatted.
 export struct SubjectRow {
     id: int,
@@ -12,3 +14,13 @@ export struct SubjectRow {
 
 // Which subjects the list shows.
 export enum SubjectTab { active, archived, all }
+
+// A task of a subject; `due` only matters when `has-due`.
+export struct TopicRow {
+    id: int,
+    title: string,
+    subject: string,
+    has-due: bool,
+    due: Date,
+    done: bool,
+}
