@@ -104,19 +104,21 @@ export component WeekView inherits VerticalLayout {
             horizontal-stretch: 1;
         }
 
+        // Same order as the Calendar and Habits: Today, then the arrows.
+        SubtleButton {
+            text: @tr("Today");
+            color: Palette.foreground;
+            outlined: true;
+            clicked => {
+                root.shift(0);
+            }
+        }
+
         SubtleButton {
             icon: @image-url("../icons/chevron-left.svg");
             label: @tr("Previous week");
             clicked => {
                 root.shift(-1);
-            }
-        }
-
-        SubtleButton {
-            text: @tr("Today");
-            color: Palette.foreground;
-            clicked => {
-                root.shift(0);
             }
         }
 

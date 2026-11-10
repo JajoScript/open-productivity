@@ -169,7 +169,6 @@ export component AppWindow inherits Window {
         session-logger.show();
     }
 
-    // The only place that forces Palette; `unknown` hands it back to the system.
     function open-new-habit() {
         root.habit-editing = false;
         root.habit-edit-name = "";
@@ -178,6 +177,7 @@ export component AppWindow inherits Window {
         habit-creator.show();
     }
 
+    // The only place that forces Palette; `unknown` hands it back to the system.
     function apply-color-mode() {
         Palette.color-scheme = root.current-color-mode == ColorMode.light ? ColorScheme.light : root.current-color-mode == ColorMode.dark ? ColorScheme.dark : ColorScheme.unknown;
     }

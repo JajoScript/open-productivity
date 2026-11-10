@@ -75,19 +75,27 @@ export component HabitsView inherits VerticalLayout {
             overflow: elide;
         }
 
+        Rectangle {
+            width: 12px;
+        }
+
+        // Same order as the Calendar: Today, the arrows, then the month, whose length never
+        // moves them.
+        SubtleButton {
+            text: @tr("Today");
+            color: Palette.foreground;
+            outlined: true;
+            clicked => {
+                root.shift(0);
+            }
+        }
+
         SubtleButton {
             icon: @image-url("../icons/chevron-left.svg");
             label: @tr("Previous month");
             clicked => {
                 root.shift(-1);
             }
-        }
-
-        Text {
-            text: Strings.month-year(root.month.month, root.month.year);
-            vertical-alignment: center;
-            horizontal-alignment: center;
-            min-width: 120px;
         }
 
         SubtleButton {
@@ -101,15 +109,11 @@ export component HabitsView inherits VerticalLayout {
             }
         }
 
-        SubtleButton {
-            text: @tr("Today");
-            color: Palette.foreground;
-            clicked => {
-                root.shift(0);
-            }
-        }
-
-        Rectangle {
+        Text {
+            text: Strings.month-year(root.month.month, root.month.year);
+            font-weight: 600;
+            vertical-alignment: center;
+            overflow: elide;
             horizontal-stretch: 1;
         }
 
