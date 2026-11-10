@@ -21,6 +21,27 @@ El workspace tiene dos crates:
 Tus datos viven en la carpeta de instancia que elijas (cada una tiene su propia base `open-productivity.db`) y puedes tener varias y cambiar entre ellas desde Configuración > Datos. No guardes una instancia en una carpeta sincronizada (OneDrive, Dropbox, Google Drive): SQLite puede perder o corromper cambios ahí.
 
 
+## Desarrollo
+
+Solo hace falta [rustup](https://rustup.rs/): la versión de Rust está fijada en `rust-toolchain.toml` y se instala sola. Por ahora la app se desarrolla y se prueba en Windows.
+
+Ejecutar la app sobre una carpeta de prueba, sin tocar tus datos:
+
+```
+cargo run -p open-productivity-app -- --instance <carpeta>
+```
+
+Las mismas comprobaciones que corre la integración continua:
+
+```
+cargo fmt --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked
+```
+
+Las reglas de negocio y el acceso a la base viven en `crates/core`, cada una con sus pruebas; `crates/app` y los `.slint` solo conectan y presentan.
+
+
 ## Licencia
 
 Copyright (C) 2026 JajoScript
