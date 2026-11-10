@@ -609,6 +609,9 @@ msgstr "Sin fecha"
 msgid "Start"
 msgstr "Inicio"
 
+msgid "Begin"
+msgstr "Empezar"
+
 msgid "End"
 msgstr "Fin"
 
@@ -686,6 +689,15 @@ msgstr "Tema"
 
 msgid "Topics"
 msgstr "Temas"
+
+msgid "No topic"
+msgstr "Sin tema"
+
+msgid "Today's study"
+msgstr "Estudio de hoy"
+
+msgid "Nothing due today. Give a topic today's date to see it here."
+msgstr "Nada para hoy. Ponle la fecha de hoy a un tema para verlo aquí."
 
 msgid "No topics yet. Add what you need to study on a subject with New topic."
 msgstr "Aún no hay temas. Añade lo que debes estudiar de una materia con Nuevo tema."
@@ -771,6 +783,9 @@ msgstr "No hay materias activas. Restaura una desde Archivadas o crea una nueva.
 msgid "That subject is archived. Restore it to log sessions."
 msgstr "Esa materia está archivada. Restáurala para registrar sesiones."
 
+msgid "That topic is no longer available."
+msgstr "Ese tema ya no está disponible."
+
 msgid "That session no longer exists."
 msgstr "Esa sesión ya no existe."
 
@@ -782,3 +797,30 @@ msgstr "{} · {}× · Archivada"
 
 msgid "Delete the {} session on {}? This can't be undone."
 msgstr "¿Borrar la sesión de {} del {}? No se puede deshacer."
+
+msgid "Discard"
+msgstr "Descartar"
+
+msgid "Finish"
+msgstr "Terminar"
+
+msgid "Keep"
+msgstr "Conservar"
+
+msgid "Start session"
+msgstr "Iniciar sesión"
+
+msgid "Saved {}. Take a {} break."
+msgstr "Guardados {}. Descansa {}."
+
+msgid "A session is already running."
+msgstr "Ya hay una sesión en marcha."
+
+msgid "No session is running."
+msgstr "No hay ninguna sesión en marcha."
+
+msgid "Study at least a minute to save it. Discard it if you don't need it."
+msgstr "Estudia al menos un minuto para guardarla. Descártala si no la necesitas."
+
+msgid "Discard this session? The time will be lost."
+msgstr "¿Descartar esta sesión? Se perderá el tiempo."

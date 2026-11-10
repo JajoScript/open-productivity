@@ -20,6 +20,8 @@ pub struct State {
     pub active: Rc<VecModel<SubjectRow>>,
     pub sessions: Rc<VecModel<SessionRow>>,
     pub topics: Rc<VecModel<TopicRow>>,
+    pub today_topics: Rc<VecModel<TopicRow>>,
+    pub logger_topics: Rc<VecModel<TopicRow>>,
     pub window: slint::Weak<AppWindow>,
 }
 
@@ -73,6 +75,7 @@ impl State {
                     date: ui_date(s.date),
                     duration: study::format_duration(s.minutes).into(),
                     description: s.description.into(),
+                    topic: s.topic.unwrap_or_default().into(),
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
@@ -93,6 +96,13 @@ impl State {
                 .map(topic_row)
                 .collect::<Result<Vec<_>, _>>()?,
         );
+        self.today_topics.set_vec(
+            study::today_topics(&self.conn, Local::now().fixed_offset())
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .map(topic_row)
+                .collect::<Result<Vec<_>, _>>()?,
+        );
         w.set_any_subject(!self.subject_rows(SubjectFilter::All)?.is_empty());
         // The open subject stays open even if it left the current tab.
         if w.get_subject_open() {
@@ -101,11 +111,29 @@ impl State {
         Ok(())
     }
 
+    /// Fills the session modal's topic choices with the pending topics of `subject`.
+    pub fn load_logger_topics(&self, subject: SubjectId) {
+        let topics = study::subject_topics(&self.conn, subject)
+            .map_err(|e| e.to_string())
+            .and_then(|t| t.into_iter().map(topic_row).collect::<Result<Vec<_>, _>>());
+        match topics {
+            Ok(t) => self.logger_topics.set_vec(t),
+            Err(e) => {
+                self.logger_topics.set_vec(Vec::new());
+                if let Some(w) = self.window.upgrade() {
+                    let msg = w.global::<Strings>().invoke_study_load_failed(e.into());
+                    w.set_study_error(msg);
+                }
+            }
+        }
+    }
+
     /// Shows a load failure in the view, or clears the last one.
     pub fn show_load(&self) {
         let Some(w) = self.window.upgrade() else {
             return;
         };
+        w.set_study_notice(Default::default());
         let msg = match self.reload(&w) {
             Err(e) => w.global::<Strings>().invoke_study_load_failed(e.into()),
             Ok(()) => Default::default(),
@@ -122,7 +150,11 @@ impl State {
             StudyError::FutureDate => s.get_study_future_date(),
             StudyError::SubjectNotFound => s.get_study_no_subject(),
             StudyError::SubjectArchived => s.get_study_archived(),
+            StudyError::TopicNotFound => s.get_study_no_topic(),
             StudyError::SessionNotFound => s.get_study_no_session(),
+            StudyError::SessionActive => s.get_study_session_active(),
+            StudyError::NoActiveSession => s.get_study_no_active_session(),
+            StudyError::TooShort => s.get_study_too_short(),
             e => s.invoke_study_failed(e.to_string().into()),
         }
     }

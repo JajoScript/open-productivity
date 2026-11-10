@@ -9,7 +9,7 @@ import { PopupSurface } from "../popup-surface.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
-import { SubjectChoice } from "session-logger.slint";
+import { ChoiceRow } from "session-logger.slint";
 import { SubjectRow } from "subject-row.slint";
 
 // Rebuilt on every show(), so the fields and the error always start fresh.
@@ -54,8 +54,9 @@ component CreatorBody inherits FocusScope {
         ScrollView {
             height: min(root.subjects.length * 32px, 128px);
             VerticalLayout {
-                for subject in root.subjects: SubjectChoice {
-                    subject: subject;
+                for subject in root.subjects: ChoiceRow {
+                    label: subject.name;
+                    icon: @image-url("../icons/notebook-text.svg");
                     chosen: subject.id == root.subject-id;
                     picked => {
                         root.subject-id = subject.id;

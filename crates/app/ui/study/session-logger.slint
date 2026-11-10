@@ -9,11 +9,12 @@ import { PopupSurface } from "../popup-surface.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
-import { SubjectRow } from "subject-row.slint";
+import { SubjectRow, TopicRow } from "subject-row.slint";
 
-// One subject in the chooser: an ink wash when chosen, like a navigation entry.
-export component SubjectChoice inherits Rectangle {
-    in property <SubjectRow> subject;
+// One option in a chooser: an ink wash when chosen, like a navigation entry.
+export component ChoiceRow inherits Rectangle {
+    in property <string> label;
+    in property <image> icon;
     in property <bool> chosen;
     callback picked;
 
@@ -23,7 +24,7 @@ export component SubjectChoice inherits Rectangle {
     animate background { duration: Theme.fast; easing: Theme.ease-out; }
     forward-focus: focus;
     accessible-role: list-item;
-    accessible-label: root.subject.name;
+    accessible-label: root.label;
     accessible-item-selectable: true;
     accessible-item-selected: root.chosen;
     accessible-action-default => {
@@ -35,7 +36,7 @@ export component SubjectChoice inherits Rectangle {
         padding-right: 10px;
         spacing: 8px;
         Image {
-            source: @image-url("../icons/notebook-text.svg");
+            source: root.icon;
             colorize: Theme.muted;
             width: 16px;
             image-fit: contain;
@@ -43,7 +44,7 @@ export component SubjectChoice inherits Rectangle {
         }
 
         Text {
-            text: root.subject.name;
+            text: root.label;
             vertical-alignment: center;
             overflow: elide;
             horizontal-stretch: 1;
@@ -79,11 +80,18 @@ export component SubjectChoice inherits Rectangle {
 // Rebuilt on every show(), so the fields and the error always start fresh.
 component LoggerBody inherits FocusScope {
     in property <[SubjectRow]> subjects;
+    // The pending topics of the chosen subject, which the owner refills on `subject-changed`.
+    in property <[TopicRow]> topics;
     // The modal gives the initial subject and day; the user changes them here.
     in-out property <int> subject-id;
     in-out property <Date> date;
-    callback save(int, Date, string, string) -> string;
+    callback save(int, bool, int, Date, string, string) -> string;
+    callback subject-changed(int);
     callback cancel;
+
+    // `topic-id` only matters when `has-topic`.
+    property <bool> has-topic;
+    property <int> topic-id;
 
     property <string> minutes;
     property <string> description;
@@ -98,7 +106,7 @@ component LoggerBody inherits FocusScope {
     }
 
     function submit() {
-        root.error = root.save(root.subject-id, root.date, root.minutes, root.description);
+        root.error = root.save(root.subject-id, root.has-topic, root.topic-id, root.date, root.minutes, root.description);
     }
 
     VerticalLayout {
@@ -118,11 +126,45 @@ component LoggerBody inherits FocusScope {
         ScrollView {
             height: min(root.subjects.length * 32px, 128px);
             VerticalLayout {
-                for subject in root.subjects: SubjectChoice {
-                    subject: subject;
+                for subject in root.subjects: ChoiceRow {
+                    label: subject.name;
+                    icon: @image-url("../icons/notebook-text.svg");
                     chosen: subject.id == root.subject-id;
                     picked => {
-                        root.subject-id = subject.id;
+                        if subject.id != root.subject-id {
+                            root.subject-id = subject.id;
+                            root.has-topic = false;
+                            root.subject-changed(subject.id);
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: @tr("Topic");
+            color: Theme.muted;
+        }
+
+        ScrollView {
+            height: min((root.topics.length + 1) * 32px, 96px);
+            VerticalLayout {
+                ChoiceRow {
+                    label: @tr("No topic");
+                    icon: @image-url("../icons/x.svg");
+                    chosen: !root.has-topic;
+                    picked => {
+                        root.has-topic = false;
+                    }
+                }
+
+                for topic in root.topics: ChoiceRow {
+                    label: topic.title;
+                    icon: @image-url("../icons/list-todo.svg");
+                    chosen: root.has-topic && topic.id == root.topic-id;
+                    picked => {
+                        root.has-topic = true;
+                        root.topic-id = topic.id;
                     }
                 }
             }
@@ -205,10 +247,12 @@ component LoggerBody inherits FocusScope {
 // Logs a session on a subject. Closing by clicking outside discards it.
 export component SessionLogger inherits PopupWindow {
     // Returns the error to show; empty means it worked and the modal closes.
-    callback log(int, Date, string, string) -> string;
+    callback log(int, bool, int, Date, string, string) -> string;
+    callback subject-changed(int);
 
     // Set by the opener before show().
     in property <[SubjectRow]> subjects;
+    in property <[TopicRow]> topics;
     in property <int> subject-id;
     in property <Date> date;
 
@@ -218,10 +262,14 @@ export component SessionLogger inherits PopupWindow {
     PopupSurface {
         LoggerBody {
             subjects: root.subjects;
+            topics: root.topics;
             subject-id: root.subject-id;
             date: root.date;
-            save(id, date, minutes, description) => {
-                let error = root.log(id, date, minutes, description);
+            subject-changed(id) => {
+                root.subject-changed(id);
+            }
+            save(id, has-topic, topic-id, date, minutes, description) => {
+                let error = root.log(id, has-topic, topic-id, date, minutes, description);
                 if error == "" {
                     root.close();
                 }

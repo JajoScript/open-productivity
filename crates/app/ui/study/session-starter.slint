@@ -1,0 +1,157 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ScrollView } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { ChoiceRow } from "session-logger.slint";
+import { SubjectRow, TopicRow } from "subject-row.slint";
+
+// Rebuilt on every show(), so the choices and the error always start fresh.
+component StarterBody inherits FocusScope {
+    in property <[SubjectRow]> subjects;
+    // The pending topics of the chosen subject, which the owner refills on `subject-changed`.
+    in property <[TopicRow]> topics;
+    in-out property <int> subject-id;
+    callback start(int, bool, int) -> string;
+    callback subject-changed(int);
+    callback cancel;
+
+    // `topic-id` only matters when `has-topic`.
+    property <bool> has-topic;
+    property <int> topic-id;
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: @tr("Start session");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        Text {
+            text: @tr("Subject");
+            color: Theme.muted;
+        }
+
+        ScrollView {
+            height: min(root.subjects.length * 32px, 128px);
+            VerticalLayout {
+                for subject in root.subjects: ChoiceRow {
+                    label: subject.name;
+                    icon: @image-url("../icons/notebook-text.svg");
+                    chosen: subject.id == root.subject-id;
+                    picked => {
+                        if subject.id != root.subject-id {
+                            root.subject-id = subject.id;
+                            root.has-topic = false;
+                            root.subject-changed(subject.id);
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: @tr("Topic");
+            color: Theme.muted;
+        }
+
+        ScrollView {
+            height: min((root.topics.length + 1) * 32px, 96px);
+            VerticalLayout {
+                ChoiceRow {
+                    label: @tr("No topic");
+                    icon: @image-url("../icons/x.svg");
+                    chosen: !root.has-topic;
+                    picked => {
+                        root.has-topic = false;
+                    }
+                }
+
+                for topic in root.topics: ChoiceRow {
+                    label: topic.title;
+                    icon: @image-url("../icons/list-todo.svg");
+                    chosen: root.has-topic && topic.id == root.topic-id;
+                    picked => {
+                        root.has-topic = true;
+                        root.topic-id = topic.id;
+                    }
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Begin");
+                clicked => {
+                    root.error = root.start(root.subject-id, root.has-topic, root.topic-id);
+                }
+            }
+        }
+    }
+}
+
+// Starts a Flowtime session on a subject and, optionally, one of its topics.
+export component SessionStarter inherits PopupWindow {
+    // Returns the error to show; empty means it started and the modal closes.
+    callback start(int, bool, int) -> string;
+    callback subject-changed(int);
+
+    // Set by the opener before show().
+    in property <[SubjectRow]> subjects;
+    in property <[TopicRow]> topics;
+    in property <int> subject-id;
+
+    close-policy: close-on-click-outside;
+    width: 360px;
+
+    PopupSurface {
+        StarterBody {
+            subjects: root.subjects;
+            topics: root.topics;
+            subject-id: root.subject-id;
+            subject-changed(id) => {
+                root.subject-changed(id);
+            }
+            start(id, has-topic, topic-id) => {
+                let error = root.start(id, has-topic, topic-id);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

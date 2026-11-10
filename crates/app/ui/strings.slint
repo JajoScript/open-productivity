@@ -42,7 +42,12 @@ export global Strings {
     out property <string> study-future-date: @tr("The date can't be in the future.");
     out property <string> study-no-subject: @tr("Choose a subject.");
     out property <string> study-archived: @tr("That subject is archived. Restore it to log sessions.");
+    out property <string> study-no-topic: @tr("That topic is no longer available.");
     out property <string> study-no-session: @tr("That session no longer exists.");
+    out property <string> study-session-active: @tr("A session is already running.");
+    out property <string> study-no-active-session: @tr("No session is running.");
+    out property <string> study-too-short: @tr("Study at least a minute to save it. Discard it if you don't need it.");
+    out property <string> study-discard-question: @tr("Discard this session? The time will be lost.");
 
     // Accessible name of a subject row.
     public pure function subject-line-label(name: string, duration: string, sessions: int) -> string {
@@ -56,6 +61,10 @@ export global Strings {
 
     public pure function delete-session-question(duration: string, date: string) -> string {
         return @tr("Delete the {} session on {}? This can't be undone.", duration, date);
+    }
+
+    public pure function study-saved(duration: string, break: string) -> string {
+        return @tr("Saved {}. Take a {} break.", duration, break);
     }
 
     public pure function study-failed(error: string) -> string {

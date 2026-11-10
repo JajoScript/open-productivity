@@ -5,6 +5,7 @@ import { Palette, ListView } from "std-widgets.slint";
 import { EmptyState } from "../empty-state.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
+import { ActiveSessionCard } from "active-session-card.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
@@ -213,14 +214,24 @@ export component StudyView inherits VerticalLayout {
     in property <bool> can-log;
     // Pending topics and those done today, of active subjects.
     in property <[TopicRow]> topics;
+    // The topics due today.
+    in property <[TopicRow]> today-topics;
     in property <SubjectRow> detail;
     in property <[SessionRow]> sessions;
     in property <string> error;
+    in property <string> notice;
+    in property <bool> active;
+    in property <string> active-subject;
+    in property <string> active-topic;
+    in property <string> clock;
     in-out property <SubjectTab> tab;
     in-out property <bool> detail-open;
     callback new-subject();
     callback new-topic();
     callback log-session();
+    callback start-session();
+    callback finish-session();
+    callback discard-session();
     callback set-topic-done(int, bool);
     callback tab-changed();
     callback open-subject(int);
@@ -263,6 +274,15 @@ export component StudyView inherits VerticalLayout {
             }
         }
 
+        SubtleButton {
+            text: @tr("Start session");
+            color: Palette.foreground;
+            enabled: root.can-log && !root.active;
+            clicked => {
+                root.start-session();
+            }
+        }
+
         InkButton {
             text: @tr("Log session");
             enabled: root.can-log;
@@ -276,6 +296,24 @@ export component StudyView inherits VerticalLayout {
         text: root.error;
         color: Theme.critical;
         wrap: word-wrap;
+    }
+
+    if root.notice != "": Text {
+        text: root.notice;
+        color: Theme.muted;
+        wrap: word-wrap;
+    }
+
+    if root.active: ActiveSessionCard {
+        subject: root.active-subject;
+        topic: root.active-topic;
+        clock: root.clock;
+        finish => {
+            root.finish-session();
+        }
+        discard => {
+            root.discard-session();
+        }
     }
 
     if !root.any-subject: EmptyState {
@@ -303,6 +341,28 @@ export component StudyView inherits VerticalLayout {
         }
         delete-session(id) => {
             root.delete-session(id);
+        }
+    }
+
+    if root.any-subject && !root.detail-open: Text {
+        text: @tr("Today's study");
+        font-weight: 700;
+        color: Palette.foreground.with-alpha(0.7);
+    }
+
+    if root.any-subject && !root.detail-open && root.today-topics.length == 0: Text {
+        text: @tr("Nothing due today. Give a topic today's date to see it here.");
+        color: Theme.muted;
+        wrap: word-wrap;
+    }
+
+    // No ListView: the section is short and takes its natural height.
+    if root.any-subject && !root.detail-open && root.today-topics.length > 0: VerticalLayout {
+        for topic in root.today-topics: TopicLine {
+            topic: topic;
+            toggled(done) => {
+                root.set-topic-done(topic.id, done);
+            }
         }
     }
 

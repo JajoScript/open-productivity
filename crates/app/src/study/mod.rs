@@ -4,6 +4,7 @@
 //! Glue between the Study view and `core::study`.
 
 mod state;
+mod timer;
 
 use std::rc::Rc;
 
@@ -17,19 +18,24 @@ use crate::dates::core_date;
 use crate::{AppWindow, Date, Strings};
 use state::State;
 
-pub fn init(window: &AppWindow, conn: Rc<Connection>) {
+/// The returned timer drives the running session's clock; the caller keeps it alive.
+pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Rc<slint::Timer> {
     let state = Rc::new(State {
         conn,
         rows: Rc::default(),
         active: Rc::default(),
         sessions: Rc::default(),
         topics: Rc::default(),
+        today_topics: Rc::default(),
+        logger_topics: Rc::default(),
         window: window.as_weak(),
     });
     window.set_subjects(ModelRc::from(state.rows.clone()));
     window.set_active_subjects(ModelRc::from(state.active.clone()));
     window.set_subject_sessions(ModelRc::from(state.sessions.clone()));
     window.set_study_topics(ModelRc::from(state.topics.clone()));
+    window.set_study_today_topics(ModelRc::from(state.today_topics.clone()));
+    window.set_logger_topics(ModelRc::from(state.logger_topics.clone()));
     state.show_load();
 
     window.on_create_subject({
@@ -90,7 +96,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
 
     window.on_log_study_session({
         let state = state.clone();
-        move |id, date: Date, minutes, description| {
+        move |id, has_topic, topic, date: Date, minutes, description| {
             let Some(w) = state.window.upgrade() else {
                 return Default::default();
             };
@@ -106,11 +112,17 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
                     date,
                     m,
                     &description,
+                    has_topic.then(|| TaskId(topic.into())),
                     Local::now().date_naive(),
                 )
             });
             state.finish(res)
         }
+    });
+
+    window.on_load_subject_topics({
+        let state = state.clone();
+        move |id| state.load_logger_topics(SubjectId(id.into()))
     });
 
     window.on_create_topic({
@@ -148,4 +160,6 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
             }
         }
     });
+
+    timer::init(window, &state)
 }

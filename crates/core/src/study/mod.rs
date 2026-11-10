@@ -8,10 +8,14 @@ use std::fmt;
 use chrono::NaiveDate;
 use rusqlite::Connection;
 
+use crate::tasks::TaskId;
+
 #[cfg(test)]
 mod tests;
+mod timer;
 mod topics;
 
+pub use timer::*;
 pub use topics::*;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -35,6 +39,8 @@ pub struct Session {
     pub date: NaiveDate,
     pub minutes: i64,
     pub description: String,
+    /// Title of the topic studied, if the session points at one.
+    pub topic: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -55,7 +61,14 @@ pub enum StudyError {
     SubjectNotFound,
     /// Archived subjects take no new sessions.
     SubjectArchived,
+    /// The topic is missing, done, or belongs to another subject.
+    TopicNotFound,
     SessionNotFound,
+    /// A Flowtime session is already running.
+    SessionActive,
+    NoActiveSession,
+    /// Under a minute studied: nothing worth saving.
+    TooShort,
     /// A stored session date that cannot be read.
     BadDate(String),
     Sqlite(rusqlite::Error),
@@ -70,7 +83,11 @@ impl fmt::Display for StudyError {
             StudyError::FutureDate => write!(f, "that day has not happened yet"),
             StudyError::SubjectNotFound => write!(f, "subject not found"),
             StudyError::SubjectArchived => write!(f, "subject is archived"),
+            StudyError::TopicNotFound => write!(f, "topic not found"),
             StudyError::SessionNotFound => write!(f, "session not found"),
+            StudyError::SessionActive => write!(f, "a session is already running"),
+            StudyError::NoActiveSession => write!(f, "no session is running"),
+            StudyError::TooShort => write!(f, "the session is shorter than a minute"),
             StudyError::BadDate(d) => write!(f, "invalid stored date: {d}"),
             StudyError::Sqlite(e) => write!(f, "database error: {e}"),
         }
@@ -167,19 +184,27 @@ pub fn set_subject_archived(
 /// Newest first: by day, then by when it was logged.
 pub fn list_sessions(conn: &Connection, subject: SubjectId) -> Result<Vec<Session>, StudyError> {
     let mut stmt = conn.prepare(
-        "SELECT id, date, focus_minutes, description FROM study_session
-         WHERE subject_id = ?1 ORDER BY date DESC, id DESC",
+        "SELECT l.id, l.date, l.focus_minutes, l.description, t.title
+         FROM study_session l LEFT JOIN task t ON t.id = l.topic_id
+         WHERE l.subject_id = ?1 ORDER BY l.date DESC, l.id DESC",
     )?;
     let rows = stmt.query_map([subject.0], |r| {
-        Ok((r.get(0)?, r.get::<_, String>(1)?, r.get(2)?, r.get(3)?))
+        Ok((
+            r.get(0)?,
+            r.get::<_, String>(1)?,
+            r.get(2)?,
+            r.get(3)?,
+            r.get(4)?,
+        ))
     })?;
     rows.map(|row| {
-        let (id, date, minutes, description) = row?;
+        let (id, date, minutes, description, topic) = row?;
         Ok(Session {
             id: SessionId(id),
             date: date.parse().map_err(|_| StudyError::BadDate(date))?,
             minutes,
             description,
+            topic,
         })
     })
     .collect()
@@ -206,13 +231,15 @@ pub fn parse_minutes(text: &str) -> Result<i64, StudyError> {
         .ok_or(StudyError::BadMinutes)
 }
 
-/// Logs time studied on `date`, which may be today but not later.
+/// Logs time studied on `date`, which may be today but not later. A `topic` must be a pending
+/// topic of the same subject.
 pub fn log_manual_session(
     conn: &Connection,
     subject: SubjectId,
     date: NaiveDate,
     minutes: i64,
     description: &str,
+    topic: Option<TaskId>,
     today: NaiveDate,
 ) -> Result<(), StudyError> {
     if minutes <= 0 {
@@ -221,16 +248,40 @@ pub fn log_manual_session(
     if date > today {
         return Err(StudyError::FutureDate);
     }
-    // One statement: it inserts only if the subject exists and is not archived.
+    // One statement: it inserts only if the subject exists and is not archived, and the topic,
+    // if any, is a pending task of that subject.
     let rows = conn.execute(
-        "INSERT INTO study_session (subject_id, date, focus_minutes, description)
-         SELECT id, ?2, ?3, ?4 FROM subject WHERE id = ?1 AND archived = 0",
-        (subject.0, date.to_string(), minutes, description.trim()),
+        "INSERT INTO study_session (subject_id, date, focus_minutes, description, topic_id)
+         SELECT id, ?2, ?3, ?4, ?5 FROM subject WHERE id = ?1 AND archived = 0
+           AND (?5 IS NULL OR EXISTS (SELECT 1 FROM task
+                WHERE id = ?5 AND subject_id = subject.id AND done_at IS NULL))",
+        (
+            subject.0,
+            date.to_string(),
+            minutes,
+            description.trim(),
+            topic.map(|t| t.0),
+        ),
     )?;
     if rows == 0 {
-        return Err(missing_or_archived(conn, subject));
+        return Err(rejection(conn, subject));
     }
     Ok(())
+}
+
+/// Why a session insert on `subject` touched no row.
+fn rejection(conn: &Connection, subject: SubjectId) -> StudyError {
+    match conn.query_row(
+        "SELECT archived FROM subject WHERE id = ?1",
+        [subject.0],
+        |r| r.get::<_, bool>(0),
+    ) {
+        Ok(true) => StudyError::SubjectArchived,
+        // The subject takes sessions, so the topic was the reason.
+        Ok(false) => StudyError::TopicNotFound,
+        Err(rusqlite::Error::QueryReturnedNoRows) => StudyError::SubjectNotFound,
+        Err(e) => e.into(),
+    }
 }
 
 /// `0m`, `45m`, `2h`, `1h 30m`.

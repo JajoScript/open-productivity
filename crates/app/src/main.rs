@@ -160,7 +160,7 @@ fn main() {
     let conn = Rc::new(conn);
     let tasks_timer = tasks::init(&window, conn.clone(), &app_dir);
     let habits_timer = habits::init(&window, conn.clone());
-    study::init(&window, conn.clone());
+    let study_timer = study::init(&window, conn.clone());
     data::init(&window, conn);
 
     let name = instance.file_name().map_or_else(
@@ -176,6 +176,7 @@ fn main() {
         // owns the callbacks that hold the connection, so it goes too.
         drop(tasks_timer);
         drop(habits_timer);
+        drop(study_timer);
         drop(window);
         drop(lock);
         let spawned =

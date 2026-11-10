@@ -5,6 +5,7 @@
 
 use super::*;
 use crate::db;
+use crate::tasks::TaskId;
 use chrono::{DateTime, FixedOffset, Utc};
 
 fn day(s: &str) -> NaiveDate {
@@ -29,8 +30,8 @@ fn list_orders_by_creation_and_sums_sessions() {
     let b = create_subject(&conn, "B").unwrap();
     let a = create_subject(&conn, "A").unwrap();
     let today = day("2026-11-08");
-    log_manual_session(&conn, b, today, 30, "", today).unwrap();
-    log_manual_session(&conn, b, today, 45, "", today).unwrap();
+    log_manual_session(&conn, b, today, 30, "", None, today).unwrap();
+    log_manual_session(&conn, b, today, 45, "", None, today).unwrap();
     let list = list_subjects(&conn, SubjectFilter::All).unwrap();
     assert_eq!(list.iter().map(|s| s.id).collect::<Vec<_>>(), [b, a]);
     assert_eq!((list[0].total_minutes, list[0].sessions), (75, 2));
@@ -44,19 +45,19 @@ fn manual_session_validations() {
     let today = day("2026-11-08");
     for m in [0, -5] {
         assert!(matches!(
-            log_manual_session(&conn, s, today, m, "", today),
+            log_manual_session(&conn, s, today, m, "", None, today),
             Err(StudyError::BadMinutes)
         ));
     }
     assert!(matches!(
-        log_manual_session(&conn, s, day("2026-11-09"), 10, "", today),
+        log_manual_session(&conn, s, day("2026-11-09"), 10, "", None, today),
         Err(StudyError::FutureDate)
     ));
     assert!(matches!(
-        log_manual_session(&conn, SubjectId(99), today, 10, "", today),
+        log_manual_session(&conn, SubjectId(99), today, 10, "", None, today),
         Err(StudyError::SubjectNotFound)
     ));
-    log_manual_session(&conn, s, today, 10, "  notes  ", today).unwrap();
+    log_manual_session(&conn, s, today, 10, "  notes  ", None, today).unwrap();
     let d: String = conn
         .query_row("SELECT description FROM study_session", [], |r| r.get(0))
         .unwrap();
@@ -94,7 +95,7 @@ fn duration_format() {
 }
 
 fn log(conn: &Connection, s: SubjectId, date: &str, minutes: i64) {
-    log_manual_session(conn, s, day(date), minutes, "", day("2026-11-08")).unwrap();
+    log_manual_session(conn, s, day(date), minutes, "", None, day("2026-11-08")).unwrap();
 }
 
 #[test]
@@ -171,7 +172,7 @@ fn archived_subject_cannot_receive_a_session() {
     let a = create_subject(&conn, "A").unwrap();
     set_subject_archived(&conn, a, true).unwrap();
     assert!(matches!(
-        log_manual_session(&conn, a, day("2026-11-08"), 10, "", day("2026-11-08")),
+        log_manual_session(&conn, a, day("2026-11-08"), 10, "", None, day("2026-11-08")),
         Err(StudyError::SubjectArchived)
     ));
     assert!(list_sessions(&conn, a).unwrap().is_empty());
@@ -288,4 +289,296 @@ fn list_topics_hides_old_done_and_archived_subjects() {
     create_topic(&conn, other, "hidden", None).unwrap();
     set_subject_archived(&conn, other, true).unwrap();
     assert_eq!(topic_titles(&conn, &today), ["old"]);
+}
+
+fn sessions(conn: &Connection) -> i64 {
+    conn.query_row("SELECT COUNT(*) FROM study_session", [], |r| r.get(0))
+        .unwrap()
+}
+
+#[test]
+fn session_points_only_at_a_pending_topic_of_its_subject() {
+    let conn = db::test_conn();
+    let math = create_subject(&conn, "Math").unwrap();
+    let art = create_subject(&conn, "Art").unwrap();
+    let today = day("2026-06-15");
+    let limits = create_topic(&conn, math, "Limits", None).unwrap();
+    let other = create_topic(&conn, art, "Color", None).unwrap();
+    let done = create_topic(&conn, math, "Sets", None).unwrap();
+    crate::tasks::set_done(&conn, done, true, today).unwrap();
+    for bad in [other, done, TaskId(999)] {
+        assert!(matches!(
+            log_manual_session(&conn, math, today, 10, "", Some(bad), today),
+            Err(StudyError::TopicNotFound)
+        ));
+    }
+    assert_eq!(sessions(&conn), 0);
+    log_manual_session(&conn, math, today, 10, "", Some(limits), today).unwrap();
+    assert_eq!(
+        list_sessions(&conn, math).unwrap()[0].topic.as_deref(),
+        Some("Limits")
+    );
+    log_manual_session(&conn, math, today, 5, "", None, today).unwrap();
+    assert_eq!(list_sessions(&conn, math).unwrap()[0].topic, None);
+}
+
+#[test]
+fn subject_problems_win_over_topic_problems() {
+    let conn = db::test_conn();
+    let math = create_subject(&conn, "Math").unwrap();
+    let topic = create_topic(&conn, math, "Limits", None).unwrap();
+    let today = day("2026-06-15");
+    set_subject_archived(&conn, math, true).unwrap();
+    assert!(matches!(
+        log_manual_session(&conn, math, today, 10, "", Some(topic), today),
+        Err(StudyError::SubjectArchived)
+    ));
+    assert!(matches!(
+        log_manual_session(&conn, SubjectId(99), today, 10, "", Some(topic), today),
+        Err(StudyError::SubjectNotFound)
+    ));
+}
+
+#[test]
+fn deleting_a_topic_keeps_its_sessions() {
+    let conn = db::test_conn();
+    let math = create_subject(&conn, "Math").unwrap();
+    let today = day("2026-06-15");
+    let topic = create_topic(&conn, math, "Limits", None).unwrap();
+    log_manual_session(&conn, math, today, 10, "", Some(topic), today).unwrap();
+    crate::tasks::delete(&conn, topic).unwrap();
+    let list = list_sessions(&conn, math).unwrap();
+    assert_eq!((list.len(), list[0].topic.as_deref()), (1, None));
+}
+
+#[test]
+fn subject_topics_are_that_subjects_pending_ones() {
+    let conn = db::test_conn();
+    let math = create_subject(&conn, "Math").unwrap();
+    let art = create_subject(&conn, "Art").unwrap();
+    create_topic(&conn, math, "undated", None).unwrap();
+    create_topic(&conn, math, "dated", Some(day("2026-06-20"))).unwrap();
+    create_topic(&conn, art, "color", None).unwrap();
+    let done = create_topic(&conn, math, "done", None).unwrap();
+    crate::tasks::set_done(&conn, done, true, day("2026-06-15")).unwrap();
+    let titles: Vec<_> = subject_topics(&conn, math)
+        .unwrap()
+        .into_iter()
+        .map(|t| t.title)
+        .collect();
+    assert_eq!(titles, ["dated", "undated"]);
+}
+
+#[test]
+fn today_topics_are_only_those_due_today() {
+    let conn = db::test_conn();
+    let s = create_subject(&conn, "S").unwrap();
+    let old = create_subject(&conn, "Old").unwrap();
+    // Done now counts as done today, so the whole test runs on the real day.
+    let now = Utc::now().fixed_offset();
+    let today = now.date_naive();
+    let on = |days| Some(today + chrono::TimeDelta::days(days));
+    let topic = |sub, title, due| create_topic(&conn, sub, title, due).unwrap();
+    topic(s, "overdue", on(-1));
+    topic(s, "future", on(1));
+    topic(s, "undated", None);
+    let done = topic(s, "done", on(0));
+    topic(s, "pending", on(0));
+    topic(old, "archived", on(0));
+    set_subject_archived(&conn, old, true).unwrap();
+    crate::tasks::set_done(&conn, done, true, today).unwrap();
+    let titles: Vec<_> = today_topics(&conn, now)
+        .unwrap()
+        .into_iter()
+        .map(|t| t.title)
+        .collect();
+    assert_eq!(titles, ["pending", "done"]);
+}
+
+mod timer {
+    use super::*;
+
+    fn at(s: &str) -> DateTime<FixedOffset> {
+        DateTime::parse_from_rfc3339(s).unwrap()
+    }
+
+    fn setup() -> (Connection, SubjectId) {
+        let conn = db::test_conn();
+        let s = create_subject(&conn, "Math").unwrap();
+        (conn, s)
+    }
+
+    fn elapsed(conn: &Connection, now: &str) -> i64 {
+        active_session(conn, at(now)).unwrap().unwrap().elapsed_secs
+    }
+
+    #[test]
+    fn start_rules() {
+        let (conn, s) = setup();
+        let now = at("2026-11-08T10:00:00-05:00");
+        assert!(matches!(
+            start_session(&conn, SubjectId(99), None, now),
+            Err(StudyError::SubjectNotFound)
+        ));
+        let other = create_subject(&conn, "Art").unwrap();
+        let foreign = create_topic(&conn, other, "Color", None).unwrap();
+        assert!(matches!(
+            start_session(&conn, s, Some(foreign), now),
+            Err(StudyError::TopicNotFound)
+        ));
+        let done = create_topic(&conn, s, "Done", None).unwrap();
+        crate::tasks::set_done(&conn, done, true, now.date_naive()).unwrap();
+        assert!(matches!(
+            start_session(&conn, s, Some(done), now),
+            Err(StudyError::TopicNotFound)
+        ));
+        set_subject_archived(&conn, other, true).unwrap();
+        assert!(matches!(
+            start_session(&conn, other, None, now),
+            Err(StudyError::SubjectArchived)
+        ));
+        assert!(active_session(&conn, now).unwrap().is_none());
+        start_session(&conn, s, None, now).unwrap();
+        assert!(matches!(
+            start_session(&conn, s, None, now),
+            Err(StudyError::SessionActive)
+        ));
+    }
+
+    #[test]
+    fn elapsed_counts_small_gaps_only() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        assert_eq!(elapsed(&conn, "2026-11-08T10:00:00Z"), 0);
+        assert_eq!(elapsed(&conn, "2026-11-08T10:01:30Z"), 90);
+        assert_eq!(elapsed(&conn, "2026-11-08T10:02:00Z"), 120);
+        assert_eq!(elapsed(&conn, "2026-11-08T10:02:01Z"), 0);
+        assert_eq!(elapsed(&conn, "2026-11-08T09:59:00Z"), 0);
+    }
+
+    #[test]
+    fn heartbeat_banks_and_ignores_long_gaps() {
+        let (conn, s) = setup();
+        heartbeat(&conn, at("2026-11-08T10:00:00Z")).unwrap();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        heartbeat(&conn, at("2026-11-08T10:01:00Z")).unwrap();
+        assert_eq!(elapsed(&conn, "2026-11-08T10:01:00Z"), 60);
+        assert_eq!(elapsed(&conn, "2026-11-08T10:01:30Z"), 90);
+        heartbeat(&conn, at("2026-11-08T11:00:00Z")).unwrap();
+        assert_eq!(elapsed(&conn, "2026-11-08T11:00:10Z"), 70);
+    }
+
+    #[test]
+    fn finish_floors_minutes_and_saves_on_start_day() {
+        let (conn, s) = setup();
+        let topic = create_topic(&conn, s, "Limits", None).unwrap();
+        start_session(&conn, s, Some(topic), at("2026-11-08T23:30:00-05:00")).unwrap();
+        for m in 1..=3 {
+            heartbeat(&conn, at(&format!("2026-11-08T23:{:02}:00-05:00", 30 + m))).unwrap();
+        }
+        // 3m + 59s, past midnight: floors to 3.
+        assert_eq!(
+            finish_session(&conn, at("2026-11-09T00:33:59-05:00")).unwrap(),
+            3
+        );
+        let sessions = list_sessions(&conn, s).unwrap();
+        assert_eq!(sessions.len(), 1);
+        assert_eq!(sessions[0].date, day("2026-11-08"));
+        assert_eq!(sessions[0].minutes, 3);
+        assert_eq!(sessions[0].topic.as_deref(), Some("Limits"));
+        assert!(
+            active_session(&conn, at("2026-11-09T00:34:00-05:00"))
+                .unwrap()
+                .is_none()
+        );
+        assert!(matches!(
+            finish_session(&conn, at("2026-11-09T00:34:00-05:00")),
+            Err(StudyError::NoActiveSession)
+        ));
+    }
+
+    #[test]
+    fn finish_too_short_or_failing_keeps_the_session() {
+        let (conn, s) = setup();
+        let topic = create_topic(&conn, s, "Limits", None).unwrap();
+        start_session(&conn, s, Some(topic), at("2026-11-08T10:00:00Z")).unwrap();
+        assert!(matches!(
+            finish_session(&conn, at("2026-11-08T10:00:59Z")),
+            Err(StudyError::TooShort)
+        ));
+        // The seconds banked by the failed attempt were rolled back too.
+        assert_eq!(elapsed(&conn, "2026-11-08T10:00:00Z"), 0);
+        crate::tasks::set_done(&conn, topic, true, day("2026-11-08")).unwrap();
+        heartbeat(&conn, at("2026-11-08T10:01:00Z")).unwrap();
+        heartbeat(&conn, at("2026-11-08T10:02:00Z")).unwrap();
+        assert!(matches!(
+            finish_session(&conn, at("2026-11-08T10:02:00Z")),
+            Err(StudyError::TopicNotFound)
+        ));
+        assert_eq!(elapsed(&conn, "2026-11-08T10:02:00Z"), 120);
+        assert!(list_sessions(&conn, s).unwrap().is_empty());
+        set_subject_archived(&conn, s, true).unwrap();
+        assert!(matches!(
+            finish_session(&conn, at("2026-11-08T10:02:00Z")),
+            Err(StudyError::TopicNotFound | StudyError::SubjectArchived)
+        ));
+        assert!(
+            active_session(&conn, at("2026-11-08T10:02:00Z"))
+                .unwrap()
+                .is_some()
+        );
+    }
+
+    #[test]
+    fn discard_drops_the_session() {
+        let (conn, s) = setup();
+        assert!(matches!(
+            discard_session(&conn),
+            Err(StudyError::NoActiveSession)
+        ));
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        discard_session(&conn).unwrap();
+        assert!(
+            active_session(&conn, at("2026-11-08T10:00:01Z"))
+                .unwrap()
+                .is_none()
+        );
+        assert!(list_sessions(&conn, s).unwrap().is_empty());
+    }
+
+    #[test]
+    fn clock_and_break_formats() {
+        for (secs, text) in [
+            (0, "00:00"),
+            (59, "00:59"),
+            (60, "01:00"),
+            (3599, "59:59"),
+            (3600, "1:00:00"),
+            (3661, "1:01:01"),
+        ] {
+            assert_eq!(format_clock(secs), text);
+        }
+        for (m, b) in [(5, 1), (25, 5), (50, 10), (3, 1)] {
+            assert_eq!(suggested_break(m), b);
+        }
+    }
+
+    #[test]
+    fn deleting_the_topic_keeps_the_session() {
+        let (conn, s) = setup();
+        let topic = create_topic(&conn, s, "Limits", None).unwrap();
+        let now = at("2026-11-08T10:00:00Z");
+        start_session(&conn, s, Some(topic), now).unwrap();
+        assert_eq!(
+            active_session(&conn, now)
+                .unwrap()
+                .unwrap()
+                .topic
+                .as_deref(),
+            Some("Limits")
+        );
+        crate::tasks::delete(&conn, topic).unwrap();
+        let active = active_session(&conn, now).unwrap().unwrap();
+        assert_eq!((active.subject_name.as_str(), active.topic), ("Math", None));
+    }
 }

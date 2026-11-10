@@ -1,0 +1,105 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+
+// The running Flowtime session: what is studied, the clock, and how to end it.
+export component ActiveSessionCard inherits Rectangle {
+    in property <string> subject;
+    // Empty when the session has no topic.
+    in property <string> topic;
+    in property <string> clock;
+    callback finish;
+    callback discard;
+
+    // Discarding asks in place, since the time cannot be recovered.
+    property <bool> confirming;
+
+    height: layout.preferred-height;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+    background: Theme.hover;
+
+    layout := HorizontalLayout {
+        padding: 12px;
+        spacing: 12px;
+        Image {
+            source: @image-url("../icons/timer.svg");
+            colorize: Theme.muted;
+            width: 20px;
+            image-fit: contain;
+            accessible-role: none;
+        }
+
+        VerticalLayout {
+            horizontal-stretch: 1;
+            alignment: center;
+            if !root.confirming: Text {
+                text: root.subject;
+                font-weight: 600;
+                overflow: elide;
+            }
+
+            if !root.confirming && root.topic != "": Text {
+                text: root.topic;
+                color: Theme.muted;
+                overflow: elide;
+            }
+
+            // The question takes the subject's place so the clock and buttons stay put.
+            if root.confirming: Text {
+                text: Strings.study-discard-question;
+                wrap: word-wrap;
+            }
+        }
+
+        Text {
+            text: root.clock;
+            font-size: 28px;
+            font-weight: 700;
+            font-family: "Consolas";
+            vertical-alignment: center;
+            accessible-role: text;
+            accessible-label: root.clock;
+        }
+
+        if !root.confirming: SubtleButton {
+            text: @tr("Discard");
+            color: Palette.foreground;
+            clicked => {
+                root.confirming = true;
+            }
+        }
+
+        if !root.confirming: InkButton {
+            text: @tr("Finish");
+            clicked => {
+                root.finish();
+            }
+        }
+
+        if root.confirming: SubtleButton {
+            text: @tr("Keep");
+            color: Palette.foreground;
+            init => {
+                self.focus();
+            }
+            clicked => {
+                root.confirming = false;
+            }
+        }
+
+        if root.confirming: InkButton {
+            text: @tr("Discard");
+            clicked => {
+                root.confirming = false;
+                root.discard();
+            }
+        }
+    }
+}

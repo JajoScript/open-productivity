@@ -49,13 +49,40 @@ pub fn list_topics(
     now: DateTime<FixedOffset>,
 ) -> Result<Vec<Topic>, StudyError> {
     let midnight = local_midnight(now).map_err(|e| StudyError::BadDate(e.to_string()))?;
-    let mut stmt = conn.prepare(
+    query_topics(conn, "(t.done_at IS NULL OR t.done_at >= ?1)", [midnight])
+}
+
+/// The topics of `list_topics` due exactly today, the same rule as the Tasks Today view.
+pub fn today_topics(
+    conn: &Connection,
+    now: DateTime<FixedOffset>,
+) -> Result<Vec<Topic>, StudyError> {
+    let midnight = local_midnight(now).map_err(|e| StudyError::BadDate(e.to_string()))?;
+    query_topics(
+        conn,
+        "(t.done_at IS NULL OR t.done_at >= ?1) AND t.due_date = ?2",
+        (midnight, now.date_naive().to_string()),
+    )
+}
+
+/// The pending topics of one active subject, in `list_topics` order: what a session can point at.
+pub fn subject_topics(conn: &Connection, subject: SubjectId) -> Result<Vec<Topic>, StudyError> {
+    query_topics(conn, "t.done_at IS NULL AND s.id = ?1", [subject.0])
+}
+
+/// `condition` is a literal written here in `study`, never user input; values go in `params`.
+fn query_topics(
+    conn: &Connection,
+    condition: &str,
+    params: impl rusqlite::Params,
+) -> Result<Vec<Topic>, StudyError> {
+    let mut stmt = conn.prepare(&format!(
         "SELECT t.id, t.title, s.id, s.name, t.due_date, t.done_at IS NOT NULL
          FROM task t JOIN subject s ON s.id = t.subject_id
-         WHERE s.archived = 0 AND (t.done_at IS NULL OR t.done_at >= ?1)
-         ORDER BY t.done_at IS NOT NULL, t.due_date IS NULL, t.due_date, t.created_at, t.id",
-    )?;
-    let rows = stmt.query_map([midnight], |r| {
+         WHERE s.archived = 0 AND {condition}
+         ORDER BY t.done_at IS NOT NULL, t.due_date IS NULL, t.due_date, t.created_at, t.id"
+    ))?;
+    let rows = stmt.query_map(params, |r| {
         Ok((
             r.get(0)?,
             r.get(1)?,

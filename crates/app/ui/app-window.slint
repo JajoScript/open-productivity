@@ -10,6 +10,7 @@ import { ListCreator } from "tasks/list-creator.slint";
 import { HabitCreator } from "habits/habit-creator.slint";
 import { ArchivedHabits } from "habits/archived-habits.slint";
 import { SessionLogger } from "study/session-logger.slint";
+import { SessionStarter } from "study/session-starter.slint";
 import { TopicCreator } from "study/topic-creator.slint";
 import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
@@ -132,10 +133,24 @@ export component AppWindow inherits Window {
     in-out property <SubjectTab> subject-tab;
     in-out property <bool> subject-open;
     in property <string> study-error;
+    // A muted confirmation under the header, e.g. after saving a session.
+    in property <string> study-notice;
+    // The running Flowtime session, shown as a card on top of the Study view.
+    in property <bool> study-active;
+    in property <string> study-active-subject;
+    in property <string> study-active-topic;
+    in property <string> study-clock;
     in property <[TopicRow]> study-topics;
+    in property <[TopicRow]> study-today-topics;
+    // The pending topics of the subject chosen in the session modal.
+    in property <[TopicRow]> logger-topics;
     // Both return the error to show; empty means it worked.
     callback create-subject(string) -> string;
-    callback log-study-session(int, Date, string, string) -> string;
+    callback log-study-session(int, bool, int, Date, string, string) -> string;
+    callback load-subject-topics(int);
+    callback start-study(int, bool, int) -> string;
+    callback finish-study();
+    callback discard-study();
     callback create-topic(int, string, bool, Date) -> string;
     callback set-topic-done(int, bool);
     callback rename-subject(int, string) -> string;
@@ -173,10 +188,17 @@ export component AppWindow inherits Window {
         topic-creator.show();
     }
 
+    function open-start-session() {
+        root.log-subject = root.subject-open && !root.subject-detail.archived ? root.subject-detail.id : root.active-subjects[0].id;
+        root.load-subject-topics(root.log-subject);
+        session-starter.show();
+    }
+
     function open-log-session() {
         // The open subject if it can take sessions, else the first active one.
         root.log-subject = root.subject-open && !root.subject-detail.archived ? root.subject-detail.id : root.active-subjects[0].id;
         root.log-date = Calendar.today();
+        root.load-subject-topics(root.log-subject);
         session-logger.show();
     }
 
@@ -272,12 +294,30 @@ export component AppWindow inherits Window {
 
         session-logger := SessionLogger {
             subjects: root.active-subjects;
+            topics: root.logger-topics;
             subject-id: root.log-subject;
             date: root.log-date;
             x: (root.width - self.width) / 2;
             y: 120px;
-            log(id, date, minutes, description) => {
-                return root.log-study-session(id, date, minutes, description);
+            subject-changed(id) => {
+                root.load-subject-topics(id);
+            }
+            log(id, has-topic, topic-id, date, minutes, description) => {
+                return root.log-study-session(id, has-topic, topic-id, date, minutes, description);
+            }
+        }
+
+        session-starter := SessionStarter {
+            subjects: root.active-subjects;
+            topics: root.logger-topics;
+            subject-id: root.log-subject;
+            x: (root.width - self.width) / 2;
+            y: 120px;
+            subject-changed(id) => {
+                root.load-subject-topics(id);
+            }
+            start(id, has-topic, topic-id) => {
+                return root.start-study(id, has-topic, topic-id);
             }
         }
 
@@ -452,9 +492,15 @@ export component AppWindow inherits Window {
                     any-subject: root.any-subject;
                     can-log: root.active-subjects.length > 0;
                     topics: root.study-topics;
+                    today-topics: root.study-today-topics;
                     detail: root.subject-detail;
                     sessions: root.subject-sessions;
                     error: root.study-error;
+                    notice: root.study-notice;
+                    active: root.study-active;
+                    active-subject: root.study-active-subject;
+                    active-topic: root.study-active-topic;
+                    clock: root.study-clock;
                     tab <=> root.subject-tab;
                     detail-open <=> root.subject-open;
                     new-subject => {
@@ -481,6 +527,15 @@ export component AppWindow inherits Window {
                     }
                     log-session => {
                         root.open-log-session();
+                    }
+                    start-session => {
+                        root.open-start-session();
+                    }
+                    finish-session => {
+                        root.finish-study();
+                    }
+                    discard-session => {
+                        root.discard-study();
                     }
                     new-topic => {
                         root.open-new-topic();
