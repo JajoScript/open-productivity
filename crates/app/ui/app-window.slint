@@ -10,22 +10,99 @@ import { ListCreator } from "tasks/list-creator.slint";
 import { HabitCreator } from "habits/habit-creator.slint";
 import { ArchivedHabits } from "habits/archived-habits.slint";
 import { SessionLogger } from "study/session-logger.slint";
-import { SessionStarter } from "study/session-starter.slint";
 import { TopicCreator } from "study/topic-creator.slint";
 import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
 import { SessionRow } from "study/subject-detail.slint";
-import { SubjectRow, SubjectTab, TopicRow } from "study/subject-row.slint";
-import { ArchivedRow, DayState, HabitRow, HabitsView, HeatCell, HeatLevel, WeekTotal } from "habits/habits-view.slint";
-import { CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource, CalendarTask, CalendarView, WeekBlock, WeekColumn } from "calendar/calendar-view.slint";
+import {
+    StudyMode,
+    SubjectRow,
+    SubjectTab,
+    TopicRow,
+} from "study/subject-row.slint";
+import {
+    ArchivedRow,
+    DayState,
+    HabitRow,
+    HabitsView,
+    HeatCell,
+    HeatLevel,
+    WeekTotal,
+} from "habits/habits-view.slint";
+import {
+    CalendarDay,
+    CalendarEntry,
+    CalendarHabit,
+    CalendarMode,
+    CalendarSource,
+    CalendarTask,
+    CalendarView,
+    WeekBlock,
+    WeekColumn,
+} from "calendar/calendar-view.slint";
 import { Module, Rail } from "rail.slint";
 import { QuickCreate } from "quick-create.slint";
 import { TaskCreator } from "tasks/task-creator.slint";
-import { ColorMode, Language, SettingsView } from "settings/settings-view.slint";
+import {
+    ColorMode,
+    Language,
+    SettingsView,
+} from "settings/settings-view.slint";
 import { InstanceRow } from "settings/data-section.slint";
-import { DayHabit, DueKind, KanbanColumn, Quadrant, Repeat, Stage, TaskRow, TasksTab, TaskView, TasksView, ViewCounts, WeekDay } from "tasks/tasks-view.slint";
-export { ArchivedRow, Calendar, Repeat, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource, CalendarTask, WeekBlock, WeekColumn, DayHabit, Date, DayState, DueKind, HabitRow, HeatCell, HeatLevel, InstanceRow, KanbanColumn, Quadrant, Stage, ColorMode, Language, ListEntry, MonthView, SessionRow, Strings, SubjectRow, SubjectTab, TaskRow, TasksTab, TaskView, TopicRow, ViewCounts, WeekDay, WeekTotal }
-
+import {
+    DayHabit,
+    DueKind,
+    KanbanColumn,
+    Quadrant,
+    Repeat,
+    Stage,
+    TaskRow,
+    TasksTab,
+    TaskView,
+    TasksView,
+    ViewCounts,
+    WeekDay,
+} from "tasks/tasks-view.slint";
+export {
+    ArchivedRow,
+    Calendar,
+    Repeat,
+    CalendarDay,
+    CalendarEntry,
+    CalendarHabit,
+    CalendarMode,
+    CalendarSource,
+    CalendarTask,
+    WeekBlock,
+    WeekColumn,
+    DayHabit,
+    Date,
+    DayState,
+    DueKind,
+    HabitRow,
+    HeatCell,
+    HeatLevel,
+    InstanceRow,
+    KanbanColumn,
+    Quadrant,
+    Stage,
+    ColorMode,
+    Language,
+    ListEntry,
+    MonthView,
+    SessionRow,
+    Strings,
+    StudyMode,
+    SubjectRow,
+    SubjectTab,
+    TaskRow,
+    TasksTab,
+    TaskView,
+    TopicRow,
+    ViewCounts,
+    WeekDay,
+    WeekTotal,
+}
 export component AppWindow inherits Window {
     icon: @image-url("app-icons/icon_256x256.png");
     in property <string> instance-name;
@@ -141,6 +218,12 @@ export component AppWindow inherits Window {
     in property <string> study-active-topic;
     in property <string> study-clock;
     in property <bool> study-paused;
+    // Only for a Pomodoro: the phase, and the pomodoros completed so far.
+    in property <bool> study-pomodoro;
+    in property <bool> study-on-break;
+    in property <int> study-pomodoros;
+    // The mode the session modal opens with: the last one used.
+    in-out property <StudyMode> study-mode;
     in property <[TopicRow]> study-topics;
     in property <[TopicRow]> study-today-topics;
     // The pending topics of the subject chosen in the session modal.
@@ -149,7 +232,10 @@ export component AppWindow inherits Window {
     callback create-subject(string) -> string;
     callback log-study-session(int, bool, int, Date, string, string) -> string;
     callback load-subject-topics(int);
-    callback start-study(int, bool, int) -> string;
+    callback start-study(int, bool, int, StudyMode) -> string;
+    // The first clock and the break minutes of a mode, for the session panel.
+    pure callback study-preview(StudyMode) -> string;
+    pure callback study-break-minutes(StudyMode) -> int;
     callback finish-study();
     callback discard-study();
     callback pause-study();
@@ -178,6 +264,7 @@ export component AppWindow inherits Window {
     property <string> habit-edit-name;
     property <[bool]> habit-edit-days;
     property <Date> habit-edit-start;
+    property <bool> study-session-open;
     // What the session modal opens with.
     property <int> log-subject;
     property <Date> log-date;
@@ -194,7 +281,7 @@ export component AppWindow inherits Window {
     function open-start-session() {
         root.log-subject = root.subject-open && !root.subject-detail.archived ? root.subject-detail.id : root.active-subjects[0].id;
         root.load-subject-topics(root.log-subject);
-        session-starter.show();
+        root.study-session-open = true;
     }
 
     function open-log-session() {
@@ -235,6 +322,9 @@ export component AppWindow inherits Window {
         root.entering = true;
     }
     changed current-list-id => {
+        root.entering = true;
+    }
+    changed study-session-open => {
         root.entering = true;
     }
     Timer {
@@ -310,20 +400,6 @@ export component AppWindow inherits Window {
             }
         }
 
-        session-starter := SessionStarter {
-            subjects: root.active-subjects;
-            topics: root.logger-topics;
-            subject-id: root.log-subject;
-            x: (root.width - self.width) / 2;
-            y: 120px;
-            subject-changed(id) => {
-                root.load-subject-topics(id);
-            }
-            start(id, has-topic, topic-id) => {
-                return root.start-study(id, has-topic, topic-id);
-            }
-        }
-
         archived-popup := ArchivedHabits {
             habits: root.archived-habits;
             x: (root.width - self.width) / 2;
@@ -364,7 +440,10 @@ export component AppWindow inherits Window {
                         opacity: 0;
                         y: 6px;
                         out {
-                            animate opacity, y { duration: Theme.enter; easing: Theme.ease-out; }
+                            animate opacity, y {
+                                duration: Theme.enter;
+                                easing: Theme.ease-out;
+                            }
                         }
                     }
                 ]
@@ -505,8 +584,28 @@ export component AppWindow inherits Window {
                     active-topic: root.study-active-topic;
                     clock: root.study-clock;
                     paused: root.study-paused;
+                    pomodoro: root.study-pomodoro;
+                    on-break: root.study-on-break;
+                    pomodoros: root.study-pomodoros;
                     tab <=> root.subject-tab;
                     detail-open <=> root.subject-open;
+                    session-open <=> root.study-session-open;
+                    session-subjects: root.active-subjects;
+                    session-topics: root.logger-topics;
+                    session-initial-subject: root.log-subject;
+                    session-mode <=> root.study-mode;
+                    session-preview(mode) => {
+                        return root.study-preview(mode);
+                    }
+                    session-break-minutes(mode) => {
+                        return root.study-break-minutes(mode);
+                    }
+                    session-subject-changed(id) => {
+                        root.load-subject-topics(id);
+                    }
+                    session-start(id, has-topic, topic-id, mode) => {
+                        return root.start-study(id, has-topic, topic-id, mode);
+                    }
                     new-subject => {
                         root.subject-editing = false;
                         root.subject-edit-name = "";

@@ -1,0 +1,326 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ScrollView } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { ChoiceRow } from "session-logger.slint";
+import { StudyMode, SubjectRow, TopicRow } from "subject-row.slint";
+
+// A row of mutually exclusive options; the chosen one gets the ink wash.
+component Segmented inherits Rectangle {
+    in property <[string]> labels;
+    in property <int> current;
+    callback picked(int);
+
+    height: 32px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+
+    HorizontalLayout {
+        padding: 2px;
+        spacing: 2px;
+        for label[i] in root.labels: Rectangle {
+            border-radius: 4px;
+            background: i == root.current ? Theme.selected : touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+            animate background {
+                duration: Theme.fast;
+                easing: Theme.ease-out;
+            }
+            accessible-role: button;
+            accessible-label: label;
+            accessible-checkable: true;
+            accessible-checked: i == root.current;
+            accessible-action-default => {
+                root.picked(i);
+            }
+
+            Text {
+                text: label;
+                font-weight: i == root.current ? 600 : 400;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+
+            touch := TouchArea {
+                clicked => {
+                    root.picked(i);
+                }
+            }
+        }
+    }
+}
+
+// The session screen: prepares a session (subject, topic, mode) and, once it runs, shows the
+// big clock with its controls. Which one shows follows `active`.
+export component SessionPanel inherits FocusScope {
+    in property <[SubjectRow]> subjects;
+    // The pending topics of the chosen subject, which the owner refills on `subject-changed`.
+    in property <[TopicRow]> topics;
+    in property <int> initial-subject;
+    in-out property <StudyMode> mode;
+    in property <string> error;
+    in property <string> notice;
+    in property <bool> active;
+    in property <string> active-subject;
+    in property <string> active-topic;
+    in property <string> clock;
+    in property <bool> paused;
+    in property <bool> pomodoro;
+    in property <bool> on-break;
+    in property <int> pomodoros;
+    // The first clock and the break length of a mode, from `core`.
+    pure callback preview(StudyMode) -> string;
+    pure callback break-minutes(StudyMode) -> int;
+    // Returns the error to show; empty means it started.
+    callback start(int, bool, int, StudyMode) -> string;
+    callback subject-changed(int);
+    callback finish;
+    callback discard;
+    callback pause;
+    callback resume;
+    callback close;
+
+    // `topic-id` only matters when `has-topic`.
+    property <int> subject-id: root.initial-subject;
+    property <bool> has-topic;
+    property <int> topic-id;
+    property <string> start-error;
+    // Discarding asks in place, since the time cannot be recovered.
+    property <bool> confirming;
+    property <bool> is-pomodoro: root.mode != StudyMode.flowtime;
+
+    init => {
+        self.focus();
+    }
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.close();
+            return accept;
+        }
+        reject
+    }
+
+    VerticalLayout {
+        spacing: 12px;
+        HorizontalLayout {
+            spacing: 8px;
+            SubtleButton {
+                icon: @image-url("../icons/chevron-left.svg");
+                label: @tr("Back");
+                clicked => {
+                    root.close();
+                }
+            }
+
+            Text {
+                text: root.active ? root.active-subject : @tr("Study session");
+                font-size: 24px;
+                font-weight: 700;
+                vertical-alignment: center;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+        }
+
+        HorizontalLayout {
+            vertical-stretch: 1;
+            alignment: center;
+            VerticalLayout {
+                width: min(parent.width, 420px);
+                spacing: 16px;
+                alignment: center;
+                if !root.active: VerticalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: @tr("Subject");
+                        color: Theme.muted;
+                    }
+
+                    ScrollView {
+                        height: min(root.subjects.length * 32px, 96px);
+                        VerticalLayout {
+                            for subject in root.subjects: ChoiceRow {
+                                label: subject.name;
+                                icon: @image-url("../icons/notebook-text.svg");
+                                chosen: subject.id == root.subject-id;
+                                picked => {
+                                    if subject.id != root.subject-id {
+                                        root.subject-id = subject.id;
+                                        root.has-topic = false;
+                                        root.subject-changed(subject.id);
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                    Text {
+                        text: @tr("Topic");
+                        color: Theme.muted;
+                    }
+
+                    ScrollView {
+                        height: min((root.topics.length + 1) * 32px, 96px);
+                        VerticalLayout {
+                            ChoiceRow {
+                                label: @tr("No topic");
+                                icon: @image-url("../icons/x.svg");
+                                chosen: !root.has-topic;
+                                picked => {
+                                    root.has-topic = false;
+                                }
+                            }
+
+                            for topic in root.topics: ChoiceRow {
+                                label: topic.title;
+                                icon: @image-url("../icons/list-todo.svg");
+                                chosen: root.has-topic && topic.id == root.topic-id;
+                                picked => {
+                                    root.has-topic = true;
+                                    root.topic-id = topic.id;
+                                }
+                            }
+                        }
+                    }
+                }
+
+                if !root.active: HorizontalLayout {
+                    alignment: center;
+                    Segmented {
+                        width: 240px;
+                        labels: [@tr("Pomodoro"), @tr("Flowtime")];
+                        current: root.is-pomodoro ? 0 : 1;
+                        picked(i) => {
+                            if i == 1 {
+                                root.mode = StudyMode.flowtime;
+                            } else if !root.is-pomodoro {
+                                root.mode = StudyMode.pomodoro25;
+                            }
+                        }
+                    }
+                }
+
+                if root.active && root.active-topic != "": Text {
+                    text: root.active-topic;
+                    color: Theme.muted;
+                    horizontal-alignment: center;
+                    overflow: elide;
+                }
+
+                Text {
+                    text: root.active ? root.clock : root.preview(root.mode);
+                    font-size: 96px;
+                    font-weight: 300;
+                    color: root.active && root.paused ? Theme.muted : Palette.foreground;
+                    horizontal-alignment: center;
+                    accessible-role: text;
+                    accessible-label: self.text;
+                }
+
+                if root.active: Text {
+                    text: root.paused ? @tr("Paused") : root.pomodoro ? (root.on-break ? @tr("Break") : @tr("Focus")) + " · " + @tr("Pomodoros: {}", root.pomodoros) : "";
+                    color: Theme.muted;
+                    horizontal-alignment: center;
+                }
+
+                if !root.active && root.is-pomodoro: Text {
+                    text: @tr("BREAK OF {} MIN", root.break-minutes(root.mode));
+                    color: Theme.muted;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                }
+
+                if !root.active && root.is-pomodoro: Segmented {
+                    labels: ["25 / 5", "50 / 10", "15 / 3"];
+                    current: root.mode == StudyMode.pomodoro25 ? 0 : root.mode == StudyMode.pomodoro50 ? 1 : 2;
+                    picked(i) => {
+                        root.mode = i == 0 ? StudyMode.pomodoro25 : i == 1 ? StudyMode.pomodoro50 : StudyMode.pomodoro15;
+                    }
+                }
+
+                if !root.active: InkButton {
+                    text: @tr("Begin");
+                    icon: @image-url("../icons/play.svg");
+                    clicked => {
+                        root.start-error = root.start(root.subject-id, root.has-topic, root.topic-id, root.mode);
+                    }
+                }
+
+                if root.active && root.confirming: Text {
+                    text: Strings.study-discard-question;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+
+                if root.active: HorizontalLayout {
+                    spacing: 8px;
+                    alignment: center;
+                    if !root.confirming: SubtleButton {
+                        text: root.paused ? @tr("Resume") : @tr("Pause");
+                        color: Palette.foreground;
+                        clicked => {
+                            if root.paused {
+                                root.resume();
+                            } else {
+                                root.pause();
+                            }
+                        }
+                    }
+
+                    if !root.confirming: SubtleButton {
+                        text: @tr("Discard");
+                        color: Palette.foreground;
+                        clicked => {
+                            root.confirming = true;
+                        }
+                    }
+
+                    if !root.confirming: InkButton {
+                        text: @tr("Finish");
+                        clicked => {
+                            root.finish();
+                        }
+                    }
+
+                    if root.confirming: SubtleButton {
+                        text: @tr("Keep");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            root.confirming = false;
+                        }
+                    }
+
+                    if root.confirming: InkButton {
+                        text: @tr("Discard");
+                        clicked => {
+                            root.confirming = false;
+                            root.discard();
+                        }
+                    }
+                }
+
+                if root.start-error != "" || root.error != "": Text {
+                    text: root.start-error != "" ? root.start-error : root.error;
+                    color: Theme.critical;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+
+                if root.notice != "": Text {
+                    text: root.notice;
+                    color: Theme.muted;
+                    horizontal-alignment: center;
+                    wrap: word-wrap;
+                }
+            }
+        }
+    }
+}

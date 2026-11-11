@@ -6,13 +6,14 @@ import { EmptyState } from "../empty-state.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
 import { ActiveSessionCard } from "active-session-card.slint";
+import { SessionPanel } from "session-panel.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { SubjectDetail, SessionRow } from "subject-detail.slint";
 import { SubjectPreview } from "subject-preview.slint";
-import { SubjectRow, SubjectTab, TopicRow } from "subject-row.slint";
+import { StudyMode, SubjectRow, SubjectTab, TopicRow } from "subject-row.slint";
 
 component SubjectLine inherits Rectangle {
     in property <SubjectRow> subject;
@@ -21,7 +22,10 @@ component SubjectLine inherits Rectangle {
     height: 40px;
     border-radius: 6px;
     background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
-    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    animate background {
+        duration: Theme.fast;
+        easing: Theme.ease-out;
+    }
     forward-focus: focus;
     accessible-role: button;
     accessible-label: Strings.subject-line-label(root.subject.name, root.subject.duration, root.subject.sessions);
@@ -97,7 +101,10 @@ component TopicLine inherits Rectangle {
     height: 36px;
     border-radius: 6px;
     background: touch.has-hover ? Theme.hover : transparent;
-    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    animate background {
+        duration: Theme.fast;
+        easing: Theme.ease-out;
+    }
 
     // Wraps the controls, so the row keeps its hover while the pointer is over them.
     touch := TouchArea {
@@ -127,6 +134,7 @@ component TopicLine inherits Rectangle {
                 color: Theme.muted;
                 vertical-alignment: center;
                 overflow: elide;
+                max-width: 240px;
                 accessible-role: none;
             }
 
@@ -225,8 +233,22 @@ export component StudyView inherits VerticalLayout {
     in property <string> active-topic;
     in property <string> clock;
     in property <bool> paused;
+    in property <bool> pomodoro;
+    in property <bool> on-break;
+    in property <int> pomodoros;
     in-out property <SubjectTab> tab;
     in-out property <bool> detail-open;
+    // The session screen replaces the whole view while open.
+    in-out property <bool> session-open;
+    // For the session screen: the subjects it can start on, the chosen subject's pending topics.
+    in property <[SubjectRow]> session-subjects;
+    in property <[TopicRow]> session-topics;
+    in property <int> session-initial-subject;
+    in-out property <StudyMode> session-mode;
+    pure callback session-preview(StudyMode) -> string;
+    pure callback session-break-minutes(StudyMode) -> int;
+    callback session-start(int, bool, int, StudyMode) -> string;
+    callback session-subject-changed(int);
     callback new-subject();
     callback new-topic();
     callback log-session();
@@ -246,72 +268,33 @@ export component StudyView inherits VerticalLayout {
     padding-top: 20px;
     spacing: 12px;
 
-    HorizontalLayout {
-        spacing: 8px;
-        Text {
-            text: @tr("Study");
-            font-size: 24px;
-            font-weight: 700;
-            vertical-alignment: center;
-            overflow: elide;
-        }
-
-        Rectangle {
-            horizontal-stretch: 1;
-        }
-
-        SubtleButton {
-            text: @tr("New subject");
-            color: Palette.foreground;
-            clicked => {
-                root.new-subject();
-            }
-        }
-
-        SubtleButton {
-            text: @tr("New topic");
-            color: Palette.foreground;
-            enabled: root.can-log;
-            clicked => {
-                root.new-topic();
-            }
-        }
-
-        SubtleButton {
-            text: @tr("Start session");
-            color: Palette.foreground;
-            enabled: root.can-log && !root.active;
-            clicked => {
-                root.start-session();
-            }
-        }
-
-        InkButton {
-            text: @tr("Log session");
-            enabled: root.can-log;
-            clicked => {
-                root.log-session();
-            }
-        }
-    }
-
-    if root.error != "": Text {
-        text: root.error;
-        color: Theme.critical;
-        wrap: word-wrap;
-    }
-
-    if root.notice != "": Text {
-        text: root.notice;
-        color: Theme.muted;
-        wrap: word-wrap;
-    }
-
-    if root.active: ActiveSessionCard {
-        subject: root.active-subject;
-        topic: root.active-topic;
+    if root.session-open: SessionPanel {
+        subjects: root.session-subjects;
+        topics: root.session-topics;
+        initial-subject: root.session-initial-subject;
+        error: root.error;
+        notice: root.notice;
+        active: root.active;
+        active-subject: root.active-subject;
+        active-topic: root.active-topic;
         clock: root.clock;
         paused: root.paused;
+        pomodoro: root.pomodoro;
+        on-break: root.on-break;
+        pomodoros: root.pomodoros;
+        mode <=> root.session-mode;
+        preview(mode) => {
+            return root.session-preview(mode);
+        }
+        break-minutes(mode) => {
+            return root.session-break-minutes(mode);
+        }
+        subject-changed(id) => {
+            root.session-subject-changed(id);
+        }
+        start(id, has-topic, topic-id, mode) => {
+            return root.session-start(id, has-topic, topic-id, mode);
+        }
         finish => {
             root.finish-session();
         }
@@ -324,107 +307,203 @@ export component StudyView inherits VerticalLayout {
         resume => {
             root.resume-session();
         }
-    }
-
-    if !root.any-subject: EmptyState {
-        title: @tr("Create your first subject");
-        description: @tr("Group what you study by subject. Every session you log adds hours to its subject, so you can see how much time each one gets.");
-        action: @tr("New subject");
-        clicked => {
-            root.new-subject();
-        }
-
-        SubjectPreview { }
-    }
-
-    if root.any-subject && root.detail-open: SubjectDetail {
-        subject: root.detail;
-        sessions: root.sessions;
-        back => {
-            root.detail-open = false;
-        }
-        rename => {
-            root.rename-subject();
-        }
-        set-archived(archived) => {
-            root.set-archived(root.detail.id, archived);
-        }
-        delete-session(id) => {
-            root.delete-session(id);
+        close => {
+            root.session-open = false;
         }
     }
 
-    if root.any-subject && !root.detail-open: Text {
-        text: @tr("Today's study");
-        font-weight: 700;
-        color: Palette.foreground.with-alpha(0.7);
-    }
+    if !root.session-open: VerticalLayout {
+        spacing: 12px;
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: @tr("Study");
+                font-size: 24px;
+                font-weight: 700;
+                vertical-alignment: center;
+                overflow: elide;
+            }
 
-    if root.any-subject && !root.detail-open && root.today-topics.length == 0: Text {
-        text: @tr("Nothing due today. Give a topic today's date to see it here.");
-        color: Theme.muted;
-        wrap: word-wrap;
-    }
+            Rectangle {
+                horizontal-stretch: 1;
+            }
 
-    // No ListView: the section is short and takes its natural height.
-    if root.any-subject && !root.detail-open && root.today-topics.length > 0: VerticalLayout {
-        for topic in root.today-topics: TopicLine {
-            topic: topic;
-            toggled(done) => {
-                root.set-topic-done(topic.id, done);
+            SubtleButton {
+                text: @tr("New subject");
+                color: Palette.foreground;
+                clicked => {
+                    root.new-subject();
+                }
+            }
+
+            SubtleButton {
+                text: @tr("New topic");
+                color: Palette.foreground;
+                enabled: root.can-log;
+                clicked => {
+                    root.new-topic();
+                }
+            }
+
+            SubtleButton {
+                text: @tr("Start session");
+                color: Palette.foreground;
+                enabled: root.can-log && !root.active;
+                clicked => {
+                    root.start-session();
+                }
+            }
+
+            InkButton {
+                text: @tr("Log session");
+                enabled: root.can-log;
+                clicked => {
+                    root.log-session();
+                }
             }
         }
-    }
 
-    if root.any-subject && !root.detail-open: Text {
-        text: Strings.subjects-count(root.subjects.length);
-        font-weight: 700;
-        color: Palette.foreground.with-alpha(0.7);
-    }
-
-    if root.any-subject && !root.detail-open: SubjectTabs {
-        tab <=> root.tab;
-        changed => {
-            root.tab-changed();
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
         }
-    }
 
-    if root.any-subject && !root.detail-open && root.subjects.length == 0: Text {
-        text: root.tab == SubjectTab.archived ? @tr("No archived subjects. Archive one from its page to tuck it away.") : @tr("No active subjects. Restore one from the Archived tab or create a new one.");
-        color: Theme.muted;
-        wrap: word-wrap;
-        vertical-stretch: 1; // takes the ListView's place, or the header stretches instead
-    }
+        if root.notice != "": Text {
+            text: root.notice;
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
 
-    if root.any-subject && !root.detail-open && root.subjects.length > 0: ListView {
-        vertical-stretch: 1;
-        for subject in root.subjects: SubjectLine {
-            subject: subject;
+        if root.active: ActiveSessionCard {
+            subject: root.active-subject;
+            topic: root.active-topic;
+            clock: root.clock;
+            paused: root.paused;
+            pomodoro: root.pomodoro;
+            on-break: root.on-break;
+            pomodoros: root.pomodoros;
             opened => {
-                root.open-subject(subject.id);
+                root.start-session();
+            }
+            finish => {
+                root.finish-session();
+            }
+            discard => {
+                root.discard-session();
+            }
+            pause => {
+                root.pause-session();
+            }
+            resume => {
+                root.resume-session();
             }
         }
-    }
 
-    if root.any-subject && !root.detail-open: Text {
-        text: @tr("Topics");
-        font-weight: 700;
-        color: Palette.foreground.with-alpha(0.7);
-    }
-
-    if root.any-subject && !root.detail-open && root.topics.length == 0: Text {
-        text: @tr("No topics yet. Add what you need to study on a subject with New topic.");
-        color: Theme.muted;
-        wrap: word-wrap;
-    }
-
-    if root.any-subject && !root.detail-open && root.topics.length > 0: ListView {
-        vertical-stretch: 1;
-        for topic in root.topics: TopicLine {
-            topic: topic;
-            toggled(done) => {
-                root.set-topic-done(topic.id, done);
+        if !root.any-subject: EmptyState {
+            title: @tr("Create your first subject");
+            description: @tr("Group what you study by subject. Every session you log adds hours to its subject, so you can see how much time each one gets.");
+            action: @tr("New subject");
+            clicked => {
+                root.new-subject();
             }
+
+            SubjectPreview { }
+        }
+
+        if root.any-subject && root.detail-open: SubjectDetail {
+            subject: root.detail;
+            sessions: root.sessions;
+            back => {
+                root.detail-open = false;
+            }
+            rename => {
+                root.rename-subject();
+            }
+            set-archived(archived) => {
+                root.set-archived(root.detail.id, archived);
+            }
+            delete-session(id) => {
+                root.delete-session(id);
+            }
+        }
+
+        if root.any-subject && !root.detail-open: Text {
+            text: @tr("Today's study");
+            font-weight: 700;
+            color: Palette.foreground.with-alpha(0.7);
+        }
+
+        if root.any-subject && !root.detail-open && root.today-topics.length == 0: Text {
+            text: @tr("Nothing due today. Give a topic today's date to see it here.");
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+
+        // No ListView: the section is short and takes its natural height.
+    if root.any-subject && !root.detail-open && root.today-topics.length > 0: VerticalLayout {
+            for topic in root.today-topics: TopicLine {
+                topic: topic;
+                toggled(done) => {
+                    root.set-topic-done(topic.id, done);
+                }
+            }
+        }
+
+        if root.any-subject && !root.detail-open: Text {
+            text: Strings.subjects-count(root.subjects.length);
+            font-weight: 700;
+            color: Palette.foreground.with-alpha(0.7);
+        }
+
+        if root.any-subject && !root.detail-open: SubjectTabs {
+            tab <=> root.tab;
+            changed => {
+                root.tab-changed();
+            }
+        }
+
+        if root.any-subject && !root.detail-open && root.subjects.length == 0: Text {
+            text: root.tab == SubjectTab.archived ? @tr("No archived subjects. Archive one from its page to tuck it away.") : @tr("No active subjects. Restore one from the Archived tab or create a new one.");
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+
+        if root.any-subject && !root.detail-open && root.subjects.length > 0: ListView {
+            height: min(root.subjects.length * 40px, 240px);
+            for subject in root.subjects: SubjectLine {
+                subject: subject;
+                opened => {
+                    root.open-subject(subject.id);
+                }
+            }
+        }
+
+        if root.any-subject && !root.detail-open: Text {
+            text: @tr("Topics");
+            font-weight: 700;
+            color: Palette.foreground.with-alpha(0.7);
+        }
+
+        if root.any-subject && !root.detail-open && root.topics.length == 0: Text {
+            text: @tr("No topics yet. Add what you need to study on a subject with New topic.");
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+
+        if root.any-subject && !root.detail-open && root.topics.length > 0: ListView {
+            height: min(root.topics.length * 36px, 240px);
+            for topic in root.topics: TopicLine {
+                topic: topic;
+                toggled(done) => {
+                    root.set-topic-done(topic.id, done);
+                }
+            }
+        }
+
+        // Whatever height the lists leave goes to the end of the view, not between sections.
+        if root.any-subject && !root.detail-open: Rectangle {
+            vertical-stretch: 1;
         }
     }
 }

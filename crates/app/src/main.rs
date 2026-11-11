@@ -160,7 +160,7 @@ fn main() {
     let conn = Rc::new(conn);
     let tasks_timer = tasks::init(&window, conn.clone(), &app_dir);
     let habits_timer = habits::init(&window, conn.clone());
-    let study_timer = study::init(&window, conn.clone());
+    let study_timer = study::init(&window, conn.clone(), &app_dir);
     data::init(&window, conn);
 
     let name = instance.file_name().map_or_else(

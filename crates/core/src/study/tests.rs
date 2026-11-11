@@ -417,30 +417,30 @@ mod timer {
         let (conn, s) = setup();
         let now = at("2026-11-08T10:00:00-05:00");
         assert!(matches!(
-            start_session(&conn, SubjectId(99), None, now),
+            start_session(&conn, SubjectId(99), None, now, None),
             Err(StudyError::SubjectNotFound)
         ));
         let other = create_subject(&conn, "Art").unwrap();
         let foreign = create_topic(&conn, other, "Color", None).unwrap();
         assert!(matches!(
-            start_session(&conn, s, Some(foreign), now),
+            start_session(&conn, s, Some(foreign), now, None),
             Err(StudyError::TopicNotFound)
         ));
         let done = create_topic(&conn, s, "Done", None).unwrap();
         crate::tasks::set_done(&conn, done, true, now.date_naive()).unwrap();
         assert!(matches!(
-            start_session(&conn, s, Some(done), now),
+            start_session(&conn, s, Some(done), now, None),
             Err(StudyError::TopicNotFound)
         ));
         set_subject_archived(&conn, other, true).unwrap();
         assert!(matches!(
-            start_session(&conn, other, None, now),
+            start_session(&conn, other, None, now, None),
             Err(StudyError::SubjectArchived)
         ));
         assert!(active_session(&conn, now).unwrap().is_none());
-        start_session(&conn, s, None, now).unwrap();
+        start_session(&conn, s, None, now, None).unwrap();
         assert!(matches!(
-            start_session(&conn, s, None, now),
+            start_session(&conn, s, None, now, None),
             Err(StudyError::SessionActive)
         ));
     }
@@ -448,7 +448,7 @@ mod timer {
     #[test]
     fn elapsed_counts_small_gaps_only() {
         let (conn, s) = setup();
-        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z"), None).unwrap();
         assert_eq!(elapsed(&conn, "2026-11-08T10:00:00Z"), 0);
         assert_eq!(elapsed(&conn, "2026-11-08T10:01:30Z"), 90);
         assert_eq!(elapsed(&conn, "2026-11-08T10:02:00Z"), 120);
@@ -460,7 +460,7 @@ mod timer {
     fn heartbeat_banks_and_ignores_long_gaps() {
         let (conn, s) = setup();
         heartbeat(&conn, at("2026-11-08T10:00:00Z")).unwrap();
-        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z"), None).unwrap();
         heartbeat(&conn, at("2026-11-08T10:01:00Z")).unwrap();
         assert_eq!(elapsed(&conn, "2026-11-08T10:01:00Z"), 60);
         assert_eq!(elapsed(&conn, "2026-11-08T10:01:30Z"), 90);
@@ -475,7 +475,7 @@ mod timer {
     #[test]
     fn pause_banks_and_stops_counting() {
         let (conn, s) = setup();
-        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z"), None).unwrap();
         pause_session(&conn, at("2026-11-08T10:00:50Z")).unwrap();
         assert!(paused(&conn, "2026-11-08T10:00:50Z"));
         assert_eq!(elapsed(&conn, "2026-11-08T10:01:20Z"), 50);
@@ -489,7 +489,7 @@ mod timer {
     #[test]
     fn resume_does_not_count_the_pause() {
         let (conn, s) = setup();
-        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z"), None).unwrap();
         pause_session(&conn, at("2026-11-08T10:00:50Z")).unwrap();
         resume_session(&conn, at("2026-11-08T10:30:00Z")).unwrap();
         assert!(!paused(&conn, "2026-11-08T10:30:00Z"));
@@ -502,7 +502,7 @@ mod timer {
     #[test]
     fn long_gap_pauses_and_active_session_only_reads() {
         let (conn, s) = setup();
-        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z"), None).unwrap();
         heartbeat(&conn, at("2026-11-08T10:01:00Z")).unwrap();
         assert!(paused(&conn, "2026-11-08T11:00:00Z"));
         assert_eq!(elapsed(&conn, "2026-11-08T11:00:00Z"), 60);
@@ -516,7 +516,7 @@ mod timer {
     #[test]
     fn backwards_clock_counts_nothing_and_does_not_pause() {
         let (conn, s) = setup();
-        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z"), None).unwrap();
         heartbeat(&conn, at("2026-11-08T09:00:00Z")).unwrap();
         assert!(!paused(&conn, "2026-11-08T09:00:10Z"));
         assert_eq!(elapsed(&conn, "2026-11-08T09:00:10Z"), 10);
@@ -525,7 +525,7 @@ mod timer {
     #[test]
     fn finish_while_paused_saves_what_was_counted() {
         let (conn, s) = setup();
-        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z"), None).unwrap();
         heartbeat(&conn, at("2026-11-08T10:01:00Z")).unwrap();
         pause_session(&conn, at("2026-11-08T10:02:10Z")).unwrap();
         assert_eq!(
@@ -552,7 +552,7 @@ mod timer {
     fn finish_floors_minutes_and_saves_on_start_day() {
         let (conn, s) = setup();
         let topic = create_topic(&conn, s, "Limits", None).unwrap();
-        start_session(&conn, s, Some(topic), at("2026-11-08T23:30:00-05:00")).unwrap();
+        start_session(&conn, s, Some(topic), at("2026-11-08T23:30:00-05:00"), None).unwrap();
         for m in 1..=3 {
             heartbeat(&conn, at(&format!("2026-11-08T23:{:02}:00-05:00", 30 + m))).unwrap();
         }
@@ -581,7 +581,7 @@ mod timer {
     fn finish_too_short_or_failing_keeps_the_session() {
         let (conn, s) = setup();
         let topic = create_topic(&conn, s, "Limits", None).unwrap();
-        start_session(&conn, s, Some(topic), at("2026-11-08T10:00:00Z")).unwrap();
+        start_session(&conn, s, Some(topic), at("2026-11-08T10:00:00Z"), None).unwrap();
         assert!(matches!(
             finish_session(&conn, at("2026-11-08T10:00:59Z")),
             Err(StudyError::TooShort)
@@ -616,7 +616,7 @@ mod timer {
             discard_session(&conn),
             Err(StudyError::NoActiveSession)
         ));
-        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z"), None).unwrap();
         discard_session(&conn).unwrap();
         assert!(
             active_session(&conn, at("2026-11-08T10:00:01Z"))
@@ -648,7 +648,7 @@ mod timer {
         let (conn, s) = setup();
         let topic = create_topic(&conn, s, "Limits", None).unwrap();
         let now = at("2026-11-08T10:00:00Z");
-        start_session(&conn, s, Some(topic), now).unwrap();
+        start_session(&conn, s, Some(topic), now, None).unwrap();
         assert_eq!(
             active_session(&conn, now)
                 .unwrap()
@@ -660,5 +660,115 @@ mod timer {
         crate::tasks::delete(&conn, topic).unwrap();
         let active = active_session(&conn, now).unwrap().unwrap();
         assert_eq!((active.subject_name.as_str(), active.topic), ("Math", None));
+    }
+
+    const T0: &str = "2026-11-08T10:00:00Z";
+
+    /// Runs `secs` of the clock in heartbeats under the gap limit.
+    fn run(conn: &Connection, from: i64, secs: i64) -> i64 {
+        let mut t = from;
+        while t < from + secs {
+            t = (t + 100).min(from + secs);
+            heartbeat(conn, at(T0) + chrono::Duration::seconds(t)).unwrap();
+        }
+        t
+    }
+
+    fn view(conn: &Connection, t: i64) -> (i64, Option<PomodoroStatus>) {
+        let a = active_session(conn, at(T0) + chrono::Duration::seconds(t))
+            .unwrap()
+            .unwrap();
+        (a.elapsed_secs, a.pomodoro)
+    }
+
+    fn status(phase: Phase, left_secs: i64, pomodoros: i64) -> Option<PomodoroStatus> {
+        Some(PomodoroStatus {
+            preset: Preset::P15,
+            phase,
+            left_secs,
+            pomodoros,
+        })
+    }
+
+    #[test]
+    fn flowtime_has_no_pomodoro_status() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at(T0), None).unwrap();
+        run(&conn, 0, 1000);
+        assert_eq!(view(&conn, 1000), (1000, None));
+    }
+
+    #[test]
+    fn focus_to_break_adds_a_pomodoro_and_break_does_not_count() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at(T0), Some(Preset::P15)).unwrap();
+        assert_eq!(view(&conn, 0), (0, status(Phase::Focus, 900, 0)));
+        let t = run(&conn, 0, 900);
+        assert_eq!(view(&conn, t), (900, status(Phase::Break, 180, 1)));
+        let t = run(&conn, t, 100);
+        assert_eq!(view(&conn, t), (900, status(Phase::Break, 80, 1)));
+    }
+
+    #[test]
+    fn break_returns_to_focus() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at(T0), Some(Preset::P15)).unwrap();
+        let t = run(&conn, 0, 900 + 180 + 60);
+        assert_eq!(view(&conn, t), (960, status(Phase::Focus, 840, 1)));
+    }
+
+    #[test]
+    fn a_gap_can_cross_the_border() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at(T0), Some(Preset::P15)).unwrap();
+        let t = run(&conn, 0, 850);
+        // 100s later: 50s of focus, then 50s of break, all from one read.
+        assert_eq!(view(&conn, t + 100), (900, status(Phase::Break, 130, 1)));
+    }
+
+    #[test]
+    fn pomodoro_pause_and_long_gap_count_nothing() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at(T0), Some(Preset::P15)).unwrap();
+        let t = run(&conn, 0, 100);
+        pause_session(&conn, at(T0) + chrono::Duration::seconds(t)).unwrap();
+        assert_eq!(view(&conn, t + 3000), (100, status(Phase::Focus, 800, 0)));
+        resume_session(&conn, at(T0) + chrono::Duration::seconds(t + 3000)).unwrap();
+        // Past MAX_GAP_SECS the session pauses and the time is lost.
+        heartbeat(&conn, at(T0) + chrono::Duration::seconds(t + 3000 + 500)).unwrap();
+        assert_eq!(view(&conn, t + 9000), (100, status(Phase::Focus, 800, 0)));
+        assert!(paused(&conn, "2026-11-08T14:00:00Z"));
+    }
+
+    #[test]
+    fn finishing_midway_saves_the_focus_minutes() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at(T0), Some(Preset::P15)).unwrap();
+        let t = run(&conn, 0, 900 + 100);
+        // 15 focus minutes; the break seconds are left out.
+        let now = at(T0) + chrono::Duration::seconds(t);
+        assert_eq!(finish_session(&conn, now).unwrap(), 15);
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at(T0), Some(Preset::P15)).unwrap();
+        let t = run(&conn, 0, 59);
+        assert!(matches!(
+            finish_session(&conn, at(T0) + chrono::Duration::seconds(t)),
+            Err(StudyError::TooShort)
+        ));
+        assert!(view(&conn, t).1.is_some());
+    }
+
+    #[test]
+    fn invalid_preset_is_rejected_by_the_table() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at(T0), None).unwrap();
+        assert!(
+            conn.execute("UPDATE study_active SET preset = 30", [])
+                .is_err()
+        );
+        assert!(
+            conn.execute("UPDATE study_active SET preset = 25, on_break = 2", [])
+                .is_err()
+        );
     }
 }

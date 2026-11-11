@@ -23,6 +23,9 @@ pub struct State {
     pub today_topics: Rc<VecModel<TopicRow>>,
     pub logger_topics: Rc<VecModel<TopicRow>>,
     pub window: slint::Weak<AppWindow>,
+    /// The Pomodoro phase seen at the last refresh, to tell when it changed.
+    pub phase: std::cell::Cell<Option<study::Phase>>,
+    pub settings_path: std::path::PathBuf,
 }
 
 fn subject_row(s: Subject) -> Result<SubjectRow, String> {

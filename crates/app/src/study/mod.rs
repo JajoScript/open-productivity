@@ -6,6 +6,7 @@
 mod state;
 mod timer;
 
+use std::path::Path;
 use std::rc::Rc;
 
 use open_productivity_core::chrono::Local;
@@ -19,7 +20,7 @@ use crate::{AppWindow, Date, Strings};
 use state::State;
 
 /// The returned timer drives the running session's clock; the caller keeps it alive.
-pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Rc<slint::Timer> {
+pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slint::Timer> {
     let state = Rc::new(State {
         conn,
         rows: Rc::default(),
@@ -29,6 +30,8 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) -> Rc<slint::Timer> {
         today_topics: Rc::default(),
         logger_topics: Rc::default(),
         window: window.as_weak(),
+        phase: Default::default(),
+        settings_path: app_dir.join("settings.json"),
     });
     window.set_subjects(ModelRc::from(state.rows.clone()));
     window.set_active_subjects(ModelRc::from(state.active.clone()));

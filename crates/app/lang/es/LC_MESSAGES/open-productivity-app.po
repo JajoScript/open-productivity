@@ -833,3 +833,33 @@ msgstr "Estudia al menos un minuto para guardarla. Descártala si no la necesita
 
 msgid "Discard this session? The time will be lost."
 msgstr "¿Descartar esta sesión? Se perderá el tiempo."
+
+msgid "Break"
+msgstr "Descanso"
+
+msgid "Focus"
+msgstr "Enfoque"
+
+msgid "Pomodoros: {}"
+msgstr "Pomodoros: {}"
+
+msgid "Flowtime"
+msgstr "Flowtime"
+
+msgid "Pomodoro done. Time for a break."
+msgstr "Pomodoro terminado. Hora de descansar."
+
+msgid "Break over. Back to focus."
+msgstr "Descanso terminado. A enfocarse."
+
+msgid "Pomodoro"
+msgstr "Pomodoro"
+
+msgid "BREAK OF {} MIN"
+msgstr "DESCANSO DE {} MIN"
+
+msgid "Back"
+msgstr "Volver"
+
+msgid "Study session"
+msgstr "Sesión de estudio"

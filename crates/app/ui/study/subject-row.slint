@@ -15,6 +15,9 @@ export struct SubjectRow {
 // Which subjects the list shows.
 export enum SubjectTab { active, archived, all }
 
+// How a study session is timed: free Flowtime, or a Pomodoro of focus/break minutes.
+export enum StudyMode { flowtime, pomodoro25, pomodoro50, pomodoro15 }
+
 // A task of a subject; `due` only matters when `has-due`.
 export struct TopicRow {
     id: int,

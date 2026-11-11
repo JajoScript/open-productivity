@@ -7,17 +7,23 @@ import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 
-// The running Flowtime session: what is studied, the clock, and how to end it.
+// The running session: what is studied, the clock, and how to end it. A Pomodoro shows its
+// phase and counts the phase down.
 export component ActiveSessionCard inherits Rectangle {
     in property <string> subject;
     // Empty when the session has no topic.
     in property <string> topic;
     in property <string> clock;
     in property <bool> paused;
+    in property <bool> pomodoro;
+    in property <bool> on-break;
+    in property <int> pomodoros;
     callback finish;
     callback discard;
     callback pause;
     callback resume;
+    // A click on the card itself, outside its buttons.
+    callback opened;
 
     // Discarding asks in place, since the time cannot be recovered.
     property <bool> confirming;
@@ -27,6 +33,13 @@ export component ActiveSessionCard inherits Rectangle {
     border-width: 1px;
     border-color: Theme.hairline;
     background: Theme.hover;
+
+    TouchArea {
+        mouse-cursor: pointer;
+        clicked => {
+            root.opened();
+        }
+    }
 
     layout := HorizontalLayout {
         padding: 12px;
@@ -54,6 +67,12 @@ export component ActiveSessionCard inherits Rectangle {
                 overflow: elide;
             }
 
+            if !root.confirming && root.pomodoro: Text {
+                text: (root.on-break ? @tr("Break") : @tr("Focus")) + " · " + @tr("Pomodoros: {}", root.pomodoros);
+                color: Theme.muted;
+                font-size: 12px;
+            }
+
             if !root.confirming && root.paused: Text {
                 text: @tr("Paused");
                 color: Theme.muted;
@@ -72,7 +91,6 @@ export component ActiveSessionCard inherits Rectangle {
             font-size: 28px;
             font-weight: 700;
             color: root.paused ? Theme.muted : Palette.foreground;
-            font-family: "Consolas";
             vertical-alignment: center;
             accessible-role: text;
             accessible-label: root.clock;

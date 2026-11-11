@@ -7,10 +7,11 @@ import { Theme } from "theme.slint";
 // Primary action in the monochrome system: an ink plate instead of Fluent's accent fill.
 export component InkButton {
     in property <string> text;
+    in property <image> icon;
     in property <bool> enabled: true;
     callback clicked;
 
-    min-width: label.preferred-width + 32px;
+    min-width: label.preferred-width + 32px + (root.icon.width > 0 ? 24px : 0px);
     min-height: 32px;
     horizontal-stretch: 0;
     opacity: root.enabled ? 1 : 0.4;
@@ -29,13 +30,25 @@ export component InkButton {
         animate opacity { duration: Theme.fast; easing: Theme.ease-out; }
     }
 
-    label := Text {
-        text: root.text;
-        color: Theme.on-ink;
-        font-weight: 600;
-        vertical-alignment: center;
-        horizontal-alignment: center;
-        accessible-role: none;
+    HorizontalLayout {
+        alignment: center;
+        spacing: 8px;
+        if root.icon.width > 0: Image {
+            source: root.icon;
+            colorize: Theme.on-ink;
+            width: 16px;
+            image-fit: contain;
+            accessible-role: none;
+        }
+
+        label := Text {
+            text: root.text;
+            color: Theme.on-ink;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+            accessible-role: none;
+        }
     }
 
     touch := TouchArea {

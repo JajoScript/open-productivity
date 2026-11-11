@@ -53,6 +53,8 @@ pub struct Settings {
     /// Ids of the unchecked calendar sources. Text, so an id from a newer version does not make
     /// the whole file unreadable and survives each save.
     pub hidden_calendars: Vec<String>,
+    /// The Pomodoro length last used to study; `None` is Flowtime.
+    pub study_preset: Option<crate::study::Preset>,
 }
 
 /// What the Calendar can show; each source has its own checkbox.
@@ -244,6 +246,21 @@ mod tests {
         assert!(s.shows(CalendarSource::Habits));
         // An id this version does not know is kept.
         assert_eq!(s.hidden_calendars, ["future"]);
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn study_preset_is_remembered_and_old_files_mean_flowtime() {
+        let dir = setup("preset");
+        let path = dir.join("settings.json");
+        std::fs::write(&path, r#"{"language":"es"}"#).unwrap();
+        assert_eq!(load(&path).study_preset, None);
+        let s = Settings {
+            study_preset: Some(crate::study::Preset::P50),
+            ..Default::default()
+        };
+        save(&path, &s).unwrap();
+        assert_eq!(load(&path).study_preset, s.study_preset);
         let _ = std::fs::remove_dir_all(&dir);
     }
 
