@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
+import { StudyStore } from "study-store.slint";
 import { Palette } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkField } from "../ink-field.slint";
@@ -80,10 +81,6 @@ component CreatorBody inherits FocusScope {
 // Creates a subject or renames one, depending on how it is opened. Closing by clicking outside
 // discards it.
 export component SubjectCreator inherits PopupWindow {
-    // Return the error to show; empty means it worked and the modal closes.
-    callback create(string) -> string;
-    callback rename(int, string) -> string;
-
     // Set by the opener before show().
     in property <bool> editing;
     in property <int> subject-id;
@@ -97,7 +94,7 @@ export component SubjectCreator inherits PopupWindow {
             editing: root.editing;
             name: root.subject-name;
             save(name) => {
-                let error = root.editing ? root.rename(root.subject-id, name) : root.create(name);
+                let error = root.editing ? StudyStore.rename-subject(root.subject-id, name) : StudyStore.create-subject(name);
                 if error == "" {
                     root.close();
                 }

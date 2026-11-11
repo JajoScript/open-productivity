@@ -16,7 +16,7 @@ use open_productivity_core::tasks::{self, TaskId};
 use slint::{ComponentHandle, ModelRc};
 
 use crate::dates::core_date;
-use crate::{AppWindow, Date, Strings};
+use crate::{AppWindow, Date, Strings, StudyStore};
 use state::State;
 
 /// The returned timer drives the running session's clock; the caller keeps it alive.
@@ -34,21 +34,35 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
         phase: Default::default(),
         settings_path: app_dir.join("settings.json"),
     });
-    window.set_subjects(ModelRc::from(state.rows.clone()));
-    window.set_active_subjects(ModelRc::from(state.active.clone()));
-    window.set_subject_sessions(ModelRc::from(state.sessions.clone()));
-    window.set_study_days(ModelRc::from(state.days.clone()));
-    window.set_study_topics(ModelRc::from(state.topics.clone()));
-    window.set_study_today_topics(ModelRc::from(state.today_topics.clone()));
-    window.set_logger_topics(ModelRc::from(state.logger_topics.clone()));
+    window
+        .global::<StudyStore>()
+        .set_subjects(ModelRc::from(state.rows.clone()));
+    window
+        .global::<StudyStore>()
+        .set_active_subjects(ModelRc::from(state.active.clone()));
+    window
+        .global::<StudyStore>()
+        .set_subject_sessions(ModelRc::from(state.sessions.clone()));
+    window
+        .global::<StudyStore>()
+        .set_days(ModelRc::from(state.days.clone()));
+    window
+        .global::<StudyStore>()
+        .set_topics(ModelRc::from(state.topics.clone()));
+    window
+        .global::<StudyStore>()
+        .set_today_topics(ModelRc::from(state.today_topics.clone()));
+    window
+        .global::<StudyStore>()
+        .set_logger_topics(ModelRc::from(state.logger_topics.clone()));
     state.show_load();
 
-    window.on_create_subject({
+    window.global::<StudyStore>().on_create_subject({
         let state = state.clone();
         move |name| state.finish(study::create_subject(&state.conn, &name).map(|_| ()))
     });
 
-    window.on_rename_subject({
+    window.global::<StudyStore>().on_rename_subject({
         let state = state.clone();
         move |id, name| {
             state.finish(study::rename_subject(
@@ -59,17 +73,17 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
         }
     });
 
-    window.on_subject_tab_changed({
+    window.global::<StudyStore>().on_subject_tab_changed({
         let state = state.clone();
         move || state.show_load()
     });
 
-    window.on_study_days_tab_changed({
+    window.global::<StudyStore>().on_days_tab_changed({
         let state = state.clone();
         move || state.show_load()
     });
 
-    window.on_open_subject({
+    window.global::<StudyStore>().on_open_subject({
         let state = state.clone();
         move |id| {
             let Some(w) = state.window.upgrade() else {
@@ -77,18 +91,18 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
             };
             match state.load_detail(&w, SubjectId(id.into())) {
                 Ok(()) => {
-                    w.set_study_error(Default::default());
-                    w.set_subject_open(true);
+                    w.global::<StudyStore>().set_error(Default::default());
+                    w.global::<StudyStore>().set_subject_open(true);
                 }
                 Err(e) => {
                     let msg = w.global::<Strings>().invoke_study_load_failed(e.into());
-                    w.set_study_error(msg);
+                    w.global::<StudyStore>().set_error(msg);
                 }
             }
         }
     });
 
-    window.on_set_subject_archived({
+    window.global::<StudyStore>().on_set_subject_archived({
         let state = state.clone();
         move |id, archived| {
             state.act(study::set_subject_archived(
@@ -99,12 +113,12 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
         }
     });
 
-    window.on_delete_study_session({
+    window.global::<StudyStore>().on_delete_session({
         let state = state.clone();
         move |id| state.act(study::delete_session(&state.conn, SessionId(id.into())))
     });
 
-    window.on_log_study_session({
+    window.global::<StudyStore>().on_log_session({
         let state = state.clone();
         move |id, has_topic, topic, date: Date, minutes, description| {
             let Some(w) = state.window.upgrade() else {
@@ -130,12 +144,12 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
         }
     });
 
-    window.on_load_subject_topics({
+    window.global::<StudyStore>().on_load_subject_topics({
         let state = state.clone();
         move |id| state.load_logger_topics(SubjectId(id.into()))
     });
 
-    window.on_create_topic({
+    window.global::<StudyStore>().on_create_topic({
         let state = state.clone();
         move |id, title, has_date, date: Date| {
             let Some(w) = state.window.upgrade() else {
@@ -152,7 +166,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
         }
     });
 
-    window.on_set_topic_done({
+    window.global::<StudyStore>().on_set_topic_done({
         let state = state.clone();
         move |id, done| {
             let res = tasks::set_done(
@@ -166,7 +180,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
                 let msg = w
                     .global::<Strings>()
                     .invoke_task_failed(e.to_string().into());
-                w.set_study_error(msg);
+                w.global::<StudyStore>().set_error(msg);
             }
         }
     });

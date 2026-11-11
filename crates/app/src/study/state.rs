@@ -12,7 +12,10 @@ use slint::{ComponentHandle, SharedString, VecModel};
 
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
-use crate::{AppWindow, DayBarRow, DaysTab, SessionRow, Strings, SubjectRow, SubjectTab, TopicRow};
+use crate::{
+    AppWindow, DayBarRow, DaysTab, SessionRow, Strings, StudyStore, SubjectRow, SubjectTab,
+    TopicRow,
+};
 
 pub struct State {
     pub conn: Rc<Connection>,
@@ -90,14 +93,15 @@ impl State {
                 })
             })
             .collect::<Result<Vec<_>, String>>()?;
-        w.set_subject_detail(subject_row(subject)?);
+        w.global::<StudyStore>()
+            .set_subject_detail(subject_row(subject)?);
         self.sessions.set_vec(sessions);
         Ok(())
     }
 
     fn reload(&self, w: &AppWindow) -> Result<(), String> {
         self.rows
-            .set_vec(self.subject_rows(filter(w.get_subject_tab()))?);
+            .set_vec(self.subject_rows(filter(w.global::<StudyStore>().get_subject_tab()))?);
         self.active
             .set_vec(self.subject_rows(SubjectFilter::Active)?);
         self.topics.set_vec(
@@ -117,11 +121,13 @@ impl State {
         let chart = study::day_minutes(
             &self.conn,
             Local::now().date_naive(),
-            days_range(w.get_study_days_tab()),
+            days_range(w.global::<StudyStore>().get_days_tab()),
         )
         .map_err(|e| e.to_string())?;
-        w.set_study_days_total(study::format_duration(chart.total_minutes).into());
-        w.set_study_days_has_minutes(chart.total_minutes > 0);
+        w.global::<StudyStore>()
+            .set_days_total(study::format_duration(chart.total_minutes).into());
+        w.global::<StudyStore>()
+            .set_days_has_minutes(chart.total_minutes > 0);
         self.days.set_vec(
             chart
                 .days
@@ -137,10 +143,14 @@ impl State {
                 })
                 .collect::<Result<Vec<_>, String>>()?,
         );
-        w.set_any_subject(!self.subject_rows(SubjectFilter::All)?.is_empty());
+        w.global::<StudyStore>()
+            .set_any_subject(!self.subject_rows(SubjectFilter::All)?.is_empty());
         // The open subject stays open even if it left the current tab.
-        if w.get_subject_open() {
-            self.load_detail(w, SubjectId(w.get_subject_detail().id.into()))?;
+        if w.global::<StudyStore>().get_subject_open() {
+            self.load_detail(
+                w,
+                SubjectId(w.global::<StudyStore>().get_subject_detail().id.into()),
+            )?;
         }
         Ok(())
     }
@@ -156,7 +166,7 @@ impl State {
                 self.logger_topics.set_vec(Vec::new());
                 if let Some(w) = self.window.upgrade() {
                     let msg = w.global::<Strings>().invoke_study_load_failed(e.into());
-                    w.set_study_error(msg);
+                    w.global::<StudyStore>().set_error(msg);
                 }
             }
         }
@@ -167,12 +177,12 @@ impl State {
         let Some(w) = self.window.upgrade() else {
             return;
         };
-        w.set_study_notice(Default::default());
+        w.global::<StudyStore>().set_notice(Default::default());
         let msg = match self.reload(&w) {
             Err(e) => w.global::<Strings>().invoke_study_load_failed(e.into()),
             Ok(()) => Default::default(),
         };
-        w.set_study_error(msg);
+        w.global::<StudyStore>().set_error(msg);
     }
 
     fn message(w: &AppWindow, e: StudyError) -> SharedString {
@@ -213,7 +223,7 @@ impl State {
         if let Some(w) = self.window.upgrade()
             && !msg.is_empty()
         {
-            w.set_study_error(msg);
+            w.global::<StudyStore>().set_error(msg);
         }
     }
 }

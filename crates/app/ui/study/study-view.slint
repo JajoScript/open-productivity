@@ -9,6 +9,7 @@ import { ActiveSessionCard } from "active-session-card.slint";
 import { DayBarRow, DaysChart, DaysTab } from "days-chart.slint";
 import { SessionPanel } from "session-panel.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
+import { StudyStore } from "study-store.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
@@ -215,61 +216,16 @@ component SubjectTabs inherits HorizontalLayout {
 
 // Subjects and the time studied on each, or one subject's detail; sessions are logged from the header.
 export component StudyView inherits VerticalLayout {
-    // The subjects of the chosen tab.
-    in property <[SubjectRow]> subjects;
-    // Whether any subject exists at all, whatever the tab shows.
-    in property <bool> any-subject;
-    // Whether there is an active subject to log a session on.
-    in property <bool> can-log;
-    // Pending topics and those done today, of active subjects.
-    in property <[TopicRow]> topics;
-    // The topics due today.
-    in property <[TopicRow]> today-topics;
-    in property <SubjectRow> detail;
-    in property <[SessionRow]> sessions;
-    in property <string> error;
-    in property <string> notice;
-    in property <bool> active;
-    in property <string> active-subject;
-    in property <string> active-topic;
-    in property <string> clock;
-    in property <bool> paused;
-    in property <bool> pomodoro;
-    in property <bool> on-break;
-    in property <int> pomodoros;
-    in-out property <SubjectTab> tab;
-    // Minutes per day, already summed; the panel beside the lists.
-    in property <[DayBarRow]> days;
-    in property <string> days-total;
-    in property <bool> days-has-minutes;
-    in-out property <DaysTab> days-tab;
-    callback days-tab-changed();
-    in-out property <bool> detail-open;
     // The session screen replaces the whole view while open.
     in-out property <bool> session-open;
-    // For the session screen: the subjects it can start on, the chosen subject's pending topics.
-    in property <[SubjectRow]> session-subjects;
-    in property <[TopicRow]> session-topics;
+    // The subject the session screen starts on.
     in property <int> session-initial-subject;
-    in-out property <StudyMode> session-mode;
-    pure callback session-preview(StudyMode) -> string;
-    pure callback session-break-minutes(StudyMode) -> int;
-    callback session-start(int, bool, int, StudyMode) -> string;
-    callback session-subject-changed(int);
+    // Open the window's modals.
     callback new-subject();
     callback new-topic();
     callback log-session();
     callback start-session();
-    callback finish-session();
-    callback discard-session();
-    callback pause-session();
-    callback resume-session();
-    callback set-topic-done(int, bool);
-    callback tab-changed();
-    callback open-subject(int);
     callback rename-subject();
-    callback set-archived(int, bool);
-    callback delete-session(int);
 
     // Two columns once the content fits the lists and the 320px panel.
     property <bool> wide: root.width - 48px >= 900px;
@@ -279,43 +235,43 @@ export component StudyView inherits VerticalLayout {
     spacing: 12px;
 
     if root.session-open: SessionPanel {
-        subjects: root.session-subjects;
-        topics: root.session-topics;
+        subjects: StudyStore.active-subjects;
+        topics: StudyStore.logger-topics;
         initial-subject: root.session-initial-subject;
-        error: root.error;
-        notice: root.notice;
-        active: root.active;
-        active-subject: root.active-subject;
-        active-topic: root.active-topic;
-        clock: root.clock;
-        paused: root.paused;
-        pomodoro: root.pomodoro;
-        on-break: root.on-break;
-        pomodoros: root.pomodoros;
-        mode <=> root.session-mode;
+        error: StudyStore.error;
+        notice: StudyStore.notice;
+        active: StudyStore.active;
+        active-subject: StudyStore.active-subject;
+        active-topic: StudyStore.active-topic;
+        clock: StudyStore.clock;
+        paused: StudyStore.paused;
+        pomodoro: StudyStore.pomodoro;
+        on-break: StudyStore.on-break;
+        pomodoros: StudyStore.pomodoros;
+        mode <=> StudyStore.mode;
         preview(mode) => {
-            return root.session-preview(mode);
+            return StudyStore.preview(mode);
         }
         break-minutes(mode) => {
-            return root.session-break-minutes(mode);
+            return StudyStore.break-minutes(mode);
         }
         subject-changed(id) => {
-            root.session-subject-changed(id);
+            StudyStore.load-subject-topics(id);
         }
         start(id, has-topic, topic-id, mode) => {
-            return root.session-start(id, has-topic, topic-id, mode);
+            return StudyStore.start-session(id, has-topic, topic-id, mode);
         }
         finish => {
-            root.finish-session();
+            StudyStore.finish-session();
         }
         discard => {
-            root.discard-session();
+            StudyStore.discard-session();
         }
         pause => {
-            root.pause-session();
+            StudyStore.pause-session();
         }
         resume => {
-            root.resume-session();
+            StudyStore.resume-session();
         }
         close => {
             root.session-open = false;
@@ -349,7 +305,7 @@ export component StudyView inherits VerticalLayout {
             SubtleButton {
                 text: @tr("New topic");
                 color: Palette.foreground;
-                enabled: root.can-log;
+                enabled: StudyStore.active-subjects.length > 0;
                 clicked => {
                     root.new-topic();
                 }
@@ -358,7 +314,7 @@ export component StudyView inherits VerticalLayout {
             SubtleButton {
                 text: @tr("Start session");
                 color: Palette.foreground;
-                enabled: root.can-log && !root.active;
+                enabled: StudyStore.active-subjects.length > 0 && !StudyStore.active;
                 clicked => {
                     root.start-session();
                 }
@@ -366,51 +322,51 @@ export component StudyView inherits VerticalLayout {
 
             InkButton {
                 text: @tr("Log session");
-                enabled: root.can-log;
+                enabled: StudyStore.active-subjects.length > 0;
                 clicked => {
                     root.log-session();
                 }
             }
         }
 
-        if root.error != "": Text {
-            text: root.error;
+        if StudyStore.error != "": Text {
+            text: StudyStore.error;
             color: Theme.critical;
             wrap: word-wrap;
         }
 
-        if root.notice != "": Text {
-            text: root.notice;
+        if StudyStore.notice != "": Text {
+            text: StudyStore.notice;
             color: Theme.muted;
             wrap: word-wrap;
         }
 
-        if root.active: ActiveSessionCard {
-            subject: root.active-subject;
-            topic: root.active-topic;
-            clock: root.clock;
-            paused: root.paused;
-            pomodoro: root.pomodoro;
-            on-break: root.on-break;
-            pomodoros: root.pomodoros;
+        if StudyStore.active: ActiveSessionCard {
+            subject: StudyStore.active-subject;
+            topic: StudyStore.active-topic;
+            clock: StudyStore.clock;
+            paused: StudyStore.paused;
+            pomodoro: StudyStore.pomodoro;
+            on-break: StudyStore.on-break;
+            pomodoros: StudyStore.pomodoros;
             opened => {
                 root.start-session();
             }
             finish => {
-                root.finish-session();
+                StudyStore.finish-session();
             }
             discard => {
-                root.discard-session();
+                StudyStore.discard-session();
             }
             pause => {
-                root.pause-session();
+                StudyStore.pause-session();
             }
             resume => {
-                root.resume-session();
+                StudyStore.resume-session();
             }
         }
 
-        if !root.any-subject: EmptyState {
+        if !StudyStore.any-subject: EmptyState {
             title: @tr("Create your first subject");
             description: @tr("Group what you study by subject. Every session you log adds hours to its subject, so you can see how much time each one gets.");
             action: @tr("New subject");
@@ -421,24 +377,24 @@ export component StudyView inherits VerticalLayout {
             SubjectPreview { }
         }
 
-        if root.any-subject && root.detail-open: SubjectDetail {
-            subject: root.detail;
-            sessions: root.sessions;
+        if StudyStore.any-subject && StudyStore.subject-open: SubjectDetail {
+            subject: StudyStore.subject-detail;
+            sessions: StudyStore.subject-sessions;
             back => {
-                root.detail-open = false;
+                StudyStore.subject-open = false;
             }
             rename => {
                 root.rename-subject();
             }
             set-archived(archived) => {
-                root.set-archived(root.detail.id, archived);
+                StudyStore.set-subject-archived(StudyStore.subject-detail.id, archived);
             }
             delete-session(id) => {
-                root.delete-session(id);
+                StudyStore.delete-session(id);
             }
         }
 
-        if root.any-subject && !root.detail-open: HorizontalLayout {
+        if StudyStore.any-subject && !StudyStore.subject-open: HorizontalLayout {
             vertical-stretch: 1;
             spacing: 24px;
             VerticalLayout {
@@ -449,47 +405,47 @@ export component StudyView inherits VerticalLayout {
                     color: Palette.foreground.with-alpha(0.7);
                 }
 
-                if root.today-topics.length == 0: Text {
+                if StudyStore.today-topics.length == 0: Text {
                     text: @tr("Nothing due today. Give a topic today's date to see it here.");
                     color: Theme.muted;
                     wrap: word-wrap;
                 }
 
                 // No ListView: the section is short and takes its natural height.
-                if root.today-topics.length > 0: VerticalLayout {
-                    for topic in root.today-topics: TopicLine {
+                if StudyStore.today-topics.length > 0: VerticalLayout {
+                    for topic in StudyStore.today-topics: TopicLine {
                         topic: topic;
                         toggled(done) => {
-                            root.set-topic-done(topic.id, done);
+                            StudyStore.set-topic-done(topic.id, done);
                         }
                     }
                 }
 
                 Text {
-                    text: Strings.subjects-count(root.subjects.length);
+                    text: Strings.subjects-count(StudyStore.subjects.length);
                     font-weight: 700;
                     color: Palette.foreground.with-alpha(0.7);
                 }
 
                 SubjectTabs {
-                    tab <=> root.tab;
+                    tab <=> StudyStore.subject-tab;
                     changed => {
-                        root.tab-changed();
+                        StudyStore.subject-tab-changed();
                     }
                 }
 
-                if root.subjects.length == 0: Text {
-                    text: root.tab == SubjectTab.archived ? @tr("No archived subjects. Archive one from its page to tuck it away.") : @tr("No active subjects. Restore one from the Archived tab or create a new one.");
+                if StudyStore.subjects.length == 0: Text {
+                    text: StudyStore.subject-tab == SubjectTab.archived ? @tr("No archived subjects. Archive one from its page to tuck it away.") : @tr("No active subjects. Restore one from the Archived tab or create a new one.");
                     color: Theme.muted;
                     wrap: word-wrap;
                 }
 
-                if root.subjects.length > 0: ListView {
-                    height: min(root.subjects.length * 40px, 240px);
-                    for subject in root.subjects: SubjectLine {
+                if StudyStore.subjects.length > 0: ListView {
+                    height: min(StudyStore.subjects.length * 40px, 240px);
+                    for subject in StudyStore.subjects: SubjectLine {
                         subject: subject;
                         opened => {
-                            root.open-subject(subject.id);
+                            StudyStore.open-subject(subject.id);
                         }
                     }
                 }
@@ -500,18 +456,18 @@ export component StudyView inherits VerticalLayout {
                     color: Palette.foreground.with-alpha(0.7);
                 }
 
-                if root.topics.length == 0: Text {
+                if StudyStore.topics.length == 0: Text {
                     text: @tr("No topics yet. Add what you need to study on a subject with New topic.");
                     color: Theme.muted;
                     wrap: word-wrap;
                 }
 
-                if root.topics.length > 0: ListView {
-                    height: min(root.topics.length * 36px, 240px);
-                    for topic in root.topics: TopicLine {
+                if StudyStore.topics.length > 0: ListView {
+                    height: min(StudyStore.topics.length * 36px, 240px);
+                    for topic in StudyStore.topics: TopicLine {
                         topic: topic;
                         toggled(done) => {
-                            root.set-topic-done(topic.id, done);
+                            StudyStore.set-topic-done(topic.id, done);
                         }
                     }
                 }
@@ -527,25 +483,25 @@ export component StudyView inherits VerticalLayout {
                 width: 320px;
                 alignment: start;
                 DaysChart {
-                    days: root.days;
-                    total: root.days-total;
-                    has-minutes: root.days-has-minutes;
-                    tab <=> root.days-tab;
+                    days: StudyStore.days;
+                    total: StudyStore.days-total;
+                    has-minutes: StudyStore.days-has-minutes;
+                    tab <=> StudyStore.days-tab;
                     changed => {
-                        root.days-tab-changed();
+                        StudyStore.days-tab-changed();
                     }
                 }
             }
         }
 
         // Narrow window: the panel goes under the lists.
-        if root.any-subject && !root.detail-open && !root.wide: DaysChart {
-                    days: root.days;
-                    total: root.days-total;
-                    has-minutes: root.days-has-minutes;
-                    tab <=> root.days-tab;
+        if StudyStore.any-subject && !StudyStore.subject-open && !root.wide: DaysChart {
+                    days: StudyStore.days;
+                    total: StudyStore.days-total;
+                    has-minutes: StudyStore.days-has-minutes;
+                    tab <=> StudyStore.days-tab;
                     changed => {
-                        root.days-tab-changed();
+                        StudyStore.days-tab-changed();
                     }
                 }
     }

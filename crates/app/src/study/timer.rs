@@ -14,7 +14,7 @@ use open_productivity_core::tasks::TaskId;
 use slint::{ComponentHandle, Timer, TimerMode};
 
 use super::state::State;
-use crate::{Strings, StudyMode};
+use crate::{Strings, StudyMode, StudyStore};
 
 /// Ticks between two saves of the clock.
 const HEARTBEAT_TICKS: u32 = 60;
@@ -45,26 +45,31 @@ impl State {
         };
         match study::active_session(&self.conn, Local::now().fixed_offset()) {
             Ok(Some(a)) => {
-                w.set_study_active(true);
-                w.set_study_active_subject(a.subject_name.into());
-                w.set_study_active_topic(a.topic.unwrap_or_default().into());
+                w.global::<StudyStore>().set_active(true);
+                w.global::<StudyStore>()
+                    .set_active_subject(a.subject_name.into());
+                w.global::<StudyStore>()
+                    .set_active_topic(a.topic.unwrap_or_default().into());
                 // A Pomodoro counts its phase down; Flowtime counts up.
                 let secs = a.pomodoro.as_ref().map_or(a.elapsed_secs, |p| p.left_secs);
-                w.set_study_clock(study::format_clock(secs).into());
-                w.set_study_paused(a.paused);
-                w.set_study_pomodoro(a.pomodoro.is_some());
-                w.set_study_on_break(a.pomodoro.as_ref().is_some_and(|p| p.phase == Phase::Break));
-                w.set_study_pomodoros(a.pomodoro.as_ref().map_or(0, |p| p.pomodoros) as i32);
+                w.global::<StudyStore>()
+                    .set_clock(study::format_clock(secs).into());
+                w.global::<StudyStore>().set_paused(a.paused);
+                w.global::<StudyStore>().set_pomodoro(a.pomodoro.is_some());
+                w.global::<StudyStore>()
+                    .set_on_break(a.pomodoro.as_ref().is_some_and(|p| p.phase == Phase::Break));
+                w.global::<StudyStore>()
+                    .set_pomodoros(a.pomodoro.as_ref().map_or(0, |p| p.pomodoros) as i32);
                 self.announce_phase(&w, a.pomodoro.map(|p| p.phase));
                 true
             }
             Ok(None) => {
-                w.set_study_active(false);
+                w.global::<StudyStore>().set_active(false);
                 self.phase.set(None);
                 false
             }
             Err(e) => {
-                w.set_study_error(
+                w.global::<StudyStore>().set_error(
                     w.global::<Strings>()
                         .invoke_study_load_failed(e.to_string().into()),
                 );
@@ -80,7 +85,7 @@ impl State {
         let before = self.phase.replace(now);
         if before.is_some() && before != now {
             let s = w.global::<Strings>();
-            w.set_study_notice(match now {
+            w.global::<StudyStore>().set_notice(match now {
                 Some(Phase::Break) => s.invoke_study_break_started(),
                 _ => s.invoke_study_focus_started(),
             });
@@ -119,18 +124,22 @@ pub fn init(window: &crate::AppWindow, state: &Rc<State>) -> Rc<Timer> {
         })
     };
 
-    window.set_study_mode(mode_of(settings::load(&state.settings_path).study_preset));
+    window
+        .global::<StudyStore>()
+        .set_mode(mode_of(settings::load(&state.settings_path).study_preset));
     if state.show_active() {
         run();
     }
 
-    window.on_study_preview(|mode| {
+    window.global::<StudyStore>().on_preview(|mode| {
         let secs = preset_of(mode).map_or(0, |p| p.focus_minutes() * 60);
         study::format_clock(secs).into()
     });
-    window.on_study_break_minutes(|mode| preset_of(mode).map_or(0, |p| p.break_minutes() as i32));
+    window
+        .global::<StudyStore>()
+        .on_break_minutes(|mode| preset_of(mode).map_or(0, |p| p.break_minutes() as i32));
 
-    window.on_start_study({
+    window.global::<StudyStore>().on_start_session({
         let (state, run) = (state.clone(), run);
         move |id, has_topic, topic, mode| {
             let res = study::start_session(
@@ -156,13 +165,13 @@ pub fn init(window: &crate::AppWindow, state: &Rc<State>) -> Rc<Timer> {
                 let msg = w
                     .global::<Strings>()
                     .invoke_settings_failed(e.to_string().into());
-                w.set_study_error(msg);
+                w.global::<StudyStore>().set_error(msg);
             }
             msg
         }
     });
 
-    window.on_finish_study({
+    window.global::<StudyStore>().on_finish_session({
         let (state, timer) = (state.clone(), timer.clone());
         move || {
             let res = study::finish_session(&state.conn, Local::now().fixed_offset());
@@ -175,7 +184,7 @@ pub fn init(window: &crate::AppWindow, state: &Rc<State>) -> Rc<Timer> {
                     state.show_active();
                     state.show_load();
                     let s = w.global::<Strings>();
-                    w.set_study_notice(s.invoke_study_saved(
+                    w.global::<StudyStore>().set_notice(s.invoke_study_saved(
                         study::format_duration(minutes).into(),
                         study::format_duration(study::suggested_break(minutes)).into(),
                     ));
@@ -186,7 +195,7 @@ pub fn init(window: &crate::AppWindow, state: &Rc<State>) -> Rc<Timer> {
         }
     });
 
-    window.on_discard_study({
+    window.global::<StudyStore>().on_discard_session({
         let (state, timer) = (state.clone(), timer.clone());
         move || {
             let res = study::discard_session(&state.conn);
@@ -198,7 +207,7 @@ pub fn init(window: &crate::AppWindow, state: &Rc<State>) -> Rc<Timer> {
         }
     });
 
-    window.on_pause_study({
+    window.global::<StudyStore>().on_pause_session({
         let state = state.clone();
         move || {
             state.act(study::pause_session(
@@ -209,7 +218,7 @@ pub fn init(window: &crate::AppWindow, state: &Rc<State>) -> Rc<Timer> {
         }
     });
 
-    window.on_resume_study({
+    window.global::<StudyStore>().on_resume_session({
         let state = state.clone();
         move || {
             state.act(study::resume_session(

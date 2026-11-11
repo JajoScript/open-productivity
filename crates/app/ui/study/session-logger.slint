@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
+import { StudyStore } from "study-store.slint";
 import { Date, Palette, ScrollView } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkDatePopup } from "../ink-date-popup.slint";
@@ -246,13 +247,7 @@ component LoggerBody inherits FocusScope {
 
 // Logs a session on a subject. Closing by clicking outside discards it.
 export component SessionLogger inherits PopupWindow {
-    // Returns the error to show; empty means it worked and the modal closes.
-    callback log(int, bool, int, Date, string, string) -> string;
-    callback subject-changed(int);
-
     // Set by the opener before show().
-    in property <[SubjectRow]> subjects;
-    in property <[TopicRow]> topics;
     in property <int> subject-id;
     in property <Date> date;
 
@@ -261,15 +256,15 @@ export component SessionLogger inherits PopupWindow {
 
     PopupSurface {
         LoggerBody {
-            subjects: root.subjects;
-            topics: root.topics;
+            subjects: StudyStore.active-subjects;
+            topics: StudyStore.logger-topics;
             subject-id: root.subject-id;
             date: root.date;
             subject-changed(id) => {
-                root.subject-changed(id);
+                StudyStore.load-subject-topics(id);
             }
             save(id, has-topic, topic-id, date, minutes, description) => {
-                let error = root.log(id, has-topic, topic-id, date, minutes, description);
+                let error = StudyStore.log-session(id, has-topic, topic-id, date, minutes, description);
                 if error == "" {
                     root.close();
                 }

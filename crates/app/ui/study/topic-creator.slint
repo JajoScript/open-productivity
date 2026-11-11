@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
+import { StudyStore } from "study-store.slint";
 import { Date, Palette, ScrollView } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkDatePopup } from "../ink-date-popup.slint";
@@ -138,11 +139,7 @@ component CreatorBody inherits FocusScope {
 
 // Creates a topic on a subject, optionally with a due date. Closing by clicking outside discards it.
 export component TopicCreator inherits PopupWindow {
-    // Returns the error to show; empty means it worked and the modal closes.
-    callback create(int, string, bool, Date) -> string;
-
     // Set by the opener before show().
-    in property <[SubjectRow]> subjects;
     in property <int> subject-id;
     in property <Date> date;
 
@@ -151,11 +148,11 @@ export component TopicCreator inherits PopupWindow {
 
     PopupSurface {
         CreatorBody {
-            subjects: root.subjects;
+            subjects: StudyStore.active-subjects;
             subject-id: root.subject-id;
             date: root.date;
             save(id, title, has-date, date) => {
-                let error = root.create(id, title, has-date, date);
+                let error = StudyStore.create-topic(id, title, has-date, date);
                 if error == "" {
                     root.close();
                 }

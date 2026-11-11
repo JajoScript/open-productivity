@@ -1,0 +1,64 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date } from "std-widgets.slint";
+import { DayBarRow, DaysTab } from "days-chart.slint";
+import { SessionRow } from "subject-detail.slint";
+import { StudyMode, SubjectRow, SubjectTab, TopicRow } from "subject-row.slint";
+
+// What the Study views show and ask for. Rust fills the data and answers the callbacks;
+// the views read and call it directly instead of forwarding it through the window.
+export global StudyStore {
+    // The subjects of the chosen tab, and the active ones, which the session logger offers.
+    in property <[SubjectRow]> subjects;
+    in property <[SubjectRow]> active-subjects;
+    in property <bool> any-subject;
+    in property <SubjectRow> subject-detail;
+    in property <[SessionRow]> subject-sessions;
+    in-out property <SubjectTab> subject-tab;
+    in property <[DayBarRow]> days;
+    in property <string> days-total;
+    in property <bool> days-has-minutes;
+    in-out property <DaysTab> days-tab;
+    in-out property <bool> subject-open;
+    in property <string> error;
+    // A muted confirmation under the header, e.g. after saving a session.
+    in property <string> notice;
+    // The running session, shown as a card on top of the Study view.
+    in property <bool> active;
+    in property <string> active-subject;
+    in property <string> active-topic;
+    in property <string> clock;
+    in property <bool> paused;
+    // Only for a Pomodoro: the phase, and the pomodoros completed so far.
+    in property <bool> pomodoro;
+    in property <bool> on-break;
+    in property <int> pomodoros;
+    // The mode the session modal opens with: the last one used.
+    in-out property <StudyMode> mode;
+    in property <[TopicRow]> topics;
+    in property <[TopicRow]> today-topics;
+    // The pending topics of the subject chosen in the session modal.
+    in property <[TopicRow]> logger-topics;
+
+    // The ones that return a string give the error to show; empty means it worked.
+    callback create-subject(string) -> string;
+    callback rename-subject(int, string) -> string;
+    callback log-session(int, bool, int, Date, string, string) -> string;
+    callback load-subject-topics(int);
+    callback start-session(int, bool, int, StudyMode) -> string;
+    // The first clock and the break minutes of a mode, for the session panel.
+    pure callback preview(StudyMode) -> string;
+    pure callback break-minutes(StudyMode) -> int;
+    callback finish-session();
+    callback discard-session();
+    callback pause-session();
+    callback resume-session();
+    callback create-topic(int, string, bool, Date) -> string;
+    callback set-topic-done(int, bool);
+    callback subject-tab-changed();
+    callback days-tab-changed();
+    callback open-subject(int);
+    callback set-subject-archived(int, bool);
+    callback delete-session(int);
+}
