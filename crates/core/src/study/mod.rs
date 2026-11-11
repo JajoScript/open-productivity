@@ -10,11 +10,13 @@ use rusqlite::Connection;
 
 use crate::tasks::TaskId;
 
+mod days;
 #[cfg(test)]
 mod tests;
 mod timer;
 mod topics;
 
+pub use days::*;
 pub use timer::*;
 pub use topics::*;
 
