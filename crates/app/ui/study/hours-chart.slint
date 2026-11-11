@@ -1,0 +1,146 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Theme } from "../theme.slint";
+
+// How far back the chart goes.
+export enum HoursTab { months3, months6, year, all }
+
+// Cumulative hours studied, as one ink line over the weeks.
+export component HoursChart inherits VerticalLayout {
+    // SVG path commands in a 100 x 100 box, built by Rust from the heights.
+    in property <string> line;
+    // Already formatted, e.g. "2h 30m".
+    in property <string> total;
+    in property <string> week;
+    in-out property <HoursTab> tab;
+    callback changed;
+
+    spacing: 8px;
+
+    function choose(t: HoursTab) {
+        root.tab = t;
+        root.changed();
+    }
+
+    // Arrow keys move the choice and the focus together.
+    function step(delta: int) {
+        if delta < 0 && root.tab != HoursTab.months3 {
+            if root.tab == HoursTab.all {
+                root.choose(HoursTab.year);
+                year-tab.focus();
+            } else if root.tab == HoursTab.year {
+                root.choose(HoursTab.months6);
+                months6-tab.focus();
+            } else {
+                root.choose(HoursTab.months3);
+                months3-tab.focus();
+            }
+        } else if delta > 0 && root.tab != HoursTab.all {
+            if root.tab == HoursTab.months3 {
+                root.choose(HoursTab.months6);
+                months6-tab.focus();
+            } else if root.tab == HoursTab.months6 {
+                root.choose(HoursTab.year);
+                year-tab.focus();
+            } else {
+                root.choose(HoursTab.all);
+                all-tab.focus();
+            }
+        }
+    }
+
+    Text {
+        text: @tr("Hours studied");
+        font-weight: 700;
+        color: Palette.foreground.with-alpha(0.7);
+    }
+
+    HorizontalLayout {
+        spacing: 4px;
+        alignment: start;
+        accessible-role: tab-list;
+
+        months3-tab := SettingsTab {
+            text: @tr("3M");
+            selected: root.tab == HoursTab.months3;
+            chosen => {
+                root.choose(HoursTab.months3);
+            }
+            step(d) => {
+                root.step(d);
+            }
+        }
+
+        months6-tab := SettingsTab {
+            text: @tr("6M");
+            selected: root.tab == HoursTab.months6;
+            chosen => {
+                root.choose(HoursTab.months6);
+            }
+            step(d) => {
+                root.step(d);
+            }
+        }
+
+        year-tab := SettingsTab {
+            text: @tr("1Y");
+            selected: root.tab == HoursTab.year;
+            chosen => {
+                root.choose(HoursTab.year);
+            }
+            step(d) => {
+                root.step(d);
+            }
+        }
+
+        all-tab := SettingsTab {
+            text: @tr("hours range" => "All");
+            selected: root.tab == HoursTab.all;
+            chosen => {
+                root.choose(HoursTab.all);
+            }
+            step(d) => {
+                root.step(d);
+            }
+        }
+    }
+
+    Text {
+        text: root.total;
+        font-size: 20px;
+        font-weight: 700;
+    }
+
+    Text {
+        text: @tr("This week: {}", root.week);
+        color: Theme.muted;
+    }
+
+    Rectangle {
+        height: 120px;
+        accessible-role: text;
+        accessible-label: @tr("Hours studied") + ": " + root.total;
+
+        Rectangle {
+            y: parent.height - 1px;
+            height: 1px;
+            background: Theme.hairline;
+        }
+
+        Path {
+            y: 2px;
+            height: parent.height - 5px;
+            viewbox-width: 100;
+            viewbox-height: 100;
+            // Stretch the 100x100 box to the panel instead of keeping it square.
+            fit: fill;
+            commands: root.line;
+            stroke: Theme.ink;
+            stroke-width: 2px;
+            fill: transparent;
+        }
+    }
+}

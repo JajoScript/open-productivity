@@ -3,6 +3,7 @@
 
 import { Date } from "std-widgets.slint";
 import { DayBarRow, DaysTab } from "days-chart.slint";
+import { HoursTab } from "hours-chart.slint";
 import { SessionRow } from "subject-detail.slint";
 import { StudyMode, SubjectRow, SubjectTab, TopicRow } from "subject-row.slint";
 
@@ -20,6 +21,10 @@ export global StudyStore {
     in property <string> days-total;
     in property <bool> days-has-minutes;
     in-out property <DaysTab> days-tab;
+    in property <string> hours-line;
+    in property <string> hours-total;
+    in property <string> hours-week;
+    in-out property <HoursTab> hours-tab: HoursTab.all;
     in-out property <bool> subject-open;
     in property <string> error;
     // A muted confirmation under the header, e.g. after saving a session.
@@ -58,6 +63,7 @@ export global StudyStore {
     callback set-topic-done(int, bool);
     callback subject-tab-changed();
     callback days-tab-changed();
+    callback hours-tab-changed();
     callback open-subject(int);
     callback set-subject-archived(int, bool);
     callback delete-session(int);

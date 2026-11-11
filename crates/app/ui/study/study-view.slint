@@ -7,6 +7,7 @@ import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
 import { ActiveSessionCard } from "active-session-card.slint";
 import { DayBarRow, DaysChart, DaysTab } from "days-chart.slint";
+import { HoursChart } from "hours-chart.slint";
 import { SessionPanel } from "session-panel.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
 import { StudyStore } from "study-store.slint";
@@ -482,6 +483,7 @@ export component StudyView inherits VerticalLayout {
             if root.wide: VerticalLayout {
                 width: 320px;
                 alignment: start;
+                spacing: 24px;
                 DaysChart {
                     days: StudyStore.days;
                     total: StudyStore.days-total;
@@ -491,18 +493,41 @@ export component StudyView inherits VerticalLayout {
                         StudyStore.days-tab-changed();
                     }
                 }
+
+                HoursChart {
+                    line: StudyStore.hours-line;
+                    total: StudyStore.hours-total;
+                    week: StudyStore.hours-week;
+                    tab <=> StudyStore.hours-tab;
+                    changed => {
+                        StudyStore.hours-tab-changed();
+                    }
+                }
             }
         }
 
         // Narrow window: the panel goes under the lists.
-        if StudyStore.any-subject && !StudyStore.subject-open && !root.wide: DaysChart {
-                    days: StudyStore.days;
-                    total: StudyStore.days-total;
-                    has-minutes: StudyStore.days-has-minutes;
-                    tab <=> StudyStore.days-tab;
-                    changed => {
-                        StudyStore.days-tab-changed();
-                    }
+        if StudyStore.any-subject && !StudyStore.subject-open && !root.wide: VerticalLayout {
+            spacing: 24px;
+            DaysChart {
+                days: StudyStore.days;
+                total: StudyStore.days-total;
+                has-minutes: StudyStore.days-has-minutes;
+                tab <=> StudyStore.days-tab;
+                changed => {
+                    StudyStore.days-tab-changed();
                 }
+            }
+
+            HoursChart {
+                line: StudyStore.hours-line;
+                total: StudyStore.hours-total;
+                week: StudyStore.hours-week;
+                tab <=> StudyStore.hours-tab;
+                changed => {
+                    StudyStore.hours-tab-changed();
+                }
+            }
+        }
     }
 }

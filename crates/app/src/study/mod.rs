@@ -3,6 +3,7 @@
 
 //! Glue between the Study view and `core::study`.
 
+mod hours_line;
 mod state;
 mod timer;
 
@@ -79,6 +80,11 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
     });
 
     window.global::<StudyStore>().on_days_tab_changed({
+        let state = state.clone();
+        move || state.show_load()
+    });
+
+    window.global::<StudyStore>().on_hours_tab_changed({
         let state = state.clone();
         move || state.show_load()
     });

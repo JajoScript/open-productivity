@@ -10,11 +10,12 @@ use open_productivity_core::db::Connection;
 use open_productivity_core::study::{self, StudyError, Subject, SubjectFilter, SubjectId};
 use slint::{ComponentHandle, SharedString, VecModel};
 
+use super::hours_line;
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
 use crate::{
-    AppWindow, DayBarRow, DaysTab, SessionRow, Strings, StudyStore, SubjectRow, SubjectTab,
-    TopicRow,
+    AppWindow, DayBarRow, DaysTab, HoursTab, SessionRow, Strings, StudyStore, SubjectRow,
+    SubjectTab, TopicRow,
 };
 
 pub struct State {
@@ -57,6 +58,15 @@ fn days_range(tab: DaysTab) -> study::DaysRange {
     match tab {
         DaysTab::Week => study::DaysRange::Week,
         DaysTab::Month => study::DaysRange::Month,
+    }
+}
+
+fn hours_range(tab: HoursTab) -> study::HoursRange {
+    match tab {
+        HoursTab::Months3 => study::HoursRange::Months3,
+        HoursTab::Months6 => study::HoursRange::Months6,
+        HoursTab::Year => study::HoursRange::Year,
+        HoursTab::All => study::HoursRange::All,
     }
 }
 
@@ -143,6 +153,16 @@ impl State {
                 })
                 .collect::<Result<Vec<_>, String>>()?,
         );
+        let hours = study::hours_chart(
+            &self.conn,
+            Local::now().date_naive(),
+            hours_range(w.global::<StudyStore>().get_hours_tab()),
+        )
+        .map_err(|e| e.to_string())?;
+        let store = w.global::<StudyStore>();
+        store.set_hours_line(hours_line::line_commands(&hours.heights).into());
+        store.set_hours_total(study::format_duration(hours.total_minutes).into());
+        store.set_hours_week(study::format_duration(hours.current_week_minutes).into());
         w.global::<StudyStore>()
             .set_any_subject(!self.subject_rows(SubjectFilter::All)?.is_empty());
         // The open subject stays open even if it left the current tab.

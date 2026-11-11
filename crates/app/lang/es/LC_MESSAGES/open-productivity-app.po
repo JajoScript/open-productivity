@@ -872,3 +872,22 @@ msgstr "Sin minutos en este periodo"
 
 msgid "{}: {} min"
 msgstr "{}: {} min"
+
+msgid "Hours studied"
+msgstr "Horas estudiadas"
+
+msgid "3M"
+msgstr "3M"
+
+msgid "6M"
+msgstr "6M"
+
+msgid "1Y"
+msgstr "1A"
+
+msgid "This week: {}"
+msgstr "Esta semana: {}"
+
+msgctxt "hours range"
+msgid "All"
+msgstr "Todo"
