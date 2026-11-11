@@ -30,6 +30,7 @@ impl State {
                 w.set_study_active_subject(a.subject_name.into());
                 w.set_study_active_topic(a.topic.unwrap_or_default().into());
                 w.set_study_clock(study::format_clock(a.elapsed_secs).into());
+                w.set_study_paused(a.paused);
                 true
             }
             Ok(None) => {
@@ -132,6 +133,28 @@ pub fn init(window: &crate::AppWindow, state: &Rc<State>) -> Rc<Timer> {
                 timer.stop();
             }
             state.act(res);
+            state.show_active();
+        }
+    });
+
+    window.on_pause_study({
+        let state = state.clone();
+        move || {
+            state.act(study::pause_session(
+                &state.conn,
+                Local::now().fixed_offset(),
+            ));
+            state.show_active();
+        }
+    });
+
+    window.on_resume_study({
+        let state = state.clone();
+        move || {
+            state.act(study::resume_session(
+                &state.conn,
+                Local::now().fixed_offset(),
+            ));
             state.show_active();
         }
     });

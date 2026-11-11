@@ -224,6 +224,7 @@ export component StudyView inherits VerticalLayout {
     in property <string> active-subject;
     in property <string> active-topic;
     in property <string> clock;
+    in property <bool> paused;
     in-out property <SubjectTab> tab;
     in-out property <bool> detail-open;
     callback new-subject();
@@ -232,6 +233,8 @@ export component StudyView inherits VerticalLayout {
     callback start-session();
     callback finish-session();
     callback discard-session();
+    callback pause-session();
+    callback resume-session();
     callback set-topic-done(int, bool);
     callback tab-changed();
     callback open-subject(int);
@@ -308,11 +311,18 @@ export component StudyView inherits VerticalLayout {
         subject: root.active-subject;
         topic: root.active-topic;
         clock: root.clock;
+        paused: root.paused;
         finish => {
             root.finish-session();
         }
         discard => {
             root.discard-session();
+        }
+        pause => {
+            root.pause-session();
+        }
+        resume => {
+            root.resume-session();
         }
     }
 

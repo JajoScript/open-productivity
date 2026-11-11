@@ -465,7 +465,87 @@ mod timer {
         assert_eq!(elapsed(&conn, "2026-11-08T10:01:00Z"), 60);
         assert_eq!(elapsed(&conn, "2026-11-08T10:01:30Z"), 90);
         heartbeat(&conn, at("2026-11-08T11:00:00Z")).unwrap();
-        assert_eq!(elapsed(&conn, "2026-11-08T11:00:10Z"), 70);
+        assert_eq!(elapsed(&conn, "2026-11-08T11:00:10Z"), 60);
+    }
+
+    fn paused(conn: &Connection, now: &str) -> bool {
+        active_session(conn, at(now)).unwrap().unwrap().paused
+    }
+
+    #[test]
+    fn pause_banks_and_stops_counting() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        pause_session(&conn, at("2026-11-08T10:00:50Z")).unwrap();
+        assert!(paused(&conn, "2026-11-08T10:00:50Z"));
+        assert_eq!(elapsed(&conn, "2026-11-08T10:01:20Z"), 50);
+        heartbeat(&conn, at("2026-11-08T10:01:30Z")).unwrap();
+        assert_eq!(elapsed(&conn, "2026-11-08T10:01:30Z"), 50);
+        // Pausing again changes nothing.
+        pause_session(&conn, at("2026-11-08T10:01:40Z")).unwrap();
+        assert_eq!(elapsed(&conn, "2026-11-08T10:01:40Z"), 50);
+    }
+
+    #[test]
+    fn resume_does_not_count_the_pause() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        pause_session(&conn, at("2026-11-08T10:00:50Z")).unwrap();
+        resume_session(&conn, at("2026-11-08T10:30:00Z")).unwrap();
+        assert!(!paused(&conn, "2026-11-08T10:30:00Z"));
+        assert_eq!(elapsed(&conn, "2026-11-08T10:30:10Z"), 60);
+        // Resuming a running session keeps the time not yet banked.
+        resume_session(&conn, at("2026-11-08T10:30:20Z")).unwrap();
+        assert_eq!(elapsed(&conn, "2026-11-08T10:30:30Z"), 80);
+    }
+
+    #[test]
+    fn long_gap_pauses_and_active_session_only_reads() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        heartbeat(&conn, at("2026-11-08T10:01:00Z")).unwrap();
+        assert!(paused(&conn, "2026-11-08T11:00:00Z"));
+        assert_eq!(elapsed(&conn, "2026-11-08T11:00:00Z"), 60);
+        // The read did not write: a read inside the gap still sees it running.
+        assert!(!paused(&conn, "2026-11-08T10:01:30Z"));
+        heartbeat(&conn, at("2026-11-08T11:00:00Z")).unwrap();
+        assert!(paused(&conn, "2026-11-08T11:00:01Z"));
+        assert_eq!(elapsed(&conn, "2026-11-08T11:00:01Z"), 60);
+    }
+
+    #[test]
+    fn backwards_clock_counts_nothing_and_does_not_pause() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        heartbeat(&conn, at("2026-11-08T09:00:00Z")).unwrap();
+        assert!(!paused(&conn, "2026-11-08T09:00:10Z"));
+        assert_eq!(elapsed(&conn, "2026-11-08T09:00:10Z"), 10);
+    }
+
+    #[test]
+    fn finish_while_paused_saves_what_was_counted() {
+        let (conn, s) = setup();
+        start_session(&conn, s, None, at("2026-11-08T10:00:00Z")).unwrap();
+        heartbeat(&conn, at("2026-11-08T10:01:00Z")).unwrap();
+        pause_session(&conn, at("2026-11-08T10:02:10Z")).unwrap();
+        assert_eq!(
+            finish_session(&conn, at("2026-11-08T12:00:00Z")).unwrap(),
+            2
+        );
+    }
+
+    #[test]
+    fn pause_and_resume_need_a_session() {
+        let conn = db::test_conn();
+        let now = at("2026-11-08T10:00:00Z");
+        assert!(matches!(
+            pause_session(&conn, now),
+            Err(StudyError::NoActiveSession)
+        ));
+        assert!(matches!(
+            resume_session(&conn, now),
+            Err(StudyError::NoActiveSession)
+        ));
     }
 
     #[test]

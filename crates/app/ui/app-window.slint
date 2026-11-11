@@ -140,6 +140,7 @@ export component AppWindow inherits Window {
     in property <string> study-active-subject;
     in property <string> study-active-topic;
     in property <string> study-clock;
+    in property <bool> study-paused;
     in property <[TopicRow]> study-topics;
     in property <[TopicRow]> study-today-topics;
     // The pending topics of the subject chosen in the session modal.
@@ -151,6 +152,8 @@ export component AppWindow inherits Window {
     callback start-study(int, bool, int) -> string;
     callback finish-study();
     callback discard-study();
+    callback pause-study();
+    callback resume-study();
     callback create-topic(int, string, bool, Date) -> string;
     callback set-topic-done(int, bool);
     callback rename-subject(int, string) -> string;
@@ -501,6 +504,7 @@ export component AppWindow inherits Window {
                     active-subject: root.study-active-subject;
                     active-topic: root.study-active-topic;
                     clock: root.study-clock;
+                    paused: root.study-paused;
                     tab <=> root.subject-tab;
                     detail-open <=> root.subject-open;
                     new-subject => {
@@ -536,6 +540,12 @@ export component AppWindow inherits Window {
                     }
                     discard-session => {
                         root.discard-study();
+                    }
+                    pause-session => {
+                        root.pause-study();
+                    }
+                    resume-session => {
+                        root.resume-study();
                     }
                     new-topic => {
                         root.open-new-topic();

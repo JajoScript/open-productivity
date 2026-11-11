@@ -801,6 +801,15 @@ msgstr "¿Borrar la sesión de {} del {}? No se puede deshacer."
 msgid "Discard"
 msgstr "Descartar"
 
+msgid "Pause"
+msgstr "Pausar"
+
+msgid "Resume"
+msgstr "Reanudar"
+
+msgid "Paused"
+msgstr "En pausa"
+
 msgid "Finish"
 msgstr "Terminar"
 

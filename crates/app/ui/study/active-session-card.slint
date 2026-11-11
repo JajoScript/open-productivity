@@ -13,8 +13,11 @@ export component ActiveSessionCard inherits Rectangle {
     // Empty when the session has no topic.
     in property <string> topic;
     in property <string> clock;
+    in property <bool> paused;
     callback finish;
     callback discard;
+    callback pause;
+    callback resume;
 
     // Discarding asks in place, since the time cannot be recovered.
     property <bool> confirming;
@@ -51,6 +54,12 @@ export component ActiveSessionCard inherits Rectangle {
                 overflow: elide;
             }
 
+            if !root.confirming && root.paused: Text {
+                text: @tr("Paused");
+                color: Theme.muted;
+                font-size: 12px;
+            }
+
             // The question takes the subject's place so the clock and buttons stay put.
             if root.confirming: Text {
                 text: Strings.study-discard-question;
@@ -62,10 +71,23 @@ export component ActiveSessionCard inherits Rectangle {
             text: root.clock;
             font-size: 28px;
             font-weight: 700;
+            color: root.paused ? Theme.muted : Palette.foreground;
             font-family: "Consolas";
             vertical-alignment: center;
             accessible-role: text;
             accessible-label: root.clock;
+        }
+
+        if !root.confirming: SubtleButton {
+            text: root.paused ? @tr("Resume") : @tr("Pause");
+            color: Palette.foreground;
+            clicked => {
+                if root.paused {
+                    root.resume();
+                } else {
+                    root.pause();
+                }
+            }
         }
 
         if !root.confirming: SubtleButton {
