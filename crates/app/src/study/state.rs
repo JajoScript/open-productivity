@@ -8,13 +8,13 @@ use std::rc::Rc;
 use open_productivity_core::chrono::Local;
 use open_productivity_core::db::Connection;
 use open_productivity_core::study::{self, StudyError, Subject, SubjectFilter, SubjectId};
-use slint::{ComponentHandle, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use super::hours_line;
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
 use crate::{
-    AppWindow, DayBarRow, DaysTab, HoursTab, SessionRow, Strings, StudyStore, SubjectRow,
+    AppWindow, DayBarRow, DaysTab, HoursTab, RankRow, SessionRow, Strings, StudyStore, SubjectRow,
     SubjectTab, TopicRow,
 };
 
@@ -163,6 +163,16 @@ impl State {
         store.set_hours_line(hours_line::line_commands(&hours.heights).into());
         store.set_hours_total(study::format_duration(hours.total_minutes).into());
         store.set_hours_week(study::format_duration(hours.current_week_minutes).into());
+        let ranking: Vec<RankRow> = study::top_subjects(&self.conn)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|s| RankRow {
+                name: s.name.into(),
+                total: study::format_duration(s.total_minutes).into(),
+                width: s.width,
+            })
+            .collect();
+        store.set_ranking(ModelRc::new(VecModel::from(ranking)));
         w.global::<StudyStore>()
             .set_any_subject(!self.subject_rows(SubjectFilter::All)?.is_empty());
         // The open subject stays open even if it left the current tab.

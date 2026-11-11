@@ -1,0 +1,67 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// One subject of the ranking.
+export struct RankRow {
+    name: string,
+    // Already formatted, e.g. "2h 30m".
+    total: string,
+    // Minutes relative to the first subject, 0..1.
+    width: float,
+}
+
+// The subjects studied the most, as horizontal ink bars.
+export component RankingChart inherits VerticalLayout {
+    in property <[RankRow]> rows;
+
+    spacing: 12px;
+
+    Text {
+        text: @tr("Most studied subjects");
+        font-weight: 700;
+        color: Palette.foreground.with-alpha(0.7);
+    }
+
+    if root.rows.length == 0: Text {
+        text: @tr("No sessions yet.");
+        color: Theme.muted;
+    }
+
+    for row in root.rows: VerticalLayout {
+        spacing: 4px;
+        accessible-role: text;
+        accessible-label: row.name + ", " + row.total;
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: row.name;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+
+            Text {
+                text: row.total;
+                color: Theme.muted;
+            }
+        }
+
+        Rectangle {
+            height: 6px;
+            background: Theme.hairline;
+
+            Rectangle {
+                x: 0;
+                width: parent.width * row.width;
+                background: Theme.ink;
+                animate width {
+                    duration: Theme.enter;
+                    easing: Theme.ease-out;
+                }
+            }
+        }
+    }
+}

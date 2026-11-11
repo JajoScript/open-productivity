@@ -888,6 +888,9 @@ msgstr "1A"
 msgid "This week: {}"
 msgstr "Esta semana: {}"
 
+msgid "Most studied subjects"
+msgstr "Materias más estudiadas"
+
 msgctxt "hours range"
 msgid "All"
 msgstr "Todo"

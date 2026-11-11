@@ -12,6 +12,7 @@ use crate::tasks::TaskId;
 
 mod days;
 mod hours;
+mod ranking;
 #[cfg(test)]
 mod tests;
 mod timer;
@@ -19,6 +20,7 @@ mod topics;
 
 pub use days::*;
 pub use hours::*;
+pub use ranking::*;
 pub use timer::*;
 pub use topics::*;
 

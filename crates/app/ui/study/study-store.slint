@@ -4,6 +4,7 @@
 import { Date } from "std-widgets.slint";
 import { DayBarRow, DaysTab } from "days-chart.slint";
 import { HoursTab } from "hours-chart.slint";
+import { RankRow } from "ranking-chart.slint";
 import { SessionRow } from "subject-detail.slint";
 import { StudyMode, SubjectRow, SubjectTab, TopicRow } from "subject-row.slint";
 
@@ -25,6 +26,8 @@ export global StudyStore {
     in property <string> hours-total;
     in property <string> hours-week;
     in-out property <HoursTab> hours-tab: HoursTab.all;
+    // The subjects studied the most, at most 6.
+    in property <[RankRow]> ranking;
     in-out property <bool> subject-open;
     in property <string> error;
     // A muted confirmation under the header, e.g. after saving a session.

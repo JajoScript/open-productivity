@@ -1,13 +1,14 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Palette, ListView } from "std-widgets.slint";
+import { Palette, ListView, ScrollView } from "std-widgets.slint";
 import { EmptyState } from "../empty-state.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
 import { ActiveSessionCard } from "active-session-card.slint";
 import { DayBarRow, DaysChart, DaysTab } from "days-chart.slint";
 import { HoursChart } from "hours-chart.slint";
+import { RankingChart } from "ranking-chart.slint";
 import { SessionPanel } from "session-panel.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
 import { StudyStore } from "study-store.slint";
@@ -479,28 +480,36 @@ export component StudyView inherits VerticalLayout {
                 }
             }
 
-            // Wide window: the panel sits beside the lists.
-            if root.wide: VerticalLayout {
+            // Wide window: the panel sits beside the lists and scrolls when its charts outgrow it.
+            if root.wide: ScrollView {
                 width: 320px;
-                alignment: start;
-                spacing: 24px;
-                DaysChart {
-                    days: StudyStore.days;
-                    total: StudyStore.days-total;
-                    has-minutes: StudyStore.days-has-minutes;
-                    tab <=> StudyStore.days-tab;
-                    changed => {
-                        StudyStore.days-tab-changed();
+                VerticalLayout {
+                    alignment: start;
+                    spacing: 24px;
+                    // Room for the floating create button over the last ranking row.
+                    padding-bottom: 88px;
+                    DaysChart {
+                        days: StudyStore.days;
+                        total: StudyStore.days-total;
+                        has-minutes: StudyStore.days-has-minutes;
+                        tab <=> StudyStore.days-tab;
+                        changed => {
+                            StudyStore.days-tab-changed();
+                        }
                     }
-                }
 
-                HoursChart {
-                    line: StudyStore.hours-line;
-                    total: StudyStore.hours-total;
-                    week: StudyStore.hours-week;
-                    tab <=> StudyStore.hours-tab;
-                    changed => {
-                        StudyStore.hours-tab-changed();
+                    HoursChart {
+                        line: StudyStore.hours-line;
+                        total: StudyStore.hours-total;
+                        week: StudyStore.hours-week;
+                        tab <=> StudyStore.hours-tab;
+                        changed => {
+                            StudyStore.hours-tab-changed();
+                        }
+                    }
+
+                    RankingChart {
+                        rows: StudyStore.ranking;
                     }
                 }
             }
@@ -527,6 +536,10 @@ export component StudyView inherits VerticalLayout {
                 changed => {
                     StudyStore.hours-tab-changed();
                 }
+            }
+
+            RankingChart {
+                rows: StudyStore.ranking;
             }
         }
     }
