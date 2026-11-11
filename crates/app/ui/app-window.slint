@@ -13,6 +13,7 @@ import { SessionLogger } from "study/session-logger.slint";
 import { TopicCreator } from "study/topic-creator.slint";
 import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
+import { DayBarRow, DaysTab } from "study/days-chart.slint";
 import { SessionRow } from "study/subject-detail.slint";
 import {
     StudyMode,
@@ -87,6 +88,8 @@ export {
     Quadrant,
     Stage,
     ColorMode,
+    DayBarRow,
+    DaysTab,
     Language,
     ListEntry,
     MonthView,
@@ -208,6 +211,11 @@ export component AppWindow inherits Window {
     in property <SubjectRow> subject-detail;
     in property <[SessionRow]> subject-sessions;
     in-out property <SubjectTab> subject-tab;
+    in property <[DayBarRow]> study-days;
+    in property <string> study-days-total;
+    in property <bool> study-days-has-minutes;
+    in-out property <DaysTab> study-days-tab;
+    callback study-days-tab-changed();
     in-out property <bool> subject-open;
     in property <string> study-error;
     // A muted confirmation under the header, e.g. after saving a session.
@@ -588,6 +596,13 @@ export component AppWindow inherits Window {
                     on-break: root.study-on-break;
                     pomodoros: root.study-pomodoros;
                     tab <=> root.subject-tab;
+                    days: root.study-days;
+                    days-total: root.study-days-total;
+                    days-has-minutes: root.study-days-has-minutes;
+                    days-tab <=> root.study-days-tab;
+                    days-tab-changed => {
+                        root.study-days-tab-changed();
+                    }
                     detail-open <=> root.subject-open;
                     session-open <=> root.study-session-open;
                     session-subjects: root.active-subjects;

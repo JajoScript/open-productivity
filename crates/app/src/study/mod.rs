@@ -26,6 +26,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
         rows: Rc::default(),
         active: Rc::default(),
         sessions: Rc::default(),
+        days: Rc::default(),
         topics: Rc::default(),
         today_topics: Rc::default(),
         logger_topics: Rc::default(),
@@ -36,6 +37,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
     window.set_subjects(ModelRc::from(state.rows.clone()));
     window.set_active_subjects(ModelRc::from(state.active.clone()));
     window.set_subject_sessions(ModelRc::from(state.sessions.clone()));
+    window.set_study_days(ModelRc::from(state.days.clone()));
     window.set_study_topics(ModelRc::from(state.topics.clone()));
     window.set_study_today_topics(ModelRc::from(state.today_topics.clone()));
     window.set_logger_topics(ModelRc::from(state.logger_topics.clone()));
@@ -58,6 +60,11 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
     });
 
     window.on_subject_tab_changed({
+        let state = state.clone();
+        move || state.show_load()
+    });
+
+    window.on_study_days_tab_changed({
         let state = state.clone();
         move || state.show_load()
     });

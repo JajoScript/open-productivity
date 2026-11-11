@@ -84,6 +84,11 @@ export global Strings {
         return @tr("Could not load the subjects: {}", error);
     }
 
+    // Accessible name of a bar of the minutes-per-day chart.
+    public pure function day-minutes-label(day: int, month: int, year: int, minutes: int) -> string {
+        return @tr("{}: {} min", Strings.date(day, month, year), minutes);
+    }
+
     // Header of the subjects list.
     public pure function subjects-count(n: int) -> string {
         return @tr("Subjects · {}", n);

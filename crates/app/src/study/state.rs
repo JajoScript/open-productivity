@@ -12,13 +12,14 @@ use slint::{ComponentHandle, SharedString, VecModel};
 
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
-use crate::{AppWindow, SessionRow, Strings, SubjectRow, SubjectTab, TopicRow};
+use crate::{AppWindow, DayBarRow, DaysTab, SessionRow, Strings, SubjectRow, SubjectTab, TopicRow};
 
 pub struct State {
     pub conn: Rc<Connection>,
     pub rows: Rc<VecModel<SubjectRow>>,
     pub active: Rc<VecModel<SubjectRow>>,
     pub sessions: Rc<VecModel<SessionRow>>,
+    pub days: Rc<VecModel<DayBarRow>>,
     pub topics: Rc<VecModel<TopicRow>>,
     pub today_topics: Rc<VecModel<TopicRow>>,
     pub logger_topics: Rc<VecModel<TopicRow>>,
@@ -47,6 +48,13 @@ fn topic_row(t: study::Topic) -> Result<TopicRow, String> {
         due: t.due.map(ui_date).unwrap_or_default(),
         done: t.done,
     })
+}
+
+fn days_range(tab: DaysTab) -> study::DaysRange {
+    match tab {
+        DaysTab::Week => study::DaysRange::Week,
+        DaysTab::Month => study::DaysRange::Month,
+    }
 }
 
 fn filter(tab: SubjectTab) -> SubjectFilter {
@@ -105,6 +113,29 @@ impl State {
                 .into_iter()
                 .map(topic_row)
                 .collect::<Result<Vec<_>, _>>()?,
+        );
+        let chart = study::day_minutes(
+            &self.conn,
+            Local::now().date_naive(),
+            days_range(w.get_study_days_tab()),
+        )
+        .map_err(|e| e.to_string())?;
+        w.set_study_days_total(study::format_duration(chart.total_minutes).into());
+        w.set_study_days_has_minutes(chart.total_minutes > 0);
+        self.days.set_vec(
+            chart
+                .days
+                .into_iter()
+                .map(|d| {
+                    Ok(DayBarRow {
+                        date: ui_date(d.date),
+                        minutes: ui_id(d.minutes)?,
+                        height: d.height,
+                        today: d.today,
+                        labeled: d.labeled,
+                    })
+                })
+                .collect::<Result<Vec<_>, String>>()?,
         );
         w.set_any_subject(!self.subject_rows(SubjectFilter::All)?.is_empty());
         // The open subject stays open even if it left the current tab.

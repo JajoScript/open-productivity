@@ -1,0 +1,154 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, Date } from "std-widgets.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+
+// Which period the chart covers.
+export enum DaysTab { week, month }
+
+// One day of the chart; `height` is 0..1 of the busiest day, `labeled` says the axis names it.
+export struct DayBarRow {
+    date: Date,
+    minutes: int,
+    height: float,
+    today: bool,
+    labeled: bool,
+}
+
+// Week / Month; the owner reads `tab` when `changed` fires.
+component DaysTabs inherits HorizontalLayout {
+    in-out property <DaysTab> tab;
+    callback changed;
+
+    spacing: 4px;
+    alignment: start;
+    accessible-role: tab-list;
+
+    function choose(t: DaysTab) {
+        root.tab = t;
+        root.changed();
+    }
+
+    // Arrow keys move the choice and the focus together.
+    function step(delta: int) {
+        if delta < 0 {
+            root.choose(DaysTab.week);
+            week-tab.focus();
+        } else {
+            root.choose(DaysTab.month);
+            month-tab.focus();
+        }
+    }
+
+    week-tab := SettingsTab {
+        text: @tr("Week");
+        selected: root.tab == DaysTab.week;
+        chosen => {
+            root.choose(DaysTab.week);
+        }
+        step(d) => {
+            root.step(d);
+        }
+    }
+
+    month-tab := SettingsTab {
+        text: @tr("Month");
+        selected: root.tab == DaysTab.month;
+        chosen => {
+            root.choose(DaysTab.month);
+        }
+        step(d) => {
+            root.step(d);
+        }
+    }
+}
+
+// Minutes studied per day of the week or month, as vertical bars.
+export component DaysChart inherits VerticalLayout {
+    in property <[DayBarRow]> days;
+    // Already formatted, e.g. "2h 30m".
+    in property <string> total;
+    in property <bool> has-minutes;
+    in-out property <DaysTab> tab;
+    callback changed;
+
+    property <length> area: 120px;
+    property <length> gap: root.tab == DaysTab.week ? 8px : 2px;
+
+    spacing: 8px;
+
+    Text {
+        text: @tr("Minutes per day");
+        font-weight: 700;
+        color: Palette.foreground.with-alpha(0.7);
+    }
+
+    DaysTabs {
+        tab <=> root.tab;
+        changed => {
+            root.changed();
+        }
+    }
+
+    Text {
+        text: root.total;
+        font-size: 20px;
+        font-weight: 700;
+    }
+
+    // Bars grow from the baseline; the hairline is the baseline.
+    Rectangle {
+        height: root.area;
+        HorizontalLayout {
+            spacing: root.gap;
+            for day in root.days: Rectangle {
+                accessible-role: text;
+                accessible-label: Strings.day-minutes-label(day.date.day, day.date.month, day.date.year, day.minutes);
+                Rectangle {
+                    height: day.minutes > 0 ? max(2px, day.height * root.area) : 0px;
+                    y: parent.height - self.height;
+                    border-top-left-radius: 2px;
+                    border-top-right-radius: 2px;
+                    background: day.today ? Theme.ink : Theme.muted;
+                    animate height {
+                        duration: Theme.enter;
+                        easing: Theme.ease-out;
+                    }
+                }
+            }
+        }
+
+        Rectangle {
+            y: parent.height - 1px;
+            height: 1px;
+            background: Theme.hairline;
+        }
+
+        if !root.has-minutes: Text {
+            text: @tr("No minutes in this period");
+            color: Theme.muted;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+
+    HorizontalLayout {
+        height: 16px;
+        spacing: root.gap;
+        for day[i] in root.days: Rectangle {
+            if day.labeled: Text {
+                text: root.tab == DaysTab.week ? Strings.day-letters[i] : day.date.day;
+                font-size: 12px;
+                font-weight: day.today ? 700 : 400;
+                color: day.today ? Theme.ink : Theme.muted;
+                width: self.preferred-width;
+                x: (parent.width - self.width) / 2;
+                accessible-role: none;
+            }
+        }
+    }
+}

@@ -863,3 +863,12 @@ msgstr "Volver"
 
 msgid "Study session"
 msgstr "Sesión de estudio"
+
+msgid "Minutes per day"
+msgstr "Minutos por día"
+
+msgid "No minutes in this period"
+msgstr "Sin minutos en este periodo"
+
+msgid "{}: {} min"
+msgstr "{}: {} min"
