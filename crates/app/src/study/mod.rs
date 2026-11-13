@@ -183,9 +183,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &Path) -> Rc<slin
             );
             state.show_load();
             if let (Err(e), Some(w)) = (res, state.window.upgrade()) {
-                let msg = w
-                    .global::<Strings>()
-                    .invoke_task_failed(e.to_string().into());
+                let msg = crate::tasks::task_message(&w.global::<Strings>(), e);
                 w.global::<StudyStore>().set_error(msg);
             }
         }

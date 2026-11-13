@@ -346,6 +346,33 @@ msgstr "TAREAS · {}/{}"
 msgid "Write a title for the task."
 msgstr "Escribe un título para la tarea."
 
+msgid "Tasks can't be created in this view."
+msgstr "No se pueden crear tareas en esta vista."
+
+msgid "That task no longer exists."
+msgstr "Esa tarea ya no existe."
+
+msgid "That list no longer exists."
+msgstr "Esa lista ya no existe."
+
+msgid "That habit no longer exists."
+msgstr "Ese hábito ya no existe."
+
+msgid "That day hasn't happened yet."
+msgstr "Ese día todavía no ha llegado."
+
+msgid "The habit hadn't started on that day."
+msgstr "El hábito no había empezado ese día."
+
+msgid "The habit doesn't apply on that weekday."
+msgstr "El hábito no se aplica ese día de la semana."
+
+msgid "That month hasn't happened yet."
+msgstr "Ese mes todavía no ha llegado."
+
+msgid "That month is out of range."
+msgstr "Ese mes está fuera del rango permitido."
+
 msgid "{n} pending"
 msgid_plural "{n} pending"
 msgstr[0] "{n} pendiente"

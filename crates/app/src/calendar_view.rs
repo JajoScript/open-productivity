@@ -18,7 +18,7 @@ use open_productivity_core::tasks::{self, Task, TaskError, TaskId};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::dates::{core_date, ui_date};
-use crate::tasks::{State, ui_id};
+use crate::tasks::{State, task_message, ui_id};
 use crate::{
     AppWindow, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource,
     CalendarTask, Date, Strings, WeekBlock, WeekColumn,
@@ -232,7 +232,7 @@ pub fn init(window: &AppWindow, state: &Rc<State>, app_dir: &Path) -> Timer {
             };
             match tasks::create_on(&state.conn, &title, due) {
                 Err(TaskError::EmptyTitle) => strings.get_task_title_empty(),
-                Err(e) => strings.invoke_task_failed(e.to_string().into()),
+                Err(e) => task_message(&strings, e),
                 Ok(_) => {
                     // Failures of the reload show in the tasks error line, as everywhere.
                     if let Err(e) = state.reload() {
@@ -251,17 +251,18 @@ pub fn init(window: &AppWindow, state: &Rc<State>, app_dir: &Path) -> Timer {
               d: Date,
               op: &dyn Fn(&Connection, TaskId, NaiveDate) -> Result<(), TaskError>| {
             let Some(w) = weak.upgrade() else { return };
-            let failed = |e: String| w.global::<Strings>().invoke_task_failed(e.into());
+            let s = w.global::<Strings>();
             let res = match core_date(d) {
-                Ok(due) => op(&state.conn, TaskId(id.into()), due).map_err(|e| e.to_string()),
-                Err(e) => Err(e),
+                Ok(due) => op(&state.conn, TaskId(id.into()), due).map_err(|e| task_message(&s, e)),
+                Err(e) => Err(s.invoke_task_failed(e.into())),
             };
             // Reload even on failure so the grid shows what is really stored; it also clears
             // the error line, so the message is set after.
             let reloaded = state.reload();
-            w.set_calendar_error(match res.and(reloaded) {
-                Ok(()) => Default::default(),
-                Err(e) => failed(e),
+            w.set_calendar_error(match res.map(|()| reloaded) {
+                Err(msg) => msg,
+                Ok(Err(e)) => s.invoke_task_failed(e.into()),
+                Ok(Ok(())) => Default::default(),
             });
         }
     };

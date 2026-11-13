@@ -12,7 +12,7 @@ use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
 use open_productivity_core::recurrence::Frequency;
 use open_productivity_core::tasks::{self, DueLabel, Priority, Task, TaskError, TaskId, View};
-use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::dates::{core_date, ui_date};
 use crate::{
@@ -42,6 +42,25 @@ pub struct State {
 /// Slint ints are i32; a larger id is an error, not a panic.
 pub fn ui_id(id: i64) -> Result<i32, String> {
     i32::try_from(id).map_err(|e| e.to_string())
+}
+
+/// The user-facing text of a task error; only database errors and corrupt stored data show raw.
+pub fn task_message(s: &Strings, e: TaskError) -> SharedString {
+    match e {
+        TaskError::EmptyTitle => s.get_title_empty(),
+        TaskError::CannotCreateHere => s.get_task_cannot_create(),
+        TaskError::NotFound => s.get_task_not_found(),
+        TaskError::BadTime(_) => s.get_time_invalid(),
+        TaskError::TimeWithoutDate => s.get_time_needs_date(),
+        TaskError::EndWithoutStart => s.get_end_needs_start(),
+        TaskError::EndNotAfterStart => s.get_end_not_after_start(),
+        TaskError::ListNotFound => s.get_list_not_found(),
+        TaskError::RecurrenceWithoutDate => s.get_repeat_needs_date(),
+        TaskError::BadInterval(_) => s.get_interval_invalid(),
+        e @ (TaskError::BadDate(_) | TaskError::BadFrequency(_) | TaskError::Sqlite(_)) => {
+            s.invoke_task_failed(e.to_string().into())
+        }
+    }
 }
 
 pub fn ui_view(v: View) -> TaskView {
@@ -128,6 +147,13 @@ pub fn show_today(w: &AppWindow, today: NaiveDate) {
 }
 
 impl State {
+    /// Shows a ready message in the tasks error line.
+    pub fn show_message(&self, msg: SharedString) {
+        if let Some(w) = self.window.upgrade() {
+            w.set_tasks_error(msg);
+        }
+    }
+
     /// Only what the open tab shows: the week, or the view's rows plus the lists panel.
     pub fn reload(&self) -> Result<(), String> {
         let res = self.reload_tab();
@@ -236,9 +262,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &std::path::Path)
             let view = if quick { View::Inbox } else { state.view.get() };
             match tasks::create(&state.conn, &title, view, today) {
                 Err(TaskError::EmptyTitle) => w.global::<Strings>().get_task_title_empty(),
-                Err(e) => w
-                    .global::<Strings>()
-                    .invoke_task_failed(e.to_string().into()),
+                Err(e) => task_message(&w.global::<Strings>(), e),
                 Ok(_) => {
                     finish(state.reload());
                     Default::default()
@@ -257,7 +281,11 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &std::path::Path)
         let (state, finish) = (state.clone(), finish.clone());
         move |res: Result<(), TaskError>| {
             let reloaded = state.reload();
-            finish(res.map_err(|e| e.to_string()).and(reloaded));
+            match (res, state.window.upgrade()) {
+                (Err(e), Some(w)) => state.show_message(task_message(&w.global::<Strings>(), e)),
+                (Err(_), None) => {}
+                (Ok(()), _) => finish(reloaded),
+            }
         }
     };
 
@@ -320,13 +348,15 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>, app_dir: &std::path::Path)
             );
             // The editor stays open with the typed text and shows the message itself.
             match res {
-                Err(TaskError::EmptyTitle) => s.get_title_empty(),
-                Err(TaskError::BadTime(_)) => s.get_time_invalid(),
-                Err(TaskError::TimeWithoutDate) => s.get_time_needs_date(),
-                Err(TaskError::EndWithoutStart) => s.get_end_needs_start(),
-                Err(TaskError::EndNotAfterStart) => s.get_end_not_after_start(),
-                Err(TaskError::RecurrenceWithoutDate) => s.get_repeat_needs_date(),
-                Err(TaskError::BadInterval(_)) => s.get_interval_invalid(),
+                Err(
+                    e @ (TaskError::EmptyTitle
+                    | TaskError::BadTime(_)
+                    | TaskError::TimeWithoutDate
+                    | TaskError::EndWithoutStart
+                    | TaskError::EndNotAfterStart
+                    | TaskError::RecurrenceWithoutDate
+                    | TaskError::BadInterval(_)),
+                ) => task_message(&s, e),
                 res => {
                     after(res);
                     Default::default()

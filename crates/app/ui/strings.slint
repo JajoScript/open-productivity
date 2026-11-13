@@ -28,6 +28,12 @@ export global Strings {
     out property <string> habit-empty-name: @tr("Give the habit a name.");
     out property <string> habit-no-days: @tr("Pick at least one day.");
     out property <string> habit-future-start: @tr("The start date can't be in the future.");
+    out property <string> habit-not-found: @tr("That habit no longer exists.");
+    out property <string> habit-future-day: @tr("That day hasn't happened yet.");
+    out property <string> habit-before-start: @tr("The habit hadn't started on that day.");
+    out property <string> habit-not-scheduled: @tr("The habit doesn't apply on that weekday.");
+    out property <string> habit-future-month: @tr("That month hasn't happened yet.");
+    out property <string> habit-month-out-of-range: @tr("That month is out of range.");
 
     // Monday-first initials of the weekday toggles; the context keeps equal English letters apart.
     out property <[string]> day-letters: [@tr("Monday initial" => "M"), @tr("Tuesday initial" => "T"), @tr("Wednesday initial" => "W"), @tr("Thursday initial" => "T"), @tr("Friday initial" => "F"), @tr("Saturday initial" => "S"), @tr("Sunday initial" => "S")];
@@ -156,6 +162,9 @@ export global Strings {
     out property <string> repeat-needs-date: @tr("A repeating task needs a due date.");
     out property <string> interval-invalid: @tr("Enter a whole number from 1 to 999.");
     out property <string> task-title-empty: @tr("Write a title for the task.");
+    out property <string> task-cannot-create: @tr("Tasks can't be created in this view.");
+    out property <string> task-not-found: @tr("That task no longer exists.");
+    out property <string> list-not-found: @tr("That list no longer exists.");
 
     // English is month/day/year; translations may reorder the placeholders.
     public pure function date(day: int, month: int, year: int) -> string {

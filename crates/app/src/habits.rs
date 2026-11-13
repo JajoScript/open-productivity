@@ -11,7 +11,7 @@ use open_productivity_core::calendar;
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
 use open_productivity_core::habits::{self, DayState as CoreState, HabitError, HabitId, Heat};
-use slint::{ComponentHandle, Model, ModelRc, Timer, TimerMode, VecModel};
+use slint::{ComponentHandle, Model, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::dates::{core_date, ui_date};
 use crate::tasks::ui_id;
@@ -19,6 +19,24 @@ use crate::{
     AppWindow, ArchivedRow, Date, DayHabit, DayState, HabitRow, HeatCell, HeatLevel, Strings,
     WeekTotal,
 };
+
+/// The user-facing text of a habit error; only database errors and corrupt stored data show raw.
+pub fn habit_message(s: &Strings, e: HabitError) -> SharedString {
+    match e {
+        HabitError::EmptyName => s.get_habit_empty_name(),
+        HabitError::NoWeekdays => s.get_habit_no_days(),
+        HabitError::FutureStart => s.get_habit_future_start(),
+        HabitError::NotFound => s.get_habit_not_found(),
+        HabitError::Future => s.get_habit_future_day(),
+        HabitError::BeforeStart => s.get_habit_before_start(),
+        HabitError::NotScheduled => s.get_habit_not_scheduled(),
+        HabitError::FutureMonth => s.get_habit_future_month(),
+        HabitError::OutOfRange => s.get_habit_month_out_of_range(),
+        e @ (HabitError::BadDate(_) | HabitError::Sqlite(_)) => {
+            s.invoke_habit_failed(e.to_string().into())
+        }
+    }
+}
 
 /// Publishes the habits that apply today for the Today tab of Tasks.
 pub fn load_today(w: &AppWindow, conn: &Connection) -> Result<(), String> {
@@ -124,17 +142,17 @@ impl State {
         Ok(())
     }
 
-    fn show_error(&self, msg: String) {
+    fn show_error(&self, msg: SharedString) {
         if let Some(w) = self.window.upgrade() {
-            w.set_habits_error(msg.into());
+            w.set_habits_error(msg);
         }
     }
 
     /// Shows the outcome in the view.
     fn finish(&self, res: Result<(), String>) {
         let msg = match (res, self.window.upgrade()) {
-            (Err(e), Some(w)) => w.global::<Strings>().invoke_habit_failed(e.into()).into(),
-            _ => String::new(),
+            (Err(e), Some(w)) => w.global::<Strings>().invoke_habit_failed(e.into()),
+            _ => SharedString::new(),
         };
         self.show_error(msg);
     }
@@ -160,10 +178,7 @@ impl State {
             Err(e) => return s.invoke_habit_failed(e.into()),
         };
         match op(&self.conn, flags, start, Local::now().date_naive()) {
-            Err(HabitError::EmptyName) => s.get_habit_empty_name(),
-            Err(HabitError::NoWeekdays) => s.get_habit_no_days(),
-            Err(HabitError::FutureStart) => s.get_habit_future_start(),
-            Err(e) => s.invoke_habit_failed(e.to_string().into()),
+            Err(e) => habit_message(&s, e),
             Ok(()) => {
                 self.after(Ok(()));
                 Default::default()
@@ -174,7 +189,11 @@ impl State {
     /// Reloads even on failure so the view shows what is really stored.
     fn after(&self, res: Result<(), HabitError>) {
         let reloaded = self.reload();
-        self.finish(res.map_err(|e| e.to_string()).and(reloaded));
+        match (res, self.window.upgrade()) {
+            (Err(e), Some(w)) => self.show_error(habit_message(&w.global::<Strings>(), e)),
+            (Err(_), None) => {}
+            (Ok(()), _) => self.finish(reloaded),
+        }
     }
 }
 

@@ -8,7 +8,7 @@ use std::rc::Rc;
 use open_productivity_core::chrono::Local;
 use open_productivity_core::lists::{self, ListError, ListId};
 use open_productivity_core::tasks::{self, View};
-use slint::ComponentHandle;
+use slint::{ComponentHandle, SharedString};
 
 use crate::tasks::{State, ui_id, ui_view};
 use crate::{AppWindow, ListEntry, Strings, ViewCounts};
@@ -16,6 +16,16 @@ use crate::{AppWindow, ListEntry, Strings, ViewCounts};
 /// The Slint side has no optional int, so 0 stands for "no list" (SQLite rowids start at 1).
 pub fn list_arg(id: i32) -> Option<ListId> {
     (id != 0).then(|| ListId(id.into()))
+}
+
+/// The user-facing text of a list error; only database errors show raw.
+pub fn list_message(s: &Strings, e: ListError) -> SharedString {
+    match e {
+        ListError::EmptyName => s.get_list_name_empty(),
+        ListError::DuplicateName => s.get_list_exists(),
+        ListError::NotFound => s.get_list_not_found(),
+        e @ ListError::Sqlite(_) => s.invoke_list_failed(e.to_string().into()),
+    }
 }
 
 pub fn show_view(state: &State, view: View, finish: &dyn Fn(Result<(), String>)) {
@@ -82,9 +92,7 @@ pub fn init(
             };
             let s = w.global::<Strings>();
             match lists::create(&state.conn, &name) {
-                Err(ListError::EmptyName) => s.get_list_name_empty(),
-                Err(ListError::DuplicateName) => s.get_list_exists(),
-                Err(e) => s.invoke_list_failed(e.to_string().into()),
+                Err(e) => list_message(&s, e),
                 Ok(_) => {
                     finish(state.reload());
                     Default::default()
@@ -102,7 +110,12 @@ pub fn init(
             if state.view.get() == View::List(id) {
                 state.view.set(View::Today);
             }
-            finish(res.map_err(|e| e.to_string()).and(state.reload()));
+            let reloaded = state.reload();
+            match (res, state.window.upgrade()) {
+                (Err(e), Some(w)) => state.show_message(list_message(&w.global::<Strings>(), e)),
+                (Err(_), None) => {}
+                (Ok(()), _) => finish(reloaded),
+            }
         }
     });
 }
