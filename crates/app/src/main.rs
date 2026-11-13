@@ -107,9 +107,14 @@ fn choose_instance(s: &Strings, app_dir: &Path) -> Option<PathBuf> {
 }
 
 fn main() {
-    let app_dir = dirs::config_dir()
-        .unwrap_or_else(|| PathBuf::from("."))
-        .join("open-productivity");
+    // QA points this elsewhere so testing never touches the real settings, registry or lock.
+    let app_dir = std::env::var_os("OPEN_PRODUCTIVITY_CONFIG_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| {
+            dirs::config_dir()
+                .unwrap_or_else(|| PathBuf::from("."))
+                .join("open-productivity")
+        });
     // A release build has no console: without this a panic would leave no trace at all.
     let (log_dir, default_hook) = (app_dir.clone(), std::panic::take_hook());
     std::panic::set_hook(Box::new(move |info| {
