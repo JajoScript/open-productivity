@@ -25,6 +25,13 @@ use crate::{
 };
 use open_productivity_core::chrono::Local;
 
+/// Segments of a card's use bar.
+const SEGMENTS: i64 = 20;
+
+fn is_card(r: &AccountRow) -> bool {
+    matches!(r.kind, AccountKind::Credit | AccountKind::CreditLine)
+}
+
 pub struct State {
     pub conn: Rc<Connection>,
     /// The Accounts tab: active accounts, then archived ones.
@@ -113,6 +120,14 @@ fn account_row(a: Account, main: &Currency, bill: Option<&Bill>) -> Result<Accou
         closing_day: card.map_or(0, |t| t.closing_day as i32),
         due_day: card.map_or(0, |t| t.due_day as i32),
         used: usage.map_or_else(String::new, |u| money(u.used)).into(),
+        reserved: if a.reserved != 0 {
+            money(a.reserved)
+        } else {
+            String::new()
+        }
+        .into(),
+        use_percent: usage.map_or(0, |u| i32::try_from(u.percent()).unwrap_or(i32::MAX)),
+        use_segments: usage.map_or(0, |u| i32::try_from(u.segments(SEGMENTS)).unwrap_or(0)),
         available: match usage {
             Some(u) => money(u.available),
             None if a.reserved != 0 => money(a.available()),
@@ -130,6 +145,7 @@ fn account_row(a: Account, main: &Currency, bill: Option<&Bill>) -> Result<Accou
         currency: a.currency.code.into(),
         balance: finances::format_in(a.balance, a.currency, main, style).into(),
         initial: finances::format_input(a.initial_balance, a.currency, style).into(),
+        overdrawn: a.balance < 0,
         archived: a.archived,
         in_use: a.in_use,
     })
@@ -191,6 +207,19 @@ impl State {
                 .iter()
                 .any(|r| matches!(r.kind, AccountKind::Credit | AccountKind::CreditLine)),
         );
+        // The Accounts tab lists plain accounts and cards apart.
+        let split = |rows: &[AccountRow], cards: bool| {
+            ModelRc::new(VecModel::from(
+                rows.iter()
+                    .filter(|r| is_card(r) == cards)
+                    .cloned()
+                    .collect::<Vec<_>>(),
+            ))
+        };
+        store.set_plain_accounts(split(&active, false));
+        store.set_cards(split(&active, true));
+        store.set_archived_plain_accounts(split(&archived, false));
+        store.set_archived_cards(split(&archived, true));
         self.summary_account_rows.set_vec(summary_accounts);
         self.rows.set_vec(active);
         self.archived_account_rows.set_vec(archived);

@@ -9,7 +9,7 @@ import { BucketRow } from "bucket-row.slint";
 import { CategoryRow } from "category-row.slint";
 import { BiggestRow, DueCell, ScheduleForm, ScheduledRow } from "scheduled-row.slint";
 import { ReserveDetail, ReserveRow } from "reserve-row.slint";
-import { AccountFilter, AxisLabelRow, BalanceLayer, DonutSliceRow, SummaryBar, SummaryCardKind, SummaryCardRow, UpcomingBarRow, UpcomingFilter, UpcomingRow } from "summary-row.slint";
+import { AccountFilter, AxisLabelRow, BalanceLayer, DonutSliceRow, SummaryCardKind, SummaryCardRow, UpcomingBarRow, UpcomingFilter, UpcomingRow } from "summary-row.slint";
 
 // What the Finances views show and ask for. Rust fills the data and answers the callbacks;
 // the views read and call it directly instead of forwarding it through the window.
@@ -45,11 +45,16 @@ export global FinanceStore {
     // The calendar of that month, six weeks of seven cells, Monday first, and its biggest payments.
     in property <[DueCell]> due-cells;
     in property <[BiggestRow]> due-biggest;
-    // The Accounts tab's net worth: the total, the assets and debts, and the biggest positive accounts as bars.
+    // The Accounts tab lists the plain accounts and the cards and lines apart, active then archived.
+    in property <[AccountRow]> plain-accounts;
+    in property <[AccountRow]> archived-plain-accounts;
+    in property <[AccountRow]> cards;
+    in property <[AccountRow]> archived-cards;
+    // The Accounts tab's net worth: the total and the positive accounts as donut slices; the
+    // donut path is asked like the Summary's.
     in property <string> worth-total;
-    in property <string> worth-assets;
-    in property <string> worth-debts;
-    in property <[SummaryBar]> worth-bars;
+    in property <[DonutSliceRow]> worth-slices;
+    pure callback worth-donut-path(int, float, float, int) -> string;
     // The Summary tab, for the month shown: the four cards, the balance chart, the category
     // donut, the latest movements, the upcoming payments and the accounts.
     in property <SummaryCardRow> summary-total;

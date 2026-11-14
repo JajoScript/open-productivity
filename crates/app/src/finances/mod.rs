@@ -90,6 +90,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
 
     transactions::connect(&state, &store);
     summary::connect(&state, &store);
+    worth::connect(&state, &store);
     scheduled::connect(&state, &store);
     categories::connect(&state, &store);
     budget::connect(&state, &store);

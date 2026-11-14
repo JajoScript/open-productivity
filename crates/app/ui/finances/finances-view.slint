@@ -296,14 +296,6 @@ export component FinancesView inherits VerticalLayout {
             }
         }
 
-        if FinanceStore.tab == FinanceTab.accounts && FinanceStore.has-reservable: SubtleButton {
-            text: @tr("New reserve");
-            color: Palette.foreground;
-            clicked => {
-                root.new-reserve();
-            }
-        }
-
     }
 
     if FinanceStore.error != "": Text {
@@ -367,6 +359,9 @@ export component FinancesView inherits VerticalLayout {
         }
         edit-account(a) => {
             root.edit-account(a);
+        }
+        new-reserve => {
+            root.new-reserve();
         }
         edit-reserve(r) => {
             root.edit-reserve(r);

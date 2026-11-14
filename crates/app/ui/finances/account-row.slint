@@ -14,6 +14,8 @@ export struct AccountRow {
     // The currency code.
     currency: string,
     balance: string,
+    // The balance is below zero: an overdraft on a plain account.
+    overdrawn: bool,
     initial: string,
     archived: bool,
     // Some movement uses it, so it can only be archived.
@@ -25,6 +27,11 @@ export struct AccountRow {
     closing-day: int,
     due-day: int,
     used: string,
+    // A plain account's reserves formatted, "" when it has none.
+    reserved: string,
+    // The use of the limit in whole percent, and how many of the 20 bar segments it fills.
+    use-percent: int,
+    use-segments: int,
     // A card: the limit left. A plain account with reserves: the balance minus them; "" otherwise.
     available: string,
     // Used part of the limit in per mille; above 1000 when over it.

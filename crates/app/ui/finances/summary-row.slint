@@ -3,15 +3,6 @@
 
 import { Date } from "std-widgets.slint";
 
-// One category of the expense bars.
-export struct SummaryBar {
-    // The uncategorized row carries the "No category" text.
-    name: string,
-    total: string,
-    // Total relative to the biggest, 0..1.
-    width: float,
-}
-
 // Which card a sparkline belongs to.
 export enum SummaryCardKind { total, balance, income, expense }
 

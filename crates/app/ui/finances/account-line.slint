@@ -1,0 +1,169 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { AccountRow } from "account-row.slint";
+import { FinanceColumns } from "finance-table.slint";
+
+// Column sizes shared by the headers and the rows of the accounts and cards tables.
+export global AccountColumns {
+    out property <length> amount: 150px;
+    out property <length> actions: 60px;
+}
+
+// A row of the accounts and cards tables: the whole row opens the account, the buttons at its
+// end take their own clicks. Its children fill the row between the icon and the buttons.
+export component AccountRowFrame inherits Rectangle {
+    in property <AccountRow> account;
+    in property <image> icon;
+    in property <string> label;
+    callback opened;
+    callback archive;
+
+    border-radius: 6px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background {
+        duration: Theme.fast;
+        easing: Theme.ease-out;
+    }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => {
+        root.opened();
+    }
+
+    // Under the row's content, so the buttons take their own clicks.
+    touch := TouchArea {
+        clicked => {
+            root.opened();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: FinanceColumns.gap;
+        Rectangle {
+            width: FinanceColumns.icon;
+            opacity: root.account.archived ? 0.55 : 1;
+            Image {
+                source: root.icon;
+                colorize: Theme.muted;
+                width: 16px;
+                height: 16px;
+                accessible-role: none;
+            }
+        }
+
+        @children
+
+        HorizontalLayout {
+            width: AccountColumns.actions;
+            alignment: end;
+            spacing: 4px;
+            SubtleButton {
+                icon: @image-url("../icons/pencil.svg");
+                label: Strings.edit-account-label(root.account.name);
+                clicked => {
+                    root.opened();
+                }
+            }
+
+            SubtleButton {
+                icon: root.account.archived ? @image-url("../icons/archive-restore.svg") : @image-url("../icons/archive.svg");
+                label: root.account.archived ? Strings.restore-account-label(root.account.name) : Strings.archive-account-label(root.account.name);
+                clicked => {
+                    root.archive();
+                }
+            }
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.opened();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// A plain account: name with bank and kind, balance (red in overdraft) with what its reserves hold.
+export component AccountLine inherits AccountRowFrame {
+    icon: @image-url("../icons/wallet.svg");
+    height: root.account.reserved != "" ? 68px : 52px;
+    label: Strings.account-line-label(root.account.name, Strings.account-kind(root.account.kind), root.account.balance);
+
+    VerticalLayout {
+        alignment: center;
+        horizontal-stretch: 1;
+        min-width: 0px;
+        preferred-width: 0px;
+        opacity: root.account.archived ? 0.55 : 1;
+        Text {
+            text: root.account.name;
+            font-weight: 600;
+            overflow: elide;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.account.bank != "" ? Strings.account-kind-bank(root.account.kind, root.account.bank) : Strings.account-kind(root.account.kind);
+            color: Theme.muted;
+            font-size: 12px;
+            overflow: elide;
+            accessible-role: none;
+        }
+    }
+
+    VerticalLayout {
+        alignment: center;
+        width: AccountColumns.amount;
+        opacity: root.account.archived ? 0.55 : 1;
+        Text {
+            text: root.account.balance;
+            color: root.account.overdrawn ? Theme.critical : Palette.foreground;
+            font-weight: 600;
+            overflow: elide;
+            horizontal-alignment: right;
+            accessible-role: none;
+        }
+
+        if root.account.reserved != "": Text {
+            text: Strings.reserved-line(root.account.reserved);
+            color: Theme.muted;
+            font-size: 11px;
+            overflow: elide;
+            horizontal-alignment: right;
+            accessible-role: none;
+        }
+
+        if root.account.reserved != "": Text {
+            text: Strings.available-line(root.account.available);
+            color: Theme.muted;
+            font-size: 11px;
+            overflow: elide;
+            horizontal-alignment: right;
+            accessible-role: none;
+        }
+    }
+}

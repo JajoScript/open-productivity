@@ -1,0 +1,183 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { FinanceStore } from "finance-store.slint";
+
+// The net worth: its total, a donut of the positive accounts and what share each one is.
+export component NetWorthCard inherits FinanceCard {
+    // The ink of slice `i`: darkest for the biggest, fading for the rest.
+    pure function slice-ink(i: int) -> color {
+        return Palette.foreground.with-alpha(Math.max(0.9 - i * 0.16, 0.15));
+    }
+
+    FinanceCardHeader {
+        title: @tr("Net worth");
+        Text {
+            text: FinanceStore.worth-total;
+            font-weight: 700;
+            vertical-alignment: center;
+        }
+    }
+
+    HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 176px;
+            height: 176px;
+            accessible-role: text;
+            accessible-label: @tr("Net worth total") + " " + FinanceStore.worth-total;
+            Path {
+                width: parent.width;
+                height: parent.height;
+                viewbox-width: self.width / 1px;
+                viewbox-height: self.height / 1px;
+                commands: FinanceStore.worth-donut-path(-1, self.width / 1px, self.height / 1px, FinanceStore.chart-version);
+                stroke: Palette.foreground.with-alpha(0.07);
+                stroke-width: 24px;
+            }
+
+            for s[i] in FinanceStore.worth-slices: Path {
+                width: parent.width;
+                height: parent.height;
+                viewbox-width: self.width / 1px;
+                viewbox-height: self.height / 1px;
+                commands: FinanceStore.worth-donut-path(i, self.width / 1px, self.height / 1px, FinanceStore.chart-version);
+                stroke: slice-ink(i);
+                stroke-width: 24px;
+            }
+
+            VerticalLayout {
+                alignment: center;
+                x: 36px;
+                width: parent.width - 72px;
+                Text {
+                    text: FinanceStore.worth-total;
+                    font-size: 16px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    overflow: elide;
+                    accessible-role: none;
+                }
+
+                Text {
+                    text: @tr("Net worth total");
+                    color: Theme.muted;
+                    font-size: 12px;
+                    horizontal-alignment: center;
+                    overflow: elide;
+                    accessible-role: none;
+                }
+            }
+        }
+    }
+
+    VerticalLayout {
+        spacing: 4px;
+        for s[i] in FinanceStore.worth-slices: HorizontalLayout {
+            spacing: 8px;
+            height: 22px;
+            accessible-role: text;
+            accessible-label: s.name + ", " + s.percent;
+            Rectangle {
+                width: 8px;
+                height: 8px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 4px;
+                background: slice-ink(i);
+            }
+
+            Text {
+                text: s.name;
+                overflow: elide;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                min-width: 0px;
+                accessible-role: none;
+            }
+
+            Text {
+                text: s.percent;
+                color: Theme.muted;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+        }
+    }
+}
+
+// The use of each active card's limit as a bar of small segments.
+export component CreditUsageCard inherits FinanceCard {
+    FinanceCardHeader {
+        title: @tr("Credit usage");
+        count: FinanceStore.cards.length;
+    }
+
+    for card in FinanceStore.cards: VerticalLayout {
+        spacing: 6px;
+        accessible-role: text;
+        accessible-label: card.name + ", " + card.use-percent + "%, " + Strings.credit-used(card.used) + ", " + Strings.credit-limit(card.limit-text);
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: card.name;
+                font-weight: 600;
+                overflow: elide;
+                horizontal-stretch: 1;
+                min-width: 0px;
+                accessible-role: none;
+            }
+
+            Text {
+                text: card.use-percent + "%";
+                color: card.over-limit ? Theme.critical : Palette.foreground;
+                font-weight: 600;
+                accessible-role: none;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 3px;
+            height: 10px;
+            for i in 20: Rectangle {
+                horizontal-stretch: 1;
+                min-width: 0px;
+                preferred-width: 0px;
+                border-radius: 2px;
+                background: i < card.use-segments ? (card.over-limit ? Theme.critical : Theme.ink) : Theme.hairline;
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: Strings.credit-used(card.used);
+                color: Theme.muted;
+                font-size: 12px;
+                overflow: elide;
+                horizontal-stretch: 1;
+                min-width: 0px;
+                accessible-role: none;
+            }
+
+            Text {
+                text: Strings.credit-limit(card.limit-text);
+                color: Theme.muted;
+                font-size: 12px;
+                horizontal-alignment: right;
+                accessible-role: none;
+            }
+        }
+    }
+
+    if FinanceStore.cards.length == 0: Text {
+        text: @tr("Nothing here.");
+        color: Theme.muted;
+        height: 40px;
+        vertical-alignment: center;
+        horizontal-alignment: center;
+    }
+}

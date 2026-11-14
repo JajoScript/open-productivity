@@ -286,10 +286,6 @@ export global Strings {
     out property <string> bucket-savings: @tr("Savings");
     out property <string> finance-category-archived: @tr("That category is archived. Restore it to use it.");
 
-    public pure function worth-line(assets: string, debts: string) -> string {
-        return @tr("Assets {} · Debts {}", assets, debts);
-    }
-
     // The title of a card bill in the upcoming payments.
     public pure function bill-title(card: string) -> string {
         return @tr("Bill {}", card);
@@ -341,10 +337,6 @@ export global Strings {
             return @tr("Credit line");
         }
         return @tr("Cash");
-    }
-
-    public pure function card-terms(closing: int, due: int) -> string {
-        return @tr("Closes on day {} · Pay on day {}", closing, due);
     }
 
     public pure function card-used(used: string, limit: string) -> string {
@@ -517,6 +509,38 @@ export global Strings {
     out property <string> finance-invalid-day: @tr("The days must be numbers from 1 to 31.");
     out property <string> finance-kind-locked: @tr("A credit card or credit line can't become another kind of account, nor the reverse.");
     out property <string> finance-scheduled-done: @tr("That scheduled payment is already finished.");
+
+    public pure function reserved-line(amount: string) -> string {
+        return @tr("Reserved: {}", amount);
+    }
+
+    public pure function available-line(amount: string) -> string {
+        return @tr("Available: {}", amount);
+    }
+
+    public pure function card-closes(day: int) -> string {
+        return @tr("Closes day {}", day);
+    }
+
+    public pure function credit-used(amount: string) -> string {
+        return @tr("Used {}", amount);
+    }
+
+    public pure function credit-limit(amount: string) -> string {
+        return @tr("Limit {}", amount);
+    }
+
+    public pure function edit-account-label(name: string) -> string {
+        return @tr("Edit {}", name);
+    }
+
+    public pure function archive-account-label(name: string) -> string {
+        return @tr("Archive {}", name);
+    }
+
+    public pure function restore-account-label(name: string) -> string {
+        return @tr("Restore {}", name);
+    }
 
     public pure function account-line-label(name: string, kind: string, balance: string) -> string {
         return @tr("{}, {}, {}", name, kind, balance);

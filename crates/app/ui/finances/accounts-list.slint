@@ -1,0 +1,146 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Theme } from "../theme.slint";
+import { AccountRow } from "account-row.slint";
+import { AccountColumns, AccountLine } from "account-line.slint";
+import { CardLine } from "card-line.slint";
+import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { FinanceColumns, HeaderLabel } from "finance-table.slint";
+import { FinanceStore } from "finance-store.slint";
+
+// The column titles of the accounts and cards tables.
+component AccountsHeader inherits HorizontalLayout {
+    in property <string> first;
+    in property <string> amount;
+
+    height: 28px;
+    padding-left: 8px;
+    padding-right: 8px;
+    spacing: FinanceColumns.gap;
+    accessible-role: none;
+    Rectangle {
+        width: FinanceColumns.icon;
+    }
+
+    HeaderLabel {
+        text: root.first.to-uppercase();
+        horizontal-stretch: 1;
+        min-width: 0px;
+        preferred-width: 0px;
+    }
+
+    HeaderLabel {
+        text: root.amount.to-uppercase();
+        width: AccountColumns.amount;
+        horizontal-alignment: right;
+    }
+
+    Rectangle {
+        width: AccountColumns.actions;
+    }
+}
+
+// The Active / Archived switch under a card's title.
+component ArchiveTabs inherits HorizontalLayout {
+    in-out property <bool> archived;
+
+    alignment: start;
+    accessible-role: tab-list;
+    SettingsTab {
+        text: @tr("Active");
+        selected: !root.archived;
+        chosen => {
+            root.archived = false;
+        }
+    }
+
+    SettingsTab {
+        text: @tr("Archived");
+        selected: root.archived;
+        chosen => {
+            root.archived = true;
+        }
+    }
+}
+
+// The plain accounts, active or archived, with their balance and reserves.
+export component AccountsCard inherits FinanceCard {
+    callback edit(AccountRow);
+    callback archive(AccountRow);
+
+    property <[AccountRow]> shown: tabs.archived ? FinanceStore.archived-plain-accounts : FinanceStore.plain-accounts;
+
+    FinanceCardHeader {
+        title: @tr("Accounts");
+        count: FinanceStore.plain-accounts.length;
+    }
+
+    tabs := ArchiveTabs { }
+
+    VerticalLayout {
+        AccountsHeader {
+            first: @tr("Account");
+            amount: @tr("account balance" => "Balance");
+        }
+
+        for account in root.shown: AccountLine {
+            account: account;
+            opened => {
+                root.edit(account);
+            }
+            archive => {
+                root.archive(account);
+            }
+        }
+
+        if root.shown.length == 0: Text {
+            text: @tr("Nothing here.");
+            color: Theme.muted;
+            height: 40px;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+}
+
+// The credit cards and lines, active or archived, with their limit.
+export component CardsCard inherits FinanceCard {
+    callback edit(AccountRow);
+    callback archive(AccountRow);
+
+    property <[AccountRow]> shown: tabs.archived ? FinanceStore.archived-cards : FinanceStore.cards;
+
+    FinanceCardHeader {
+        title: @tr("Cards");
+        count: FinanceStore.cards.length;
+    }
+
+    tabs := ArchiveTabs { }
+
+    VerticalLayout {
+        AccountsHeader {
+            first: @tr("Card");
+            amount: @tr("Limit");
+        }
+
+        for account in root.shown: CardLine {
+            account: account;
+            opened => {
+                root.edit(account);
+            }
+            archive => {
+                root.archive(account);
+            }
+        }
+
+        if root.shown.length == 0: Text {
+            text: @tr("Nothing here.");
+            color: Theme.muted;
+            height: 40px;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+}

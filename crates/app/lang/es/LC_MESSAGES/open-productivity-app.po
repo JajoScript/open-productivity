@@ -1171,9 +1171,6 @@ msgstr "Total en cuentas"
 msgid "Net worth"
 msgstr "Patrimonio"
 
-msgid "Assets {} · Debts {}"
-msgstr "Activos {} · Deudas {}"
-
 msgid "Expenses by category"
 msgstr "Gastos por categoría"
 
@@ -1316,9 +1313,6 @@ msgstr "Editar línea de crédito"
 
 msgid "New credit line"
 msgstr "Nueva línea de crédito"
-
-msgid "Closes on day {} · Pay on day {}"
-msgstr "Cierra el día {} · Paga el día {}"
 
 msgid "{} of {}"
 msgstr "{} de {}"
@@ -1656,3 +1650,39 @@ msgstr "No hay facturas este mes."
 
 msgid "payment due"
 msgstr "pago por vencer"
+
+msgid "Cards"
+msgstr "Tarjetas"
+
+msgid "Limit"
+msgstr "Límite"
+
+msgid "Credit usage"
+msgstr "Uso de crédito"
+
+msgid "Net worth total"
+msgstr "Patrimonio total"
+
+msgid "Nothing here."
+msgstr "Aquí no hay nada."
+
+msgid "Reserved: {}"
+msgstr "Reservado: {}"
+
+msgid "Available: {}"
+msgstr "Disponible: {}"
+
+msgid "Closes day {}"
+msgstr "Cierra el día {}"
+
+msgid "Used {}"
+msgstr "Usado {}"
+
+msgid "Limit {}"
+msgstr "Límite {}"
+
+msgid "Edit {}"
+msgstr "Editar {}"
+
+msgid "Archive {}"
+msgstr "Archivar {}"

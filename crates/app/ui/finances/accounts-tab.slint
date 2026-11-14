@@ -1,197 +1,30 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Palette, ScrollView } from "std-widgets.slint";
+import { ScrollView } from "std-widgets.slint";
 import { EmptyState } from "../empty-state.slint";
-import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
 import { AccountPreview } from "account-preview.slint";
-import { AccountKind, AccountRow } from "account-row.slint";
-import { ReserveRow } from "reserve-row.slint";
-import { CardLine } from "card-line.slint";
+import { AccountRow } from "account-row.slint";
+import { AccountsCard, CardsCard } from "accounts-list.slint";
+import { CreditUsageCard, NetWorthCard } from "accounts-side.slint";
 import { FinanceStore } from "finance-store.slint";
+import { ReserveRow } from "reserve-row.slint";
+import { ReservesCard } from "reserves-card.slint";
 
-component ReserveLine inherits Rectangle {
-    in property <ReserveRow> reserve;
-    callback opened;
-
-    height: 56px;
-    border-radius: 6px;
-    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
-    animate background {
-        duration: Theme.fast;
-        easing: Theme.ease-out;
-    }
-    forward-focus: focus;
-    accessible-role: button;
-    accessible-label: Strings.reserve-line-label(root.reserve.name, root.reserve.account-name, root.reserve.balance);
-    accessible-action-default => {
-        root.opened();
-    }
-
-    HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 16px; // clears the ListView scroll bar
-        spacing: 8px;
-        Image {
-            source: @image-url("../icons/archive.svg");
-            colorize: Theme.muted;
-            width: 16px;
-            image-fit: contain;
-            accessible-role: none;
-        }
-
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            Text {
-                text: root.reserve.name;
-                opacity: root.reserve.archived ? 0.55 : 1;
-                overflow: elide;
-                accessible-role: none;
-            }
-
-            Text {
-                text: root.reserve.account-name;
-                color: Theme.muted;
-                overflow: elide;
-                accessible-role: none;
-            }
-        }
-
-        Text {
-            text: root.reserve.balance;
-            opacity: root.reserve.archived ? 0.55 : 1;
-            font-weight: 600;
-            vertical-alignment: center;
-            horizontal-alignment: right;
-            accessible-role: none;
-        }
-    }
-
-    Rectangle {
-        y: parent.height - 1px;
-        height: 1px;
-        background: Theme.hairline;
-    }
-
-    touch := TouchArea {
-        clicked => {
-            root.opened();
-        }
-    }
-
-    focus := FocusScope {
-        width: 0px; // keyboard only; clicks go to the TouchArea
-        key-pressed(event) => {
-            if event.text == Key.Space || event.text == Key.Return {
-                root.opened();
-                return accept;
-            }
-            reject
-        }
-    }
-
-    if focus.has-focus: Rectangle {
-        border-radius: root.border-radius;
-        border-width: 2px;
-        border-color: Palette.foreground;
-    }
-}
-
-component AccountLine inherits Rectangle {
-    in property <AccountRow> account;
-    callback opened;
-
-    height: 56px;
-    border-radius: 6px;
-    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
-    animate background {
-        duration: Theme.fast;
-        easing: Theme.ease-out;
-    }
-    forward-focus: focus;
-    accessible-role: button;
-    accessible-label: Strings.account-line-label(root.account.name, Strings.account-kind(root.account.kind), root.account.balance);
-    accessible-action-default => {
-        root.opened();
-    }
-
-    HorizontalLayout {
-        padding-left: 8px;
-        padding-right: 16px; // clears the ListView scroll bar
-        spacing: 8px;
-        Image {
-            source: @image-url("../icons/wallet.svg");
-            colorize: Theme.muted;
-            width: 16px;
-            image-fit: contain;
-            accessible-role: none;
-        }
-
-        VerticalLayout {
-            alignment: center;
-            horizontal-stretch: 1;
-            Text {
-                text: root.account.name;
-                opacity: root.account.archived ? 0.55 : 1;
-                overflow: elide;
-                accessible-role: none;
-            }
-
-            Text {
-                text: root.account.available != "" ? Strings.account-available-line(root.account.bank != "" ? Strings.account-kind-bank(root.account.kind, root.account.bank) : Strings.account-kind(root.account.kind), root.account.available) : root.account.bank != "" ? Strings.account-kind-bank(root.account.kind, root.account.bank) : Strings.account-kind(root.account.kind);
-                color: Theme.muted;
-                overflow: elide;
-                accessible-role: none;
-            }
-        }
-
-        Text {
-            text: root.account.balance;
-            opacity: root.account.archived ? 0.55 : 1;
-            font-weight: 600;
-            vertical-alignment: center;
-            horizontal-alignment: right;
-            accessible-role: none;
-        }
-    }
-
-    Rectangle {
-        y: parent.height - 1px;
-        height: 1px;
-        background: Theme.hairline;
-    }
-
-    touch := TouchArea {
-        clicked => {
-            root.opened();
-        }
-    }
-
-    focus := FocusScope {
-        width: 0px; // keyboard only; clicks go to the TouchArea
-        key-pressed(event) => {
-            if event.text == Key.Space || event.text == Key.Return {
-                root.opened();
-                return accept;
-            }
-            reject
-        }
-    }
-
-    if focus.has-focus: Rectangle {
-        border-radius: root.border-radius;
-        border-width: 2px;
-        border-color: Palette.foreground;
-    }
-}
-
-// The accounts and their balances.
+// The accounts and cards with their balances on the left; net worth and credit use on the right.
 export component AccountsTab inherits VerticalLayout {
     callback new-account();
     callback edit-account(AccountRow);
+    callback new-reserve();
     callback edit-reserve(ReserveRow);
+
+    property <string> error;
+
+    // Archiving or restoring from a row; a refusal shows above the cards.
+    function archive(a: AccountRow) {
+        root.error = FinanceStore.archive-account(a.id, !a.archived);
+    }
 
     if FinanceStore.accounts.length == 0 && FinanceStore.archived-accounts.length == 0: EmptyState {
         title: @tr("Add your first account");
@@ -208,127 +41,59 @@ export component AccountsTab inherits VerticalLayout {
         vertical-stretch: 1;
         VerticalLayout {
             alignment: start;
-            VerticalLayout {
-                padding-left: 8px;
-                padding-right: 16px; // clears the scroll bar
-                padding-bottom: 12px;
-                spacing: 6px;
-                Text {
-                    text: @tr("Net worth");
-                    color: Theme.muted;
-                }
+            spacing: 12px;
+            padding-right: 12px; // clears the scroll bar
+            if root.error != "": Text {
+                text: root.error;
+                color: Theme.critical;
+                wrap: word-wrap;
+            }
 
-                Text {
-                    text: FinanceStore.worth-total;
-                    font-size: 28px;
-                    font-weight: 700;
-                }
-
-                Text {
-                    text: Strings.worth-line(FinanceStore.worth-assets, FinanceStore.worth-debts);
-                    color: Theme.muted;
-                }
-
-                for bar in FinanceStore.worth-bars: VerticalLayout {
-                    spacing: 4px;
-                    accessible-role: text;
-                    accessible-label: bar.name + ", " + bar.total;
-                    HorizontalLayout {
-                        spacing: 8px;
-                        Text {
-                            text: bar.name;
-                            overflow: elide;
-                            horizontal-stretch: 1;
+            HorizontalLayout {
+                spacing: 12px;
+                VerticalLayout {
+                    spacing: 12px;
+                    alignment: start;
+                    horizontal-stretch: 3;
+                    min-width: 0px;
+                    preferred-width: 0px;
+                    AccountsCard {
+                        edit(a) => {
+                            root.edit-account(a);
                         }
-
-                        Text {
-                            text: bar.total;
-                            color: Theme.muted;
+                        archive(a) => {
+                            root.archive(a);
                         }
                     }
 
-                    Rectangle {
-                        height: 6px;
-                        background: Theme.hairline;
-                        Rectangle {
-                            x: 0;
-                            width: parent.width * bar.width;
-                            background: Theme.ink;
+                    CardsCard {
+                        edit(a) => {
+                            root.edit-account(a);
+                        }
+                        archive(a) => {
+                            root.archive(a);
+                        }
+                    }
+
+                    ReservesCard {
+                        new-reserve => {
+                            root.new-reserve();
+                        }
+                        edit-reserve(r) => {
+                            root.edit-reserve(r);
                         }
                     }
                 }
-            }
 
-            for account in FinanceStore.accounts: AccountLine {
-                visible: !(account.kind == AccountKind.credit || account.kind == AccountKind.credit-line);
-                height: !(account.kind == AccountKind.credit || account.kind == AccountKind.credit-line) ? 56px : 0px;
-                account: account;
-                opened => {
-                    root.edit-account(account);
-                }
-            }
+                VerticalLayout {
+                    spacing: 12px;
+                    alignment: start;
+                    horizontal-stretch: 2;
+                    min-width: 0px;
+                    preferred-width: 0px;
+                    NetWorthCard { }
 
-            if FinanceStore.has-cards: HorizontalLayout {
-                height: 32px;
-                padding-left: 8px;
-                Text {
-                    text: @tr("Credit");
-                    color: Theme.muted;
-                    vertical-alignment: bottom;
-                }
-            }
-
-            for account in FinanceStore.accounts: CardLine {
-                visible: (account.kind == AccountKind.credit || account.kind == AccountKind.credit-line);
-                height: (account.kind == AccountKind.credit || account.kind == AccountKind.credit-line) ? 72px : 0px;
-                account: account;
-                opened => {
-                    root.edit-account(account);
-                }
-            }
-
-            if FinanceStore.reserves.length > 0: HorizontalLayout {
-                height: 32px;
-                padding-left: 8px;
-                Text {
-                    text: @tr("Reserves");
-                    color: Theme.muted;
-                    vertical-alignment: bottom;
-                }
-            }
-
-            for reserve in FinanceStore.reserves: ReserveLine {
-                reserve: reserve;
-                opened => {
-                    root.edit-reserve(reserve);
-                }
-            }
-
-            if FinanceStore.archived-accounts.length > 0: HorizontalLayout {
-                height: 32px;
-                padding-left: 8px;
-                Text {
-                    text: @tr("Archived");
-                    color: Theme.muted;
-                    vertical-alignment: bottom;
-                }
-            }
-
-            for account in FinanceStore.archived-accounts: AccountLine {
-                visible: !(account.kind == AccountKind.credit || account.kind == AccountKind.credit-line);
-                height: !(account.kind == AccountKind.credit || account.kind == AccountKind.credit-line) ? 56px : 0px;
-                account: account;
-                opened => {
-                    root.edit-account(account);
-                }
-            }
-
-            for account in FinanceStore.archived-accounts: CardLine {
-                visible: (account.kind == AccountKind.credit || account.kind == AccountKind.credit-line);
-                height: (account.kind == AccountKind.credit || account.kind == AccountKind.credit-line) ? 72px : 0px;
-                account: account;
-                opened => {
-                    root.edit-account(account);
+                    CreditUsageCard { }
                 }
             }
         }

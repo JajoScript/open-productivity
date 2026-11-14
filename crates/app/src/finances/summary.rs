@@ -32,6 +32,8 @@ pub struct Charts {
     cards: [Vec<i64>; 4],
     balance: BalanceChart,
     shares: Vec<f32>,
+    /// The net worth donut of the Accounts tab.
+    pub worth_shares: Vec<f32>,
 }
 
 fn card_row(
@@ -196,6 +198,7 @@ impl State {
             ],
             balance: chart,
             shares: donut.slices.iter().map(|d| d.share).collect(),
+            ..Default::default()
         };
         store.set_chart_version(store.get_chart_version().wrapping_add(1));
         store.set_month(ui_date(month));

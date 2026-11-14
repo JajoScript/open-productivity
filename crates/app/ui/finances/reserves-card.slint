@@ -1,0 +1,134 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { FinanceStore } from "finance-store.slint";
+import { ReserveRow } from "reserve-row.slint";
+
+component ReserveLine inherits Rectangle {
+    in property <ReserveRow> reserve;
+    callback opened;
+
+    height: 56px;
+    border-radius: 6px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background {
+        duration: Theme.fast;
+        easing: Theme.ease-out;
+    }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: Strings.reserve-line-label(root.reserve.name, root.reserve.account-name, root.reserve.balance);
+    accessible-action-default => {
+        root.opened();
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 8px;
+        Image {
+            source: @image-url("../icons/archive.svg");
+            colorize: Theme.muted;
+            width: 16px;
+            image-fit: contain;
+            accessible-role: none;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            min-width: 0px;
+            preferred-width: 0px;
+            Text {
+                text: root.reserve.name;
+                opacity: root.reserve.archived ? 0.55 : 1;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            Text {
+                text: root.reserve.account-name;
+                color: Theme.muted;
+                overflow: elide;
+                accessible-role: none;
+            }
+        }
+
+        Text {
+            text: root.reserve.balance;
+            opacity: root.reserve.archived ? 0.55 : 1;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            accessible-role: none;
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.opened();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.opened();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// The reserves of the accounts, active then archived; they move to the Budget tab later.
+export component ReservesCard inherits FinanceCard {
+    callback new-reserve();
+    callback edit-reserve(ReserveRow);
+
+    FinanceCardHeader {
+        title: @tr("Reserves");
+        if FinanceStore.has-reservable: SubtleButton {
+            text: @tr("New reserve");
+            color: Palette.foreground;
+            clicked => {
+                root.new-reserve();
+            }
+        }
+    }
+
+    VerticalLayout {
+        for reserve in FinanceStore.reserves: ReserveLine {
+            reserve: reserve;
+            opened => {
+                root.edit-reserve(reserve);
+            }
+        }
+
+        if FinanceStore.reserves.length == 0: Text {
+            text: @tr("Nothing here.");
+            color: Theme.muted;
+            height: 40px;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
+    }
+}
