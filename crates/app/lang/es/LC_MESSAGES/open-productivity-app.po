@@ -1358,3 +1358,90 @@ msgstr "Factura: {} · vence el {}"
 
 msgid "{}, {}, due {}, {}"
 msgstr "{}, {}, vence el {}, {}"
+
+msgid "Budget"
+msgstr "Presupuesto"
+
+msgid "New bucket"
+msgstr "Nueva bolsa"
+
+msgid "Edit bucket"
+msgstr "Editar bolsa"
+
+msgid "Bucket name"
+msgstr "Nombre de la bolsa"
+
+msgid "Percent (0-100)"
+msgstr "Porcentaje (0-100)"
+
+msgid "Expense categories"
+msgstr "Categorías de gasto"
+
+msgid "In another bucket"
+msgstr "En otra bolsa"
+
+msgid "Plan your month"
+msgstr "Planifica tu mes"
+
+msgid "Split your income into buckets, each with a percentage, and see how much of each you have spent. Start with the 50/30/20 rule, or create your own buckets."
+msgstr "Reparte tus ingresos en bolsas, cada una con un porcentaje, y mira cuánto has gastado de cada una. Empieza con la regla 50/30/20 o crea tus propias bolsas."
+
+msgid "Create suggested budget (50/30/20)"
+msgstr "Crear presupuesto sugerido (50/30/20)"
+
+msgid "Base:"
+msgstr "Base:"
+
+msgid "This month"
+msgstr "Este mes"
+
+msgid "Previous month"
+msgstr "Mes anterior"
+
+msgid "All your buckets are archived. Restore one or create a new bucket."
+msgstr "Todas tus bolsas están archivadas. Restaura una o crea una bolsa nueva."
+
+msgid "That bucket no longer exists."
+msgstr "Esa bolsa ya no existe."
+
+msgid "Categories belong to this bucket, so it can't be deleted. Take them out or archive it instead."
+msgstr "Hay categorías en esta bolsa, así que no se puede eliminar. Sácalas o archívala."
+
+msgid "There are already buckets."
+msgstr "Ya hay bolsas."
+
+msgid "Enter a whole percentage from 0 to 100; the active buckets can't add up to more than 100."
+msgstr "Ingresa un porcentaje entero de 0 a 100; las bolsas activas no pueden sumar más de 100."
+
+msgid "Needs"
+msgstr "Necesidades"
+
+msgid "Wants"
+msgstr "Deseos"
+
+msgid "Savings"
+msgstr "Ahorro"
+
+msgid "Income of {0}: {1}"
+msgstr "Ingresos de {0}: {1}"
+
+msgid "Unassigned: {}"
+msgstr "Sin asignar: {}"
+
+msgid "{0} of {1}"
+msgstr "{0} de {1}"
+
+msgid "{} left"
+msgstr "Quedan {}"
+
+msgid "{} over"
+msgstr "Excedido en {}"
+
+msgid "{0}, {1}%, {2}, {3}"
+msgstr "{0}, {1}%, {2}, {3}"
+
+msgid "Percentage of the income for {}"
+msgstr "Porcentaje de los ingresos de {}"
+
+msgid "Delete the bucket {}? This can't be undone."
+msgstr "¿Eliminar la bolsa {}? Esto no se puede deshacer."

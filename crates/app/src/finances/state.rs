@@ -17,7 +17,7 @@ use super::style;
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
 use crate::{
-    AccountKind, AccountRow, AppWindow, BillRow, CategoryRow, CurrencyRow, FinanceStore,
+    AccountKind, AccountRow, AppWindow, BillRow, BucketRow, CategoryRow, CurrencyRow, FinanceStore,
     FinanceTab, RateRow, ScheduledRow, Strings, TransactionRow,
 };
 use open_productivity_core::chrono::Local;
@@ -37,6 +37,9 @@ pub struct State {
     pub archived_rows: Rc<VecModel<CategoryRow>>,
     /// Every category of both kinds, for the movement modal.
     pub choices: Rc<VecModel<CategoryRow>>,
+    /// The Budget tab: the active buckets of the shown month, then the archived ones.
+    pub bucket_rows: Rc<VecModel<BucketRow>>,
+    pub archived_bucket_rows: Rc<VecModel<BucketRow>>,
     /// First day of the month the Movements tab shows.
     pub shown: Cell<NaiveDate>,
     /// The exchange rates edited in the open modal (code, text), saved together.
@@ -172,6 +175,10 @@ impl State {
                     self.load_choices()?;
                 }
                 FinanceTab::Summary => self.load_summary(w)?,
+                FinanceTab::Budget => {
+                    self.load_budget(w)?;
+                    self.load_choices()?;
+                }
                 FinanceTab::Categories => self.load_categories(w)?,
                 FinanceTab::Accounts => {}
             }
@@ -218,6 +225,10 @@ impl State {
             FinanceError::CategoryNotFound => s.get_finance_no_category(),
             FinanceError::DuplicateName => s.get_finance_duplicate_name(),
             FinanceError::InUse => s.get_finance_category_in_use(),
+            FinanceError::BucketNotFound => s.get_finance_no_bucket(),
+            FinanceError::BucketInUse => s.get_finance_bucket_in_use(),
+            FinanceError::BucketsExist => s.get_finance_buckets_exist(),
+            FinanceError::InvalidShares => s.get_finance_invalid_shares(),
             FinanceError::CategoriesExist => s.get_finance_categories_exist(),
             FinanceError::CategoryKindMismatch => s.get_finance_category_kind(),
             FinanceError::CategoryArchived => s.get_finance_category_archived(),

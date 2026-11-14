@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+// A budget bucket for the shown month. The amounts arrive formatted; `remaining` is the amount
+// left, or the amount over when `overspent`. An archived bucket only carries its name.
+export struct BucketRow {
+    id: int,
+    name: string,
+    percent: int,
+    assigned: string,
+    spent: string,
+    remaining: string,
+    overspent: bool,
+    // Spent against assigned, per thousand; may pass 1000.
+    spent-permille: int,
+    archived: bool,
+    in-use: bool,
+}

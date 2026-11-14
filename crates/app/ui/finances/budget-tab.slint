@@ -1,0 +1,257 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ScrollView } from "std-widgets.slint";
+import { EmptyState } from "../empty-state.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+import { BucketRow } from "bucket-row.slint";
+import { FinanceStore } from "finance-store.slint";
+import { MonthNav } from "month-nav.slint";
+
+// A bucket: its name and percentage, a thin bar of what it spent, and what is left of its share.
+component BucketLine inherits Rectangle {
+    in property <BucketRow> bucket;
+    callback opened;
+
+    height: 64px;
+    border-radius: 6px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background {
+        duration: Theme.fast;
+        easing: Theme.ease-out;
+    }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.bucket.archived ? Strings.archived-category(root.bucket.name) : Strings.bucket-line-label(root.bucket.name, root.bucket.percent, Strings.bucket-spent(root.bucket.spent, root.bucket.assigned), root.bucket.overspent ? Strings.bucket-over(root.bucket.remaining) : Strings.bucket-left(root.bucket.remaining));
+    accessible-action-default => {
+        root.opened();
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 16px; // clears the ScrollView scroll bar
+        spacing: 12px;
+        VerticalLayout {
+            alignment: center;
+            spacing: 6px;
+            horizontal-stretch: 1;
+            HorizontalLayout {
+                spacing: 8px;
+                alignment: start; // the percent sits right after the name
+                Text {
+                    text: root.bucket.name;
+                    opacity: root.bucket.archived ? 0.55 : 1;
+                    overflow: elide;
+                    horizontal-stretch: 0;
+                    accessible-role: none;
+                }
+
+                if !root.bucket.archived: Text {
+                    text: root.bucket.percent + "%";
+                    color: Theme.muted;
+                    accessible-role: none;
+                }
+            }
+
+            if !root.bucket.archived: Rectangle {
+                height: 3px;
+                border-radius: 1.5px;
+                background: Theme.hairline;
+                Rectangle {
+                    x: 0px;
+                    width: parent.width * min(1, root.bucket.spent-permille / 1000);
+                    border-radius: parent.border-radius;
+                    background: root.bucket.overspent ? Theme.critical : Theme.ink;
+                    animate width {
+                        duration: Theme.enter;
+                        easing: Theme.ease-out;
+                    }
+                }
+            }
+        }
+
+        if !root.bucket.archived: VerticalLayout {
+            alignment: center;
+            width: 220px; // fixed, so every bar ends at the same x
+            Text {
+                text: Strings.bucket-spent(root.bucket.spent, root.bucket.assigned);
+                font-weight: 600;
+                horizontal-alignment: right;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            Text {
+                text: root.bucket.overspent ? Strings.bucket-over(root.bucket.remaining) : Strings.bucket-left(root.bucket.remaining);
+                color: root.bucket.overspent ? Theme.critical : Theme.muted;
+                horizontal-alignment: right;
+                overflow: elide;
+                accessible-role: none;
+            }
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.opened();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.opened();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// The month's income split into buckets by percentage, with what each has spent.
+export component BudgetTab inherits VerticalLayout {
+    callback new-bucket();
+    callback edit-bucket(BucketRow);
+
+    // Failure of the suggested budget or of the base setting, shown in the tab.
+    property <string> error;
+
+    spacing: 12px;
+
+    if !FinanceStore.has-buckets: EmptyState {
+        title: @tr("Plan your month");
+        description: @tr("Split your income into buckets, each with a percentage, and see how much of each you have spent. Start with the 50/30/20 rule, or create your own buckets.");
+        action: @tr("Create suggested budget (50/30/20)");
+        clicked => {
+            root.error = FinanceStore.create-suggested-budget();
+        }
+    }
+
+    if !FinanceStore.has-buckets && root.error != "": Text {
+        text: root.error;
+        color: Theme.critical;
+        wrap: word-wrap;
+    }
+
+    if FinanceStore.has-buckets: MonthNav { }
+
+    if FinanceStore.has-buckets: HorizontalLayout {
+        spacing: 8px;
+        Text {
+            text: Strings.budget-income(Strings.month-year(FinanceStore.budget-base-month.month, FinanceStore.budget-base-month.year), FinanceStore.budget-base);
+            font-weight: 600;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+
+        Text {
+            text: @tr("Base:");
+            color: Theme.muted;
+            vertical-alignment: center;
+        }
+
+        HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: 0px;
+            accessible-role: tab-list;
+            SettingsTab {
+                text: @tr("This month");
+                selected: !FinanceStore.budget-previous;
+                chosen => {
+                    root.error = FinanceStore.set-budget-base(false);
+                }
+                step(d) => {
+                    if d > 0 {
+                        root.error = FinanceStore.set-budget-base(true);
+                    }
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Previous month");
+                selected: FinanceStore.budget-previous;
+                chosen => {
+                    root.error = FinanceStore.set-budget-base(true);
+                }
+                step(d) => {
+                    if d < 0 {
+                        root.error = FinanceStore.set-budget-base(false);
+                    }
+                }
+            }
+        }
+    }
+
+    if FinanceStore.has-buckets && root.error != "": Text {
+        text: root.error;
+        color: Theme.critical;
+        wrap: word-wrap;
+    }
+
+    if FinanceStore.has-buckets && FinanceStore.buckets.length == 0: Text {
+        text: @tr("All your buckets are archived. Restore one or create a new bucket.");
+        color: Theme.muted;
+        wrap: word-wrap;
+    }
+
+    if FinanceStore.has-buckets: ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            for b in FinanceStore.buckets: BucketLine {
+                bucket: b;
+                opened => {
+                    root.edit-bucket(b);
+                }
+            }
+
+            HorizontalLayout {
+                height: 44px;
+                padding-left: 8px;
+                padding-right: 16px;
+                accessible-role: text;
+                accessible-label: Strings.budget-unassigned(FinanceStore.budget-unassigned);
+                Text {
+                    text: Strings.budget-unassigned(FinanceStore.budget-unassigned);
+                    color: Theme.muted;
+                    vertical-alignment: center;
+                    accessible-role: none;
+                }
+            }
+
+            if FinanceStore.archived-buckets.length > 0: HorizontalLayout {
+                height: 32px;
+                padding-left: 8px;
+                Text {
+                    text: @tr("Archived");
+                    color: Theme.muted;
+                    vertical-alignment: bottom;
+                }
+            }
+
+            for b in FinanceStore.archived-buckets: BucketLine {
+                height: 44px;
+                bucket: b;
+                opened => {
+                    root.edit-bucket(b);
+                }
+            }
+        }
+    }
+}

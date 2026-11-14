@@ -35,6 +35,7 @@ fn row(c: Category, total: String) -> Result<CategoryRow, String> {
         kind: ui_kind(c.kind),
         archived: c.archived,
         in_use: c.in_use,
+        bucket_id: c.bucket.map_or(Ok(0), |b| ui_id(b.0))?,
         total: total.into(),
     })
 }

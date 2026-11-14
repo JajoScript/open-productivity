@@ -1,0 +1,257 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ScrollView } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkCheck } from "../ink-check.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { FinanceStore } from "finance-store.slint";
+import { TxKind } from "transaction-row.slint";
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component BucketBody inherits FocusScope {
+    in property <bool> editing;
+    in property <int> bucket-id;
+    in property <bool> archived;
+    // What the delete confirmation names: the saved name, not the one being typed.
+    in property <string> saved-name;
+    // The month the percentage is for, already named.
+    in property <string> month-label;
+    // The modal gives the initial values and the user edits them here.
+    in-out property <string> name;
+    in-out property <string> percent;
+    callback save(string, string) -> string;
+    callback toggle-archived() -> string;
+    callback delete() -> string;
+    callback cancel;
+
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.name, root.percent);
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: root.editing ? @tr("Edit bucket") : @tr("New bucket");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        InkField {
+            text <=> root.name;
+            placeholder-text: @tr("Bucket name");
+            init => {
+                self.focus();
+            }
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        if root.editing && !root.archived: Text {
+            text: Strings.bucket-percent-label(root.month-label);
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+
+        if root.editing && !root.archived: InkField {
+            text <=> root.percent;
+            placeholder-text: @tr("Percent (0-100)");
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        if root.editing && !root.archived: Text {
+            text: @tr("Expense categories");
+            color: Theme.muted;
+        }
+
+        if root.editing && !root.archived: ScrollView {
+            height: 120px;
+            VerticalLayout {
+                // Those of the bucket, or free to take; checking one of another bucket moves it here.
+                for c in FinanceStore.category-choices: VerticalLayout {
+                    if c.kind == TxKind.expense && (!c.archived || c.bucket-id == root.bucket-id): HorizontalLayout {
+                        height: 32px;
+                        spacing: 4px;
+                        InkCheck {
+                            checked: c.bucket-id == root.bucket-id;
+                            label: c.name;
+                            toggled(on) => {
+                                root.error = FinanceStore.assign-category(c.id, root.bucket-id, on);
+                            }
+                        }
+
+                        Text {
+                            text: c.archived ? Strings.archived-category(c.name) : c.name;
+                            vertical-alignment: center;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                            accessible-role: none;
+                        }
+
+                        if c.bucket-id != 0 && c.bucket-id != root.bucket-id: Text {
+                            text: @tr("In another bucket");
+                            color: Theme.muted;
+                            vertical-alignment: center;
+                            accessible-role: none;
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            if root.editing: SubtleButton {
+                text: root.archived ? @tr("Restore") : @tr("Archive");
+                color: Palette.foreground;
+                clicked => {
+                    root.error = root.toggle-archived();
+                }
+            }
+
+            // Refused with a message while a category belongs to the bucket.
+            if root.editing: SubtleButton {
+                text: @tr("Delete");
+                color: Palette.foreground;
+                clicked => {
+                    confirm.show();
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: root.editing ? @tr("Save") : @tr("Create");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+
+    confirm := PopupWindow {
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        width: 320px;
+        PopupSurface {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: Strings.delete-bucket-question(root.saved-name);
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Cancel");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            confirm.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Delete");
+                        clicked => {
+                            confirm.close();
+                            root.error = root.delete();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Creates a bucket, or renames it, sets its percentage for the month shown, chooses its expense
+// categories, archives or deletes it, depending on how it is opened. Closing by clicking outside
+// discards what was typed (categories checked are already saved).
+export component BucketCreator inherits PopupWindow {
+    // Set by the opener before show().
+    in property <bool> editing;
+    in property <int> bucket-id;
+    in property <string> bucket-name;
+    in property <int> bucket-percent;
+    in property <bool> bucket-archived;
+
+    close-policy: close-on-click-outside;
+    width: 400px;
+
+    PopupSurface {
+        BucketBody {
+            editing: root.editing;
+            bucket-id: root.bucket-id;
+            archived: root.bucket-archived;
+            saved-name: root.bucket-name;
+            month-label: Strings.month-year(FinanceStore.month.month, FinanceStore.month.year);
+            name: root.bucket-name;
+            percent: "\{root.bucket-percent}";
+            save(name, percent) => {
+                let first = root.editing ? FinanceStore.rename-bucket(root.bucket-id, name) : FinanceStore.create-bucket(name);
+                // The percentage only follows a rename that worked.
+                let error = first == "" && root.editing && !root.bucket-archived ? FinanceStore.set-share(root.bucket-id, percent) : first;
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            toggle-archived => {
+                let error = FinanceStore.archive-bucket(root.bucket-id, !root.bucket-archived);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            delete => {
+                let error = FinanceStore.delete-bucket(root.bucket-id);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

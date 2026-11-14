@@ -17,6 +17,8 @@ import { StudyStore } from "study/study-store.slint";
 import { AccountCreator } from "finances/account-creator.slint";
 import { MainCurrencyEditor } from "finances/main-currency-editor.slint";
 import { RatesEditor } from "finances/rates-editor.slint";
+import { BucketCreator } from "finances/bucket-creator.slint";
+import { BucketRow } from "finances/bucket-row.slint";
 import { CategoryCreator } from "finances/category-creator.slint";
 import { CategoryRow, SuggestedCategory } from "finances/category-row.slint";
 import { FinancesView } from "finances/finances-view.slint";
@@ -114,6 +116,7 @@ export {
     ScheduledRow,
     BillRow,
     CategoryRow,
+    BucketRow,
     SuggestedCategory,
     TxKind,
     SummaryFigure,
@@ -299,6 +302,12 @@ export component AppWindow inherits Window {
     property <ScheduledRow> scheduled-edit;
     property <ScheduledRow> scheduled-confirm-row;
 
+    property <bool> bucket-editing;
+    property <int> bucket-edit-id;
+    property <string> bucket-edit-name;
+    property <int> bucket-edit-percent;
+    property <bool> bucket-edit-archived;
+
     property <bool> category-editing;
     property <int> category-edit-id;
     property <TxKind> category-edit-kind;
@@ -465,6 +474,16 @@ export component AppWindow inherits Window {
         scheduled-confirm := ScheduledConfirm {
             due: root.scheduled-confirm-row;
             today: Calendar.today();
+            x: (root.width - self.width) / 2;
+            y: 120px;
+        }
+
+        bucket-creator := BucketCreator {
+            editing: root.bucket-editing;
+            bucket-id: root.bucket-edit-id;
+            bucket-name: root.bucket-edit-name;
+            bucket-percent: root.bucket-edit-percent;
+            bucket-archived: root.bucket-edit-archived;
             x: (root.width - self.width) / 2;
             y: 120px;
         }
@@ -803,6 +822,22 @@ export component AppWindow inherits Window {
                     confirm-scheduled(d) => {
                         root.scheduled-confirm-row = d;
                         scheduled-confirm.show();
+                    }
+                    new-bucket => {
+                        root.bucket-editing = false;
+                        root.bucket-edit-id = 0;
+                        root.bucket-edit-name = "";
+                        root.bucket-edit-percent = 0;
+                        root.bucket-edit-archived = false;
+                        bucket-creator.show();
+                    }
+                    edit-bucket(b) => {
+                        root.bucket-editing = true;
+                        root.bucket-edit-id = b.id;
+                        root.bucket-edit-name = b.name;
+                        root.bucket-edit-percent = b.percent;
+                        root.bucket-edit-archived = b.archived;
+                        bucket-creator.show();
                     }
                     new-category => {
                         root.category-editing = false;

@@ -5,6 +5,7 @@ import { Date } from "std-widgets.slint";
 import { FinanceTab, TransactionRow, TxKind } from "transaction-row.slint";
 import { AccountKind, AccountRow, CurrencyRow, RateRow } from "account-row.slint";
 import { BillRow } from "bill-row.slint";
+import { BucketRow } from "bucket-row.slint";
 import { CategoryRow } from "category-row.slint";
 import { ScheduleForm, ScheduledRow } from "scheduled-row.slint";
 import { SummaryBar, SummaryFigure } from "summary-row.slint";
@@ -43,6 +44,17 @@ export global FinanceStore {
     // Some account is not in the main currency, so the totals use exchange rates.
     in property <bool> summary-uses-rates;
     in property <[TransactionRow]> summary-recent;
+    // The Budget tab, for the month shown: false until the first bucket exists.
+    in property <bool> has-buckets;
+    // The active buckets with their percentage of the month; then the archived ones.
+    in property <[BucketRow]> buckets;
+    in property <[BucketRow]> archived-buckets;
+    // The income the percentages apply to, the month it belongs to, and what no bucket gets.
+    in property <string> budget-base;
+    in property <Date> budget-base-month;
+    in property <string> budget-unassigned;
+    // The setting: use the previous month's income instead of the shown month's.
+    in property <bool> budget-previous;
     // The kind the Categories tab lists.
     in-out property <TxKind> category-kind: TxKind.expense;
     // False only while there are no categories at all, which offers the suggested ones.
@@ -96,6 +108,17 @@ export global FinanceStore {
     callback archive-category(int, bool) -> string;
     callback delete-category(int) -> string;
     callback create-suggested() -> string;
+    callback create-bucket(string) -> string;
+    callback rename-bucket(int, string) -> string;
+    // bucket, typed percent of the shown month's income.
+    callback set-share(int, string) -> string;
+    callback archive-bucket(int, bool) -> string;
+    callback delete-bucket(int) -> string;
+    // category, bucket, true to put it in the bucket and false to take it out.
+    callback assign-category(int, int, bool) -> string;
+    // true: the previous month's income is the base.
+    callback set-budget-base(bool) -> string;
+    callback create-suggested-budget() -> string;
     // -1 / +1 moves a month; 0 goes back to the current one.
     callback shift(int);
     // Reload on entering the module or when the language changes the amount style.

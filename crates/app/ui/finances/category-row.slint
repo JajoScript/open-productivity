@@ -13,5 +13,7 @@ export struct CategoryRow {
     kind: TxKind,
     archived: bool,
     in-use: bool,
+    // The budget bucket the category counts in, 0 for none.
+    bucket-id: int,
     total: string,
 }

@@ -9,6 +9,8 @@ import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { AccountRow } from "account-row.slint";
 import { AccountsTab } from "accounts-tab.slint";
+import { BudgetTab } from "budget-tab.slint";
+import { BucketRow } from "bucket-row.slint";
 import { CategoriesTab } from "categories-tab.slint";
 import { CategoryRow } from "category-row.slint";
 import { FinanceStore } from "finance-store.slint";
@@ -120,6 +122,8 @@ export component FinancesView inherits VerticalLayout {
     callback edit-scheduled(ScheduledRow);
     callback confirm-scheduled(ScheduledRow);
     callback pay-bill(BillRow);
+    callback new-bucket();
+    callback edit-bucket(BucketRow);
     callback new-category();
     callback edit-category(CategoryRow);
     callback edit-rates();
@@ -181,7 +185,18 @@ export component FinancesView inherits VerticalLayout {
                     root.choose(FinanceTab.due);
                 }
                 step(d) => {
-                    root.choose(d < 0 ? FinanceTab.movements : FinanceTab.accounts);
+                    root.choose(d < 0 ? FinanceTab.movements : FinanceTab.budget);
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Budget");
+                selected: FinanceStore.tab == FinanceTab.budget;
+                chosen => {
+                    root.choose(FinanceTab.budget);
+                }
+                step(d) => {
+                    root.choose(d < 0 ? FinanceTab.due : FinanceTab.accounts);
                 }
             }
 
@@ -192,7 +207,7 @@ export component FinancesView inherits VerticalLayout {
                     root.choose(FinanceTab.accounts);
                 }
                 step(d) => {
-                    root.choose(d < 0 ? FinanceTab.due : FinanceTab.categories);
+                    root.choose(d < 0 ? FinanceTab.budget : FinanceTab.categories);
                 }
             }
 
@@ -226,6 +241,13 @@ export component FinancesView inherits VerticalLayout {
             text: @tr("New scheduled payment");
             clicked => {
                 root.new-scheduled();
+            }
+        }
+
+        if FinanceStore.tab == FinanceTab.budget: InkButton {
+            text: @tr("New bucket");
+            clicked => {
+                root.new-bucket();
             }
         }
 
@@ -298,6 +320,16 @@ export component FinancesView inherits VerticalLayout {
         }
         pay-bill(b) => {
             root.pay-bill(b);
+        }
+    }
+
+    if FinanceStore.has-currency && FinanceStore.tab == FinanceTab.budget: BudgetTab {
+        vertical-stretch: 1;
+        new-bucket => {
+            root.new-bucket();
+        }
+        edit-bucket(b) => {
+            root.edit-bucket(b);
         }
     }
 

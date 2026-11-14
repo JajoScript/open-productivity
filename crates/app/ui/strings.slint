@@ -261,6 +261,14 @@ export global Strings {
     out property <string> transfer: @tr("Transfer");
     out property <string> no-category: @tr("No category");
     out property <string> same-as-last-month: @tr("Same as last month");
+    out property <string> finance-no-bucket: @tr("That bucket no longer exists.");
+    out property <string> finance-bucket-in-use: @tr("Categories belong to this bucket, so it can't be deleted. Take them out or archive it instead.");
+    out property <string> finance-buckets-exist: @tr("There are already buckets.");
+    out property <string> finance-invalid-shares: @tr("Enter a whole percentage from 0 to 100; the active buckets can't add up to more than 100.");
+    // Names of the suggested 50/30/20 buckets.
+    out property <string> bucket-needs: @tr("Needs");
+    out property <string> bucket-wants: @tr("Wants");
+    out property <string> bucket-savings: @tr("Savings");
     out property <string> finance-category-archived: @tr("That category is archived. Restore it to use it.");
 
     public pure function vs-last-month(change: string) -> string {
@@ -350,6 +358,38 @@ export global Strings {
 
     public pure function transfer-line-label(title: string, from: string, to: string, date: string, amount: string) -> string {
         return @tr("{}, from {} to {}, {}, {}", title, from, to, date, amount);
+    }
+
+    public pure function budget-income(month: string, amount: string) -> string {
+        return @tr("Income of {0}: {1}", month, amount);
+    }
+
+    public pure function budget-unassigned(amount: string) -> string {
+        return @tr("Unassigned: {}", amount);
+    }
+
+    public pure function bucket-spent(spent: string, assigned: string) -> string {
+        return @tr("{0} of {1}", spent, assigned);
+    }
+
+    public pure function bucket-left(amount: string) -> string {
+        return @tr("{} left", amount);
+    }
+
+    public pure function bucket-over(amount: string) -> string {
+        return @tr("{} over", amount);
+    }
+
+    public pure function bucket-line-label(name: string, percent: int, spent: string, remaining: string) -> string {
+        return @tr("{0}, {1}%, {2}, {3}", name, percent, spent, remaining);
+    }
+
+    public pure function bucket-percent-label(month: string) -> string {
+        return @tr("Percentage of the income for {}", month);
+    }
+
+    public pure function delete-bucket-question(name: string) -> string {
+        return @tr("Delete the bucket {}? This can't be undone.", name);
     }
 
     public pure function archived-category(name: string) -> string {
