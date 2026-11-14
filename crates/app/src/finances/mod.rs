@@ -103,6 +103,40 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         }
     });
 
+    store.on_create_credit_line({
+        let state = state.clone();
+        move |name, bank, currency, balance, limit, rate| {
+            state.finish(
+                finances::create_credit_line(
+                    &state.conn,
+                    &name,
+                    &bank,
+                    &currency,
+                    &balance,
+                    &limit,
+                    Some(&rate),
+                )
+                .map(|_| ()),
+            )
+        }
+    });
+
+    store.on_update_credit_line({
+        let state = state.clone();
+        move |id, name, bank, currency, balance, limit, rate| {
+            state.finish(finances::update_credit_line(
+                &state.conn,
+                AccountId(id.into()),
+                &name,
+                &bank,
+                &currency,
+                &balance,
+                &limit,
+                Some(&rate),
+            ))
+        }
+    });
+
     store.on_create_card({
         let state = state.clone();
         move |name, bank, currency, limit, closing, due, rate| {

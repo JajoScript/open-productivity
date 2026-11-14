@@ -51,6 +51,7 @@ pub fn core_kind(k: AccountKind) -> CoreKind {
         AccountKind::Savings => CoreKind::Savings,
         AccountKind::Cash => CoreKind::Cash,
         AccountKind::Credit => CoreKind::Credit,
+        AccountKind::CreditLine => CoreKind::CreditLine,
     }
 }
 
@@ -61,6 +62,7 @@ fn ui_kind(k: CoreKind) -> AccountKind {
         CoreKind::Savings => AccountKind::Savings,
         CoreKind::Cash => AccountKind::Cash,
         CoreKind::Credit => AccountKind::Credit,
+        CoreKind::CreditLine => AccountKind::CreditLine,
     }
 }
 
@@ -78,15 +80,16 @@ pub fn currency_rows(rates: Option<&Rates>) -> Vec<CurrencyRow> {
 
 fn account_row(a: Account, main: &Currency, bill: Option<&Bill>) -> Result<AccountRow, String> {
     let style = style();
-    let (card, usage) = (a.card, a.card_usage());
+    let (card, usage) = (a.card, a.credit_usage());
     let money = |v: i64| finances::format_in(v, a.currency, main, style);
     Ok(AccountRow {
-        limit: card
-            .map_or_else(String::new, |t| {
-                finances::format_input(t.limit, a.currency, style)
+        limit: a
+            .credit_limit
+            .map_or_else(String::new, |l| {
+                finances::format_input(l, a.currency, style)
             })
             .into(),
-        limit_text: card.map_or_else(String::new, |t| money(t.limit)).into(),
+        limit_text: a.credit_limit.map_or_else(String::new, money).into(),
         closing_day: card.map_or(0, |t| t.closing_day as i32),
         due_day: card.map_or(0, |t| t.due_day as i32),
         used: usage.map_or_else(String::new, |u| money(u.used)).into(),
@@ -149,7 +152,11 @@ impl State {
                 }
             }
         }
-        store.set_has_cards(active.iter().any(|r| r.kind == AccountKind::Credit));
+        store.set_has_cards(
+            active
+                .iter()
+                .any(|r| matches!(r.kind, AccountKind::Credit | AccountKind::CreditLine)),
+        );
         self.rows.set_vec(active);
         self.archived_account_rows.set_vec(archived);
         store.set_has_currency(has_currency);

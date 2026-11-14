@@ -3,7 +3,7 @@
 
 import { Date } from "std-widgets.slint";
 
-export enum AccountKind { checking, demand, savings, cash, credit }
+export enum AccountKind { checking, demand, savings, cash, credit, credit-line }
 
 // `balance` arrives formatted for display; `initial` formatted for the edit field.
 export struct AccountRow {
@@ -18,7 +18,7 @@ export struct AccountRow {
     archived: bool,
     // Some movement uses it, so it can only be archived.
     in-use: bool,
-    // Credit cards only (empty or 0 otherwise): the limit formatted for the edit field and for
+    // Cards and lines (empty or 0 otherwise): the limit formatted for the edit field and for
     // display, the days of the month, and the figures `core` computed.
     limit: string,
     limit-text: string,

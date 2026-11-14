@@ -62,6 +62,9 @@ export global FinanceStore {
     callback update-account(int, string, AccountKind, string, string, string, string) -> string;
     // name, bank, currency code, limit, closing day, due day, exchange rate. The days are the
     // typed text; core validates them.
+    // name, bank, currency code, initial balance, limit, exchange rate.
+    callback create-credit-line(string, string, string, string, string, string) -> string;
+    callback update-credit-line(int, string, string, string, string, string, string) -> string;
     callback create-card(string, string, string, string, string, string, string) -> string;
     callback update-card(int, string, string, string, string, string, string, string) -> string;
     // The exchange rates modal reports each field edited, then saves them all or discards them.

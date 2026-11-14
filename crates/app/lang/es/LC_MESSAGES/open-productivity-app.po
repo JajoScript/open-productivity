@@ -1299,8 +1299,17 @@ msgstr[1] "{n} pagos programados usan esta cuenta."
 msgid "Credit card"
 msgstr "Tarjeta de crédito"
 
-msgid "Credit cards"
-msgstr "Tarjetas de crédito"
+msgid "Credit"
+msgstr "Crédito"
+
+msgid "Credit line"
+msgstr "Línea de crédito"
+
+msgid "Edit credit line"
+msgstr "Editar línea de crédito"
+
+msgid "New credit line"
+msgstr "Nueva línea de crédito"
 
 msgid "Closes on day {} · Pay on day {}"
 msgstr "Cierra el día {} · Paga el día {}"
@@ -1317,8 +1326,8 @@ msgstr "El cupo debe ser un monto mayor que cero."
 msgid "The days must be numbers from 1 to 31."
 msgstr "Los días deben ser números del 1 al 31."
 
-msgid "A credit card can't become another kind of account, nor the reverse."
-msgstr "Una tarjeta de crédito no puede pasar a otro tipo de cuenta, ni al revés."
+msgid "A credit card or credit line can't become another kind of account, nor the reverse."
+msgstr "Una tarjeta o línea de crédito no puede pasar a otro tipo de cuenta, ni al revés."
 
 msgid "Credit limit"
 msgstr "Cupo"

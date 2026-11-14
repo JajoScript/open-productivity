@@ -25,7 +25,7 @@ component CreatorBody inherits FocusScope {
     in-out property <AccountKind> kind;
     in-out property <string> bank;
     in-out property <string> balance;
-    // Cards only: the limit and the days of the month, as typed.
+    // Cards and lines: the limit and the days of the month, as typed.
     in-out property <string> limit;
     in-out property <string> closing;
     in-out property <string> due;
@@ -43,7 +43,9 @@ component CreatorBody inherits FocusScope {
 
     property <string> error;
     // A card stays a card and an account stays an account, so the other kinds are not offered.
-    property <[AccountKind]> kinds: !root.editing ? [AccountKind.checking, AccountKind.demand, AccountKind.savings, AccountKind.cash, AccountKind.credit] : root.kind == AccountKind.credit ? [AccountKind.credit] : [AccountKind.checking, AccountKind.demand, AccountKind.savings, AccountKind.cash];
+    // Credit kinds are picked in their own row when creating, so the plain kinds fit in one row.
+    property <bool> credit: root.kind == AccountKind.credit || root.kind == AccountKind.credit-line;
+    property <[AccountKind]> kinds: root.credit ? [] : [AccountKind.checking, AccountKind.demand, AccountKind.savings, AccountKind.cash];
 
     capture-key-pressed(event) => {
         if event.text == Key.Escape {
@@ -59,7 +61,7 @@ component CreatorBody inherits FocusScope {
 
     // Arrow keys move the choice, like the tabs they are drawn as.
     function step(delta: int) {
-        let i = root.kind == AccountKind.checking ? 0 : root.kind == AccountKind.demand ? 1 : root.kind == AccountKind.savings ? 2 : root.kind == AccountKind.cash ? 3 : 4;
+        let i = root.kind == AccountKind.checking ? 0 : root.kind == AccountKind.demand ? 1 : root.kind == AccountKind.savings ? 2 : root.kind == AccountKind.cash ? 3 : root.kind == AccountKind.credit ? 4 : 5;
         root.kind = root.kinds[max(0, min(root.kinds.length - 1, i + delta))];
     }
 
@@ -67,7 +69,7 @@ component CreatorBody inherits FocusScope {
         padding: 16px;
         spacing: 12px;
         Text {
-            text: root.kind == AccountKind.credit ? (root.editing ? @tr("Edit card") : @tr("New card")) : (root.editing ? @tr("Edit account") : @tr("New account"));
+            text: root.kind == AccountKind.credit ? (root.editing ? @tr("Edit card") : @tr("New card")) : root.kind == AccountKind.credit-line ? (root.editing ? @tr("Edit credit line") : @tr("New credit line")) : (root.editing ? @tr("Edit account") : @tr("New account"));
             font-size: 14px;
             font-weight: 700;
         }
@@ -80,6 +82,35 @@ component CreatorBody inherits FocusScope {
             }
             accepted(text) => {
                 root.submit();
+            }
+        }
+
+        if !root.editing: HorizontalLayout {
+            spacing: 0px;
+            alignment: start;
+            accessible-role: tab-list;
+            SettingsTab {
+                text: @tr("Account");
+                selected: !root.credit;
+                chosen => {
+                    root.kind = AccountKind.checking;
+                }
+            }
+
+            SettingsTab {
+                text: Strings.account-kind(AccountKind.credit);
+                selected: root.kind == AccountKind.credit;
+                chosen => {
+                    root.kind = AccountKind.credit;
+                }
+            }
+
+            SettingsTab {
+                text: Strings.account-kind(AccountKind.credit-line);
+                selected: root.kind == AccountKind.credit-line;
+                chosen => {
+                    root.kind = AccountKind.credit-line;
+                }
             }
         }
 
@@ -162,7 +193,7 @@ component CreatorBody inherits FocusScope {
             }
         }
 
-        if root.kind == AccountKind.credit: InkField {
+        if root.kind == AccountKind.credit || root.kind == AccountKind.credit-line: InkField {
             text <=> root.limit;
             placeholder-text: @tr("Credit limit");
             accepted(text) => {
@@ -310,7 +341,7 @@ export component AccountCreator inherits PopupWindow {
             due: root.account-due;
             currency: root.account-currency;
             save(name, kind, bank, currency, balance, limit, closing, due, rate) => {
-                let error = kind == AccountKind.credit ? (root.editing ? FinanceStore.update-card(root.account-id, name, bank, currency, limit, closing, due, rate) : FinanceStore.create-card(name, bank, currency, limit, closing, due, rate)) : (root.editing ? FinanceStore.update-account(root.account-id, name, kind, bank, currency, balance, rate) : FinanceStore.create-account(name, kind, bank, currency, balance, rate));
+                let error = kind == AccountKind.credit-line ? (root.editing ? FinanceStore.update-credit-line(root.account-id, name, bank, currency, balance, limit, rate) : FinanceStore.create-credit-line(name, bank, currency, balance, limit, rate)) : kind == AccountKind.credit ? (root.editing ? FinanceStore.update-card(root.account-id, name, bank, currency, limit, closing, due, rate) : FinanceStore.create-card(name, bank, currency, limit, closing, due, rate)) : (root.editing ? FinanceStore.update-account(root.account-id, name, kind, bank, currency, balance, rate) : FinanceStore.create-account(name, kind, bank, currency, balance, rate));
                 if error == "" {
                     root.close();
                 }

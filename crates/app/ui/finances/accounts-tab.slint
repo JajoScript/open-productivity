@@ -119,8 +119,8 @@ export component AccountsTab inherits VerticalLayout {
         VerticalLayout {
             alignment: start;
             for account in FinanceStore.accounts: AccountLine {
-                visible: account.kind != AccountKind.credit;
-                height: account.kind != AccountKind.credit ? 56px : 0px;
+                visible: !(account.kind == AccountKind.credit || account.kind == AccountKind.credit-line);
+                height: !(account.kind == AccountKind.credit || account.kind == AccountKind.credit-line) ? 56px : 0px;
                 account: account;
                 opened => {
                     root.edit-account(account);
@@ -131,15 +131,15 @@ export component AccountsTab inherits VerticalLayout {
                 height: 32px;
                 padding-left: 8px;
                 Text {
-                    text: @tr("Credit cards");
+                    text: @tr("Credit");
                     color: Theme.muted;
                     vertical-alignment: bottom;
                 }
             }
 
             for account in FinanceStore.accounts: CardLine {
-                visible: account.kind == AccountKind.credit;
-                height: account.kind == AccountKind.credit ? 72px : 0px;
+                visible: (account.kind == AccountKind.credit || account.kind == AccountKind.credit-line);
+                height: (account.kind == AccountKind.credit || account.kind == AccountKind.credit-line) ? 72px : 0px;
                 account: account;
                 opened => {
                     root.edit-account(account);
@@ -157,8 +157,8 @@ export component AccountsTab inherits VerticalLayout {
             }
 
             for account in FinanceStore.archived-accounts: AccountLine {
-                visible: account.kind != AccountKind.credit;
-                height: account.kind != AccountKind.credit ? 56px : 0px;
+                visible: !(account.kind == AccountKind.credit || account.kind == AccountKind.credit-line);
+                height: !(account.kind == AccountKind.credit || account.kind == AccountKind.credit-line) ? 56px : 0px;
                 account: account;
                 opened => {
                     root.edit-account(account);
@@ -166,8 +166,8 @@ export component AccountsTab inherits VerticalLayout {
             }
 
             for account in FinanceStore.archived-accounts: CardLine {
-                visible: account.kind == AccountKind.credit;
-                height: account.kind == AccountKind.credit ? 72px : 0px;
+                visible: (account.kind == AccountKind.credit || account.kind == AccountKind.credit-line);
+                height: (account.kind == AccountKind.credit || account.kind == AccountKind.credit-line) ? 72px : 0px;
                 account: account;
                 opened => {
                     root.edit-account(account);
