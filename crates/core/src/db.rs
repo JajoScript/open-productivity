@@ -88,6 +88,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0022_finance_transfer.sql"),
     include_str!("../migrations/0023_finance_currencies.sql"),
     include_str!("../migrations/0024_finance_scheduled.sql"),
+    include_str!("../migrations/0025_finance_credit_card.sql"),
 ];
 
 pub fn open(path: &Path) -> Result<Connection, DbError> {
@@ -319,6 +320,64 @@ mod tests {
             })
             .unwrap();
         assert_eq!(archived, 0);
+    }
+
+    #[test]
+    fn credit_card_migration_keeps_rows_and_foreign_keys() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        migrate(&mut conn, &MIGRATIONS[..24]).unwrap();
+        conn.execute_batch(
+            "INSERT INTO finance_account (name, kind, currency, initial_balance, archived)
+                 VALUES ('A', 'cash', 'CLP', 0, 0), ('B', 'savings', 'CLP', 9, 1);
+             INSERT INTO finance_transaction (kind, account_id, amount, date, to_account_id)
+                 VALUES ('expense', 1, 5, '2026-03-01', NULL), ('transfer', 1, 3, '2026-03-02', 2);
+             INSERT INTO finance_scheduled (account_id, kind, amount, start_date, next_date, form)
+                 VALUES (2, 'expense', 4, '2026-04-01', '2026-04-01', 'once');",
+        )
+        .unwrap();
+        migrate(&mut conn, MIGRATIONS).unwrap();
+        let rows: Vec<(i64, String, i64, i64)> = conn
+            .prepare("SELECT id, name, initial_balance, archived FROM finance_account ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(rows, [(1, "A".into(), 0, 0), (2, "B".into(), 9, 1)]);
+        let moves: i64 = conn
+            .query_row("SELECT count(*) FROM finance_transaction", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(moves, 2);
+        let broken = conn
+            .prepare("PRAGMA foreign_key_check")
+            .unwrap()
+            .query_map([], |_| Ok(()))
+            .unwrap()
+            .count();
+        assert_eq!(broken, 0);
+        assert!(
+            conn.execute(
+                "INSERT INTO finance_transaction (kind, account_id, amount, date)
+                 VALUES ('expense', 99, 1, '2026-03-01')",
+                [],
+            )
+            .is_err()
+        );
+        conn.execute(
+            "INSERT INTO finance_account (name, kind, currency, initial_balance, credit_limit, closing_day, due_day)
+             VALUES ('C', 'credit', 'CLP', 0, 100, 5, 20)",
+            [],
+        )
+        .unwrap();
+        assert!(
+            conn.execute(
+                "INSERT INTO finance_account (name, kind, currency, initial_balance, credit_limit)
+                 VALUES ('D', 'cash', 'CLP', 0, 100)",
+                [],
+            )
+            .is_err()
+        );
     }
 
     #[test]

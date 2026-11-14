@@ -14,6 +14,8 @@ mod summary;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_cards;
+#[cfg(test)]
 mod tests_categories;
 #[cfg(test)]
 mod tests_currencies;
@@ -77,6 +79,12 @@ pub enum FinanceError {
     InvalidRate,
     /// The account has movements, so its currency cannot change.
     CurrencyLocked,
+    /// A card's limit is empty, malformed or not positive.
+    InvalidLimit,
+    /// A closing or due day is outside 1..=31.
+    InvalidDay,
+    /// A card cannot become a plain account, nor the reverse.
+    KindLocked,
     /// A scheduled payment's form, frequency or installments are not valid.
     InvalidSchedule,
     ScheduledNotFound,
@@ -111,6 +119,9 @@ impl fmt::Display for FinanceError {
             FinanceError::MissingRate(c) => write!(f, "missing exchange rate for {c}"),
             FinanceError::InvalidRate => write!(f, "the exchange rate is not valid"),
             FinanceError::CurrencyLocked => write!(f, "the account's currency is locked"),
+            FinanceError::InvalidLimit => write!(f, "the credit limit is not valid"),
+            FinanceError::InvalidDay => write!(f, "the day is not valid"),
+            FinanceError::KindLocked => write!(f, "the account kind cannot change"),
             FinanceError::InvalidSchedule => write!(f, "the scheduled payment is not valid"),
             FinanceError::ScheduledNotFound => write!(f, "scheduled payment not found"),
             FinanceError::ScheduledDone => write!(f, "the scheduled payment is finished"),
