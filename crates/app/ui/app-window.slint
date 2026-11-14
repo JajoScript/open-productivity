@@ -14,6 +14,10 @@ import { TopicCreator } from "study/topic-creator.slint";
 import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
 import { StudyStore } from "study/study-store.slint";
+import { AccountCreator } from "finances/account-creator.slint";
+import { FinancesView } from "finances/finances-view.slint";
+import { FinanceStore } from "finances/finance-store.slint";
+import { AccountKind, AccountRow, CurrencyRow } from "finances/account-row.slint";
 import { DayBarRow, DaysTab } from "study/days-chart.slint";
 import { HoursTab } from "study/hours-chart.slint";
 import { RankRow } from "study/ranking-chart.slint";
@@ -91,6 +95,10 @@ export {
     Quadrant,
     Stage,
     ColorMode,
+    AccountKind,
+    AccountRow,
+    CurrencyRow,
+    FinanceStore,
     DayBarRow,
     DaysTab,
     HoursTab,
@@ -233,6 +241,13 @@ export component AppWindow inherits Window {
     // What the subject modal opens with: a new subject, or the one being renamed.
     property <bool> subject-editing;
     property <string> subject-edit-name;
+    // What the account modal opens with: a new account, or the one being edited.
+    property <bool> account-editing;
+    property <int> account-edit-id;
+    property <string> account-edit-name;
+    property <AccountKind> account-edit-kind;
+    property <string> account-edit-bank;
+    property <string> account-edit-balance;
     function open-new-topic() {
         // Same starting subject as the session modal.
         root.log-subject = StudyStore.subject-open && !StudyStore.subject-detail.archived ? StudyStore.subject-detail.id : StudyStore.active-subjects[0].id;
@@ -277,6 +292,9 @@ export component AppWindow inherits Window {
         root.instances-status = "";
         if root.module == Module.settings {
             root.instances-opened();
+        }
+        if root.module == Module.finances {
+            FinanceStore.refresh();
         }
         root.entering = true;
     }
@@ -326,6 +344,17 @@ export component AppWindow inherits Window {
             editing: root.subject-editing;
             subject-id: StudyStore.subject-detail.id;
             subject-name: root.subject-edit-name;
+            x: (root.width - self.width) / 2;
+            y: 120px;
+        }
+
+        account-creator := AccountCreator {
+            editing: root.account-editing;
+            account-id: root.account-edit-id;
+            account-name: root.account-edit-name;
+            account-kind: root.account-edit-kind;
+            account-bank: root.account-edit-bank;
+            account-balance: root.account-edit-balance;
             x: (root.width - self.width) / 2;
             y: 120px;
         }
@@ -534,6 +563,28 @@ export component AppWindow inherits Window {
                     }
                     new-topic => {
                         root.open-new-topic();
+                    }
+                }
+
+                if root.module == Module.finances: FinancesView {
+                    width: parent.width;
+                    height: parent.height;
+                    new-account => {
+                        root.account-editing = false;
+                        root.account-edit-name = "";
+                        root.account-edit-kind = AccountKind.checking;
+                        root.account-edit-bank = "";
+                        root.account-edit-balance = "";
+                        account-creator.show();
+                    }
+                    edit-account(a) => {
+                        root.account-editing = true;
+                        root.account-edit-id = a.id;
+                        root.account-edit-name = a.name;
+                        root.account-edit-kind = a.kind;
+                        root.account-edit-bank = a.bank;
+                        root.account-edit-balance = a.initial;
+                        account-creator.show();
                     }
                 }
 

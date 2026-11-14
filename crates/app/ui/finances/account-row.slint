@@ -1,0 +1,19 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+export enum AccountKind { checking, demand, savings, cash }
+
+// `balance` arrives formatted for display; `initial` formatted for the edit field.
+export struct AccountRow {
+    id: int,
+    name: string,
+    kind: AccountKind,
+    bank: string,
+    balance: string,
+    initial: string,
+}
+
+export struct CurrencyRow {
+    code: string,
+    symbol: string,
+}

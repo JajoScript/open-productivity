@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { AccountKind, AccountRow, CurrencyRow } from "account-row.slint";
+
+// What the Finances views show and ask for. Rust fills the data and answers the callbacks;
+// the views read and call it directly instead of forwarding it through the window.
+export global FinanceStore {
+    // False until the user picks the main currency.
+    in property <bool> has-currency;
+    in property <[CurrencyRow]> currencies;
+    in property <[AccountRow]> accounts;
+    in property <string> error;
+
+    // The ones that return a string give the error to show; empty means it worked.
+    callback choose-currency(string) -> string;
+    callback create-account(string, AccountKind, string, string) -> string;
+    callback update-account(int, string, AccountKind, string, string) -> string;
+    // Reload on entering the module or when the language changes the amount style.
+    callback refresh();
+}

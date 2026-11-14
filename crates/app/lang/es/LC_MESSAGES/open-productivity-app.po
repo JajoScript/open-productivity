@@ -921,3 +921,72 @@ msgstr "Materias más estudiadas"
 msgctxt "hours range"
 msgid "All"
 msgstr "Todo"
+
+msgid "Finances"
+msgstr "Finanzas"
+
+msgid "Give the account a name."
+msgstr "Ponle un nombre a la cuenta."
+
+msgid "Enter the balance as a positive number, with only the decimals the currency uses."
+msgstr "Escribe el saldo como un número positivo, solo con los decimales que usa la moneda."
+
+msgid "Choose the main currency first."
+msgstr "Elige primero la moneda principal."
+
+msgid "That account no longer exists."
+msgstr "Esa cuenta ya no existe."
+
+msgid "Could not save the account: {}"
+msgstr "No se pudo guardar la cuenta: {}"
+
+msgid "Could not load the accounts: {}"
+msgstr "No se pudieron cargar las cuentas: {}"
+
+msgid "Checking"
+msgstr "Corriente"
+
+msgid "Demand deposit"
+msgstr "Vista"
+
+msgid "Savings"
+msgstr "Ahorro"
+
+msgid "Cash"
+msgstr "Efectivo"
+
+msgid "{} · {}"
+msgstr "{} · {}"
+
+msgid "{}, {}, {}"
+msgstr "{}, {}, {}"
+
+msgid "Edit account"
+msgstr "Editar cuenta"
+
+msgid "New account"
+msgstr "Nueva cuenta"
+
+msgid "Account name"
+msgstr "Nombre de la cuenta"
+
+msgid "Bank (optional)"
+msgstr "Banco (opcional)"
+
+msgid "Initial balance"
+msgstr "Saldo inicial"
+
+msgid "Choose your main currency"
+msgstr "Elige tu moneda principal"
+
+msgid "Your accounts and balances will use it. You can't change it later."
+msgstr "Tus cuentas y saldos la usarán. No podrás cambiarla después."
+
+msgid "Confirm"
+msgstr "Confirmar"
+
+msgid "Add your first account"
+msgstr "Agrega tu primera cuenta"
+
+msgid "Register where your money is, such as a bank account or cash, with what it holds today. Every account shows its balance."
+msgstr "Registra dónde está tu dinero, como una cuenta bancaria o efectivo, con lo que tiene hoy. Cada cuenta muestra su saldo."

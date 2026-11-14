@@ -21,6 +21,7 @@ mod calendar_view;
 mod data;
 mod dates;
 mod dialogs;
+mod finances;
 mod habits;
 mod instances_ui;
 mod kanban;
@@ -166,6 +167,7 @@ fn main() {
     let tasks_timer = tasks::init(&window, conn.clone(), &app_dir);
     let habits_timer = habits::init(&window, conn.clone());
     let study_timer = study::init(&window, conn.clone(), &app_dir);
+    finances::init(&window, conn.clone());
     data::init(&window, conn);
 
     let name = instance.file_name().map_or_else(

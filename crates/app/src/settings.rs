@@ -12,7 +12,7 @@ use open_productivity_core::settings::{
 use slint::ComponentHandle;
 use slint::winit_030::{WinitWindowAccessor, winit::window::Theme};
 
-use crate::{AppWindow, ColorMode, Language, Strings};
+use crate::{AppWindow, ColorMode, FinanceStore, Language, Strings};
 
 fn to_ui(l: CoreLanguage) -> Language {
     match l {
@@ -64,7 +64,10 @@ fn apply(language: CoreLanguage, app_dir: &Path) {
     let mut last_error = None;
     for c in &candidates {
         match slint::select_bundled_translation(c) {
-            Ok(()) => return,
+            Ok(()) => {
+                crate::finances::set_style_for(c);
+                return;
+            }
             Err(e) => last_error = Some(e),
         }
     }
@@ -129,6 +132,8 @@ pub fn init(window: &AppWindow, app_dir: &Path) {
         apply(language, &app_dir);
         if let Some(w) = weak.upgrade() {
             w.set_current_language(l);
+            // Amounts follow the language's separators.
+            w.global::<FinanceStore>().invoke_refresh();
         }
         r(saved);
     });

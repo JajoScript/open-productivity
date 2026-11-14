@@ -1,0 +1,79 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Theme } from "../theme.slint";
+
+// Sample accounts as they will look in the list: the icon, the name and the balance, with the
+// text drawn as bars so it is not taken for real data. The rows appear once, one after another.
+export component AccountPreview inherits Rectangle {
+    property <bool> on: false;
+    // Name bar width, balance bar width.
+    property <[[length]]> rows: [[96px, 56px], [72px, 44px], [120px, 64px]];
+
+    width: 356px;
+    height: 132px;
+    border-radius: 6px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+    background: Theme.field;
+    accessible-role: none;
+
+    Timer {
+        interval: 16ms;
+        running: !root.on;
+        triggered => {
+            root.on = true;
+        }
+    }
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 6px;
+        alignment: center;
+        for row[r] in root.rows: Rectangle {
+            height: 28px;
+            opacity: root.on ? 1 : 0;
+            animate opacity { duration: Theme.enter; delay: 200ms + r * 150ms; easing: Theme.ease-out; }
+
+            HorizontalLayout {
+                padding-left: 8px;
+                padding-right: 8px;
+                spacing: 8px;
+                Image {
+                    source: @image-url("../icons/wallet.svg");
+                    colorize: Theme.muted;
+                    width: 16px;
+                    image-fit: contain;
+                    accessible-role: none;
+                }
+
+                Rectangle {
+                    Rectangle {
+                        x: 0px;
+                        width: row[0];
+                        height: 7px;
+                        border-radius: 3.5px;
+                        background: Theme.muted;
+                    }
+                }
+
+                Rectangle {
+                    width: row[1];
+                    Rectangle {
+                        x: parent.width - self.width;
+                        width: row[1];
+                        height: 7px;
+                        border-radius: 3.5px;
+                        background: Theme.hairline;
+                    }
+                }
+            }
+
+            Rectangle {
+                y: parent.height - 1px;
+                height: 1px;
+                background: Theme.hairline;
+            }
+        }
+    }
+}

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
+import { AccountKind } from "finances/account-row.slint";
+
 // Messages shown by native dialogs and the log; msgids are English, see lang/README.md.
 export global Strings {
     out property <string> already-running: @tr("Open Productivity is already running.");
@@ -235,4 +237,38 @@ export global Strings {
     }
 
     out property <[string]> weekdays: [@tr("Mo"), @tr("Tu"), @tr("We"), @tr("Th"), @tr("Fr"), @tr("Sa"), @tr("Su")];
+
+    out property <string> finance-empty-name: @tr("Give the account a name.");
+    out property <string> finance-invalid-amount: @tr("Enter the balance as a positive number, with only the decimals the currency uses.");
+    out property <string> finance-no-currency: @tr("Choose the main currency first.");
+    out property <string> finance-no-account: @tr("That account no longer exists.");
+
+    public pure function finance-failed(error: string) -> string {
+        return @tr("Could not save the account: {}", error);
+    }
+
+    public pure function finance-load-failed(error: string) -> string {
+        return @tr("Could not load the accounts: {}", error);
+    }
+
+    public pure function account-kind(kind: AccountKind) -> string {
+        if kind == AccountKind.checking {
+            return @tr("Checking");
+        }
+        if kind == AccountKind.demand {
+            return @tr("Demand deposit");
+        }
+        if kind == AccountKind.savings {
+            return @tr("Savings");
+        }
+        return @tr("Cash");
+    }
+
+    public pure function account-kind-bank(kind: AccountKind, bank: string) -> string {
+        return @tr("{} · {}", Strings.account-kind(kind), bank);
+    }
+
+    public pure function account-line-label(name: string, kind: string, balance: string) -> string {
+        return @tr("{}, {}, {}", name, kind, balance);
+    }
 }

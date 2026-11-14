@@ -1,0 +1,159 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { AccountKind } from "account-row.slint";
+import { FinanceStore } from "finance-store.slint";
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component CreatorBody inherits FocusScope {
+    in property <bool> editing;
+    // The modal gives the initial values and the user edits them here.
+    in-out property <string> name;
+    in-out property <AccountKind> kind;
+    in-out property <string> bank;
+    in-out property <string> balance;
+    callback save(string, AccountKind, string, string) -> string;
+    callback cancel;
+
+    property <string> error;
+    property <[AccountKind]> kinds: [AccountKind.checking, AccountKind.demand, AccountKind.savings, AccountKind.cash];
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.name, root.kind, root.bank, root.balance);
+    }
+
+    // Arrow keys move the choice, like the tabs they are drawn as.
+    function step(delta: int) {
+        let i = root.kind == AccountKind.checking ? 0 : root.kind == AccountKind.demand ? 1 : root.kind == AccountKind.savings ? 2 : 3;
+        root.kind = root.kinds[max(0, min(3, i + delta))];
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: root.editing ? @tr("Edit account") : @tr("New account");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        InkField {
+            text <=> root.name;
+            placeholder-text: @tr("Account name");
+            init => {
+                self.focus();
+            }
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 0px;
+            alignment: start;
+            accessible-role: tab-list;
+            for k in root.kinds: SettingsTab {
+                text: Strings.account-kind(k);
+                selected: root.kind == k;
+                chosen => {
+                    root.kind = k;
+                }
+                step(d) => {
+                    root.step(d);
+                }
+            }
+        }
+
+        InkField {
+            text <=> root.bank;
+            placeholder-text: @tr("Bank (optional)");
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        InkField {
+            text <=> root.balance;
+            placeholder-text: @tr("Initial balance");
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: root.editing ? @tr("Save") : @tr("Create");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+}
+
+// Creates an account or edits one, depending on how it is opened. Closing by clicking outside
+// discards it.
+export component AccountCreator inherits PopupWindow {
+    // Set by the opener before show().
+    in property <bool> editing;
+    in property <int> account-id;
+    in property <string> account-name;
+    in property <AccountKind> account-kind;
+    in property <string> account-bank;
+    in property <string> account-balance;
+
+    close-policy: close-on-click-outside;
+    width: 400px;
+
+    PopupSurface {
+        CreatorBody {
+            editing: root.editing;
+            name: root.account-name;
+            kind: root.account-kind;
+            bank: root.account-bank;
+            balance: root.account-balance;
+            save(name, kind, bank, balance) => {
+                let error = root.editing ? FinanceStore.update-account(root.account-id, name, kind, bank, balance) : FinanceStore.create-account(name, kind, bank, balance);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

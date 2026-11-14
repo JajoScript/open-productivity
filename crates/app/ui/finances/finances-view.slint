@@ -1,0 +1,249 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ListView } from "std-widgets.slint";
+import { EmptyState } from "../empty-state.slint";
+import { InkButton } from "../ink-button.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+import { AccountPreview } from "account-preview.slint";
+import { AccountRow } from "account-row.slint";
+import { FinanceStore } from "finance-store.slint";
+
+component AccountLine inherits Rectangle {
+    in property <AccountRow> account;
+    callback opened;
+
+    height: 56px;
+    border-radius: 6px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background {
+        duration: Theme.fast;
+        easing: Theme.ease-out;
+    }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: Strings.account-line-label(root.account.name, Strings.account-kind(root.account.kind), root.account.balance);
+    accessible-action-default => {
+        root.opened();
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 16px; // clears the ListView scroll bar
+        spacing: 8px;
+        Image {
+            source: @image-url("../icons/wallet.svg");
+            colorize: Theme.muted;
+            width: 16px;
+            image-fit: contain;
+            accessible-role: none;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.account.name;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            Text {
+                text: root.account.bank != "" ? Strings.account-kind-bank(root.account.kind, root.account.bank) : Strings.account-kind(root.account.kind);
+                color: Theme.muted;
+                overflow: elide;
+                accessible-role: none;
+            }
+        }
+
+        Text {
+            text: root.account.balance;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            accessible-role: none;
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.opened();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.opened();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// First use: the main currency has no default, the user chooses it once.
+component CurrencyPicker inherits HorizontalLayout {
+    property <string> chosen;
+    property <string> error;
+
+    alignment: center;
+    vertical-stretch: 1;
+
+    VerticalLayout {
+        max-width: 440px;
+        spacing: 6px;
+        alignment: start;
+        Text {
+            text: @tr("Choose your main currency");
+            font-size: 16px;
+            font-weight: 600;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        Text {
+            text: @tr("Your accounts and balances will use it. You can't change it later.");
+            color: Theme.muted;
+            horizontal-alignment: center;
+            wrap: word-wrap;
+        }
+
+        // The eleven rows, so the button sits right under them; scrolls on short windows.
+        ListView {
+            min-height: 120px;
+            preferred-height: 396px;
+            for c in FinanceStore.currencies: Rectangle {
+                height: 36px;
+                border-radius: 6px;
+                background: root.chosen == c.code ? Theme.selected : t.pressed ? Theme.pressed : t.has-hover ? Theme.hover : transparent;
+                accessible-role: radio-button;
+                accessible-label: c.code + " " + c.symbol;
+                accessible-checkable: true;
+                accessible-checked: root.chosen == c.code;
+                accessible-action-default => {
+                    root.chosen = c.code;
+                }
+                HorizontalLayout {
+                    padding-left: 12px;
+                    padding-right: 16px;
+                    spacing: 8px;
+                    Text {
+                        text: c.code;
+                        font-weight: root.chosen == c.code ? 700 : 400;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        accessible-role: none;
+                    }
+
+                    Text {
+                        text: c.symbol;
+                        color: Theme.muted;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+                }
+
+                t := TouchArea {
+                    clicked => {
+                        root.chosen = c.code;
+                    }
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            alignment: center;
+            padding-top: 6px;
+            InkButton {
+                text: @tr("Confirm");
+                enabled: root.chosen != "";
+                clicked => {
+                    root.error = FinanceStore.choose-currency(root.chosen);
+                }
+            }
+        }
+    }
+}
+
+// The accounts and their balances; the main currency is chosen the first time.
+export component FinancesView inherits VerticalLayout {
+    // Open the window's modal: a new account, or the one of the row.
+    callback new-account();
+    callback edit-account(AccountRow);
+
+    padding: 24px;
+    padding-top: 20px;
+    spacing: 12px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            text: @tr("Finances");
+            font-size: 24px;
+            font-weight: 700;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+        }
+
+        if FinanceStore.has-currency: InkButton {
+            text: @tr("New account");
+            clicked => {
+                root.new-account();
+            }
+        }
+    }
+
+    if FinanceStore.error != "": Text {
+        text: FinanceStore.error;
+        color: Theme.critical;
+        wrap: word-wrap;
+    }
+
+    if !FinanceStore.has-currency: CurrencyPicker { }
+
+    if FinanceStore.has-currency && FinanceStore.accounts.length == 0: EmptyState {
+        title: @tr("Add your first account");
+        description: @tr("Register where your money is, such as a bank account or cash, with what it holds today. Every account shows its balance.");
+        action: @tr("New account");
+        clicked => {
+            root.new-account();
+        }
+
+        AccountPreview { }
+    }
+
+    if FinanceStore.has-currency && FinanceStore.accounts.length > 0: ListView {
+        vertical-stretch: 1;
+        for account in FinanceStore.accounts: AccountLine {
+            account: account;
+            opened => {
+                root.edit-account(account);
+            }
+        }
+    }
+}
