@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Palette } from "std-widgets.slint";
+import { Palette, ScrollView } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkField } from "../ink-field.slint";
 import { PopupSurface } from "../popup-surface.slint";
@@ -9,6 +9,7 @@ import { SettingsTab } from "../settings/settings-tab.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
+import { ChoiceRow } from "../study/session-logger.slint";
 import { AccountKind } from "account-row.slint";
 import { FinanceStore } from "finance-store.slint";
 
@@ -24,7 +25,13 @@ component CreatorBody inherits FocusScope {
     in-out property <AccountKind> kind;
     in-out property <string> bank;
     in-out property <string> balance;
-    callback save(string, AccountKind, string, string) -> string;
+    // The currency code; fixed once the account has movements.
+    in-out property <string> currency;
+    // The exchange rate typed when the chosen currency has none yet.
+    in-out property <string> rate;
+    // The picked currency has no rate yet; it opens on the main or the account's own, which never do.
+    property <bool> needs-rate;
+    callback save(string, AccountKind, string, string, string, string) -> string;
     callback toggle-archived() -> string;
     callback delete() -> string;
     callback cancel;
@@ -41,7 +48,7 @@ component CreatorBody inherits FocusScope {
     }
 
     function submit() {
-        root.error = root.save(root.name, root.kind, root.bank, root.balance);
+        root.error = root.save(root.name, root.kind, root.bank, root.currency, root.balance, root.rate);
     }
 
     // Arrow keys move the choice, like the tabs they are drawn as.
@@ -91,6 +98,53 @@ component CreatorBody inherits FocusScope {
             placeholder-text: @tr("Bank (optional)");
             accepted(text) => {
                 root.submit();
+            }
+        }
+
+        Text {
+            text: @tr("Currency");
+            color: Theme.muted;
+        }
+
+        if root.in-use: Text {
+            text: root.currency;
+            accessible-description: @tr("Movements use this account, so its currency can't be changed.");
+        }
+
+        if !root.in-use: ScrollView {
+            height: 96px;
+            VerticalLayout {
+                for c in FinanceStore.currencies: ChoiceRow {
+                    label: c.code + " " + c.symbol;
+                    icon: @image-url("../icons/wallet.svg");
+                    chosen: c.code == root.currency;
+                    picked => {
+                        root.currency = c.code;
+                        root.needs-rate = c.needs-rate;
+                    }
+                }
+            }
+        }
+
+        // Asked only the first time a currency is used.
+        if root.needs-rate: HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: Strings.rate-prefix(root.currency);
+                vertical-alignment: center;
+            }
+
+            InkField {
+                text <=> root.rate;
+                placeholder-text: @tr("Exchange rate");
+                accepted(text) => {
+                    root.submit();
+                }
+            }
+
+            Text {
+                text: FinanceStore.main-currency;
+                vertical-alignment: center;
             }
         }
 
@@ -198,6 +252,7 @@ export component AccountCreator inherits PopupWindow {
     in property <AccountKind> account-kind;
     in property <string> account-bank;
     in property <string> account-balance;
+    in property <string> account-currency;
     in property <bool> account-archived;
     in property <bool> account-in-use;
 
@@ -214,8 +269,9 @@ export component AccountCreator inherits PopupWindow {
             kind: root.account-kind;
             bank: root.account-bank;
             balance: root.account-balance;
-            save(name, kind, bank, balance) => {
-                let error = root.editing ? FinanceStore.update-account(root.account-id, name, kind, bank, balance) : FinanceStore.create-account(name, kind, bank, balance);
+            currency: root.account-currency;
+            save(name, kind, bank, currency, balance, rate) => {
+                let error = root.editing ? FinanceStore.update-account(root.account-id, name, kind, bank, currency, balance, rate) : FinanceStore.create-account(name, kind, bank, currency, balance, rate);
                 if error == "" {
                     root.close();
                 }

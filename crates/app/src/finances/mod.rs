@@ -8,7 +8,7 @@ mod state;
 mod summary;
 mod transactions;
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -47,6 +47,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         archived_rows: Rc::default(),
         choices: Rc::default(),
         shown: Cell::new(calendar::month_start(Local::now().date_naive())),
+        pending_rates: RefCell::default(),
         window: window.as_weak(),
     });
     let store = window.global::<FinanceStore>();
@@ -56,7 +57,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     store.set_categories(ModelRc::from(state.cat_rows.clone()));
     store.set_archived_categories(ModelRc::from(state.archived_rows.clone()));
     store.set_category_choices(ModelRc::from(state.choices.clone()));
-    store.set_currencies(ModelRc::new(VecModel::from(state::currency_rows())));
+    store.set_currencies(ModelRc::new(VecModel::from(state::currency_rows(None))));
     state.show_load();
 
     store.on_refresh({
@@ -74,10 +75,18 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
 
     store.on_create_account({
         let state = state.clone();
-        move |name, kind, bank, balance| {
+        move |name, kind, bank, currency, balance, rate| {
             state.finish(
-                finances::create_account(&state.conn, &name, core_kind(kind), &bank, &balance)
-                    .map(|_| ()),
+                finances::create_account(
+                    &state.conn,
+                    &name,
+                    core_kind(kind),
+                    &bank,
+                    &currency,
+                    &balance,
+                    Some(&rate),
+                )
+                .map(|_| ()),
             )
         }
     });
@@ -100,15 +109,48 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
 
     store.on_update_account({
         let state = state.clone();
-        move |id, name, kind, bank, balance| {
+        move |id, name, kind, bank, currency, balance, rate| {
             state.finish(finances::update_account(
                 &state.conn,
                 AccountId(id.into()),
                 &name,
                 core_kind(kind),
                 &bank,
+                &currency,
                 &balance,
+                Some(&rate),
             ))
+        }
+    });
+
+    // The rates modal reports each edited field; they are saved together.
+    store.on_edit_rate({
+        let state = state.clone();
+        move |code, text| {
+            let mut pending = state.pending_rates.borrow_mut();
+            pending.retain(|(c, _)| *c != code.as_str());
+            pending.push((code.to_string(), text.to_string()));
+        }
+    });
+
+    store.on_discard_rates({
+        let state = state.clone();
+        move || state.pending_rates.borrow_mut().clear()
+    });
+
+    store.on_save_rates({
+        let state = state.clone();
+        move || {
+            let pending = state.pending_rates.borrow().clone();
+            let list: Vec<(&str, &str)> = pending
+                .iter()
+                .map(|(c, t)| (c.as_str(), t.as_str()))
+                .collect();
+            let msg = state.finish(finances::set_rates(&state.conn, &list));
+            if msg.is_empty() {
+                state.pending_rates.borrow_mut().clear();
+            }
+            msg
         }
     });
 }

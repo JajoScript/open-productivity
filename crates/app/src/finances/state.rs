@@ -3,21 +3,21 @@
 
 //! What the Finances view shows: the models, their refresh and the error messages.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use open_productivity_core::chrono::NaiveDate;
 use open_productivity_core::db::Connection;
 use open_productivity_core::finances::{
-    self, Account, AccountKind as CoreKind, CURRENCIES, FinanceError,
+    self, Account, AccountKind as CoreKind, CURRENCIES, Currency, FinanceError, Rates,
 };
-use slint::{ComponentHandle, SharedString, VecModel};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use super::style;
 use crate::tasks::ui_id;
 use crate::{
     AccountKind, AccountRow, AppWindow, CategoryRow, CurrencyRow, FinanceStore, FinanceTab,
-    Strings, TransactionRow,
+    RateRow, Strings, TransactionRow,
 };
 
 pub struct State {
@@ -33,6 +33,8 @@ pub struct State {
     pub choices: Rc<VecModel<CategoryRow>>,
     /// First day of the month the Movements tab shows.
     pub shown: Cell<NaiveDate>,
+    /// The exchange rates edited in the open modal (code, text), saved together.
+    pub pending_rates: RefCell<Vec<(String, String)>>,
     pub window: slint::Weak<AppWindow>,
 }
 
@@ -54,24 +56,27 @@ fn ui_kind(k: CoreKind) -> AccountKind {
     }
 }
 
-pub fn currency_rows() -> Vec<CurrencyRow> {
+/// The currencies to pick from; `rates` tells which still need an exchange rate.
+pub fn currency_rows(rates: Option<&Rates>) -> Vec<CurrencyRow> {
     CURRENCIES
         .iter()
         .map(|c| CurrencyRow {
             code: c.code.into(),
             symbol: c.symbol.into(),
+            needs_rate: rates.is_some_and(|r| r.needs_rate(c)),
         })
         .collect()
 }
 
-fn account_row(a: Account) -> Result<AccountRow, String> {
+fn account_row(a: Account, main: &Currency) -> Result<AccountRow, String> {
     let style = style();
     Ok(AccountRow {
         id: ui_id(a.id.0)?,
         name: a.name.into(),
         kind: ui_kind(a.kind),
         bank: a.bank.into(),
-        balance: finances::format_amount(a.balance, a.currency, style).into(),
+        currency: a.currency.code.into(),
+        balance: finances::format_in(a.balance, a.currency, main, style).into(),
         initial: finances::format_input(a.initial_balance, a.currency, style).into(),
         archived: a.archived,
         in_use: a.in_use,
@@ -80,14 +85,29 @@ fn account_row(a: Account) -> Result<AccountRow, String> {
 
 impl State {
     fn reload(&self, w: &AppWindow) -> Result<(), String> {
-        let has_currency = finances::main_currency(&self.conn)
-            .map_err(|e| e.to_string())?
-            .is_some();
+        let main = finances::main_currency(&self.conn).map_err(|e| e.to_string())?;
+        let has_currency = main.is_some();
+        let store = w.global::<FinanceStore>();
         let (mut active, mut archived) = (Vec::new(), Vec::new());
-        if has_currency {
+        if let Some(main) = main {
+            let rates = finances::load_rates(&self.conn).map_err(|e| e.to_string())?;
+            store.set_currencies(ModelRc::new(VecModel::from(currency_rows(Some(&rates)))));
+            store.set_main_currency(main.code.into());
+            let in_use = finances::list_rates(&self.conn)
+                .map_err(|e| e.to_string())?
+                .into_iter()
+                .map(|r| RateRow {
+                    code: r.currency.code.into(),
+                    rate: r
+                        .rate
+                        .map_or_else(String::new, |v| finances::format_rate(v, style()))
+                        .into(),
+                })
+                .collect::<Vec<_>>();
+            store.set_rates(ModelRc::new(VecModel::from(in_use)));
             for a in finances::list_accounts(&self.conn).map_err(|e| e.to_string())? {
                 let is_archived = a.archived;
-                let r = account_row(a)?;
+                let r = account_row(a, main)?;
                 if is_archived {
                     archived.push(r);
                 } else {
@@ -97,7 +117,6 @@ impl State {
         }
         self.rows.set_vec(active);
         self.archived_account_rows.set_vec(archived);
-        let store = w.global::<FinanceStore>();
         store.set_has_currency(has_currency);
         // Only the shown tab's data is read.
         if has_currency {
@@ -112,6 +131,13 @@ impl State {
             }
         }
         Ok(())
+    }
+
+    /// The instance's main currency.
+    pub fn main(&self) -> Result<&'static Currency, String> {
+        finances::main_currency(&self.conn)
+            .map_err(|e| e.to_string())?
+            .ok_or_else(|| "no main currency".to_string())
     }
 
     /// Shows a load failure in the view, or clears the last one.
@@ -152,6 +178,9 @@ impl State {
             FinanceError::SameAccount => s.get_finance_same_account(),
             FinanceError::AccountInUse => s.get_finance_account_in_use(),
             FinanceError::AccountArchived => s.get_finance_account_archived(),
+            FinanceError::MissingRate(code) => s.invoke_finance_missing_rate(code.into()),
+            FinanceError::InvalidRate => s.get_finance_invalid_rate(),
+            FinanceError::CurrencyLocked => s.get_finance_currency_locked(),
             e @ (FinanceError::Sqlite(_)
             | FinanceError::UnknownCurrency(_)
             | FinanceError::BadKind(_)

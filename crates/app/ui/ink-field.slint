@@ -10,6 +10,8 @@ export component InkField {
     in property <string> placeholder-text;
     in property <bool> enabled: true;
     callback accepted(string);
+    // The text changed because the user typed.
+    callback edited(string);
 
     min-height: 36px;
     opacity: root.enabled ? 1 : 0.5;
@@ -56,6 +58,9 @@ export component InkField {
         accessible-label: root.placeholder-text;
         accepted => {
             root.accepted(self.text);
+        }
+        edited => {
+            root.edited(self.text);
         }
     }
 }

@@ -254,6 +254,9 @@ export global Strings {
     out property <string> finance-same-account: @tr("Choose two different accounts.");
     out property <string> finance-account-in-use: @tr("Movements use this account, so it can't be deleted. Archive it instead.");
     out property <string> finance-account-archived: @tr("That account is archived. Restore it to use it.");
+    out property <string> finance-invalid-rate: @tr("Enter the exchange rate as a positive number with up to 6 decimals.");
+    out property <string> finance-currency-locked: @tr("Movements use this account, so its currency can't be changed.");
+    out property <string> rates-note: @tr("Totals use today's exchange rates.");
     out property <string> transfer: @tr("Transfer");
     out property <string> no-category: @tr("No category");
     out property <string> same-as-last-month: @tr("Same as last month");
@@ -261,6 +264,15 @@ export global Strings {
 
     public pure function vs-last-month(change: string) -> string {
         return @tr("{} vs last month", change);
+    }
+
+    public pure function finance-missing-rate(currency: string) -> string {
+        return @tr("Enter the exchange rate of {} to your main currency.", currency);
+    }
+
+    // Start of "1 USD = 987.24 CLP" for a rate field.
+    public pure function rate-prefix(currency: string) -> string {
+        return @tr("1 {} =", currency);
     }
 
     public pure function finance-failed(error: string) -> string {

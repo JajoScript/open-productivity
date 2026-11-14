@@ -33,9 +33,14 @@ component CreatorBody inherits FocusScope {
     // The kind of the chosen category, to drop it when the movement changes kind.
     in-out property <TxKind> category-kind;
     in-out property <string> amount;
+    // The currency codes of the chosen accounts; a transfer between different ones asks for the
+    // amount that arrives.
+    in-out property <string> from-currency;
+    in-out property <string> to-currency;
+    in-out property <string> to-amount;
     in-out property <Date> date;
     in-out property <string> description;
-    callback save(bool, TxKind, int, int, bool, int, string, Date, string) -> string;
+    callback save(bool, TxKind, int, int, bool, int, string, string, Date, string) -> string;
     callback delete() -> string;
     callback cancel;
 
@@ -50,7 +55,7 @@ component CreatorBody inherits FocusScope {
     }
 
     function submit() {
-        root.error = root.save(root.transfer, root.kind, root.account-id, root.to-account-id, root.has-category, root.category-id, root.amount, root.date, root.description);
+        root.error = root.save(root.transfer, root.kind, root.account-id, root.to-account-id, root.has-category, root.category-id, root.amount, root.to-amount, root.date, root.description);
     }
 
     function set-kind(kind: TxKind) {
@@ -140,6 +145,7 @@ component CreatorBody inherits FocusScope {
                     chosen: account.id == root.account-id;
                     picked => {
                         root.account-id = account.id;
+                        root.from-currency = account.currency;
                     }
                 }
 
@@ -151,6 +157,7 @@ component CreatorBody inherits FocusScope {
                         chosen: account.id == root.account-id;
                         picked => {
                             root.account-id = account.id;
+                            root.from-currency = account.currency;
                         }
                     }
                 }
@@ -171,6 +178,7 @@ component CreatorBody inherits FocusScope {
                     chosen: account.id == root.to-account-id;
                     picked => {
                         root.to-account-id = account.id;
+                        root.to-currency = account.currency;
                     }
                 }
 
@@ -182,6 +190,7 @@ component CreatorBody inherits FocusScope {
                         chosen: account.id == root.to-account-id;
                         picked => {
                             root.to-account-id = account.id;
+                            root.to-currency = account.currency;
                         }
                     }
                 }
@@ -221,14 +230,40 @@ component CreatorBody inherits FocusScope {
             }
         }
 
-        InkField {
-            text <=> root.amount;
-            placeholder-text: @tr("Amount");
-            init => {
-                self.focus();
+        HorizontalLayout {
+            spacing: 8px;
+            InkField {
+                text <=> root.amount;
+                placeholder-text: @tr("Amount");
+                init => {
+                    self.focus();
+                }
+                accepted(text) => {
+                    root.submit();
+                }
             }
-            accepted(text) => {
-                root.submit();
+
+            Text {
+                text: root.from-currency;
+                color: Theme.muted;
+                vertical-alignment: center;
+            }
+        }
+
+        if root.transfer && root.to-currency != "" && root.to-currency != root.from-currency: HorizontalLayout {
+            spacing: 8px;
+            InkField {
+                text <=> root.to-amount;
+                placeholder-text: @tr("Amount that arrives");
+                accepted(text) => {
+                    root.submit();
+                }
+            }
+
+            Text {
+                text: root.to-currency;
+                color: Theme.muted;
+                vertical-alignment: center;
             }
         }
 
@@ -358,6 +393,9 @@ export component TransactionCreator inherits PopupWindow {
     in property <bool> tx-has-category;
     in property <int> tx-category-id;
     in property <string> tx-amount;
+    in property <string> tx-from-currency;
+    in property <string> tx-to-currency;
+    in property <string> tx-to-amount;
     in property <string> tx-amount-label;
     in property <Date> tx-date;
     in property <string> tx-description;
@@ -379,10 +417,13 @@ export component TransactionCreator inherits PopupWindow {
             category-id: root.tx-category-id;
             category-kind: root.tx-kind;
             amount: root.tx-amount;
+            from-currency: root.tx-from-currency;
+            to-currency: root.tx-to-currency;
+            to-amount: root.tx-to-amount;
             date: root.tx-date;
             description: root.tx-description;
-            save(transfer, kind, account, to-account, has-category, category, amount, date, description) => {
-                let error = transfer ? (root.editing ? FinanceStore.update-transfer(root.tx-id, account, to-account, amount, date, description) : FinanceStore.create-transfer(account, to-account, amount, date, description)) : (root.editing ? FinanceStore.update-transaction(root.tx-id, kind, account, has-category, category, amount, date, description) : FinanceStore.create-transaction(kind, account, has-category, category, amount, date, description));
+            save(transfer, kind, account, to-account, has-category, category, amount, to-amount, date, description) => {
+                let error = transfer ? (root.editing ? FinanceStore.update-transfer(root.tx-id, account, to-account, amount, to-amount, date, description) : FinanceStore.create-transfer(account, to-account, amount, to-amount, date, description)) : (root.editing ? FinanceStore.update-transaction(root.tx-id, kind, account, has-category, category, amount, date, description) : FinanceStore.create-transaction(kind, account, has-category, category, amount, date, description));
                 if error == "" {
                     root.close();
                 }

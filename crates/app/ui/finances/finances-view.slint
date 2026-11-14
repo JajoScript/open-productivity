@@ -4,6 +4,7 @@
 import { Palette, ListView } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
+import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { AccountRow } from "account-row.slint";
 import { AccountsTab } from "accounts-tab.slint";
@@ -113,6 +114,7 @@ export component FinancesView inherits VerticalLayout {
     callback edit-transaction(TransactionRow);
     callback new-category();
     callback edit-category(CategoryRow);
+    callback edit-rates();
 
     padding: 24px;
     padding-top: 20px;
@@ -204,6 +206,14 @@ export component FinancesView inherits VerticalLayout {
             text: @tr("New category");
             clicked => {
                 root.new-category();
+            }
+        }
+
+        if FinanceStore.tab == FinanceTab.accounts && FinanceStore.rates.length > 0: SubtleButton {
+            text: @tr("Exchange rates");
+            color: Palette.foreground;
+            clicked => {
+                root.edit-rates();
             }
         }
 

@@ -3,7 +3,7 @@
 
 import { Date } from "std-widgets.slint";
 import { FinanceTab, TransactionRow, TxKind } from "transaction-row.slint";
-import { AccountKind, AccountRow, CurrencyRow } from "account-row.slint";
+import { AccountKind, AccountRow, CurrencyRow, RateRow } from "account-row.slint";
 import { CategoryRow } from "category-row.slint";
 import { SummaryBar, SummaryFigure } from "summary-row.slint";
 
@@ -13,6 +13,10 @@ export global FinanceStore {
     // False until the user picks the main currency.
     in property <bool> has-currency;
     in property <[CurrencyRow]> currencies;
+    // The main currency code, once chosen.
+    in property <string> main-currency;
+    // The non-main currencies some account uses; edited in one place.
+    in property <[RateRow]> rates;
     // The active accounts; the archived ones are apart.
     in property <[AccountRow]> accounts;
     in property <[AccountRow]> archived-accounts;
@@ -28,6 +32,8 @@ export global FinanceStore {
     in property <SummaryFigure> summary-balance;
     in property <SummaryFigure> summary-accounts;
     in property <[SummaryBar]> summary-bars;
+    // Some account is not in the main currency, so the totals use exchange rates.
+    in property <bool> summary-uses-rates;
     in property <[TransactionRow]> summary-recent;
     // The kind the Categories tab lists.
     in-out property <TxKind> category-kind: TxKind.expense;
@@ -43,14 +49,19 @@ export global FinanceStore {
 
     // The ones that return a string give the error to show; empty means it worked.
     callback choose-currency(string) -> string;
-    callback create-account(string, AccountKind, string, string) -> string;
-    callback update-account(int, string, AccountKind, string, string) -> string;
+    // name, kind, bank, currency code, initial balance, exchange rate ("" when it is not asked).
+    callback create-account(string, AccountKind, string, string, string, string) -> string;
+    callback update-account(int, string, AccountKind, string, string, string, string) -> string;
+    // The exchange rates modal reports each field edited, then saves them all or discards them.
+    callback edit-rate(string, string);
+    callback save-rates() -> string;
+    callback discard-rates();
     callback archive-account(int, bool) -> string;
     callback delete-account(int) -> string;
     callback create-transaction(TxKind, int, bool, int, string, Date, string) -> string;
     callback update-transaction(int, TxKind, int, bool, int, string, Date, string) -> string;
-    callback create-transfer(int, int, string, Date, string) -> string;
-    callback update-transfer(int, int, int, string, Date, string) -> string;
+    callback create-transfer(int, int, string, string, Date, string) -> string;
+    callback update-transfer(int, int, int, string, string, Date, string) -> string;
     callback delete-transaction(int) -> string;
     callback create-category(TxKind, string) -> string;
     callback rename-category(int, string) -> string;

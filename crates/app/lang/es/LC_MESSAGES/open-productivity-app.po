@@ -1182,3 +1182,33 @@ msgstr "{} respecto al mes anterior"
 
 msgid "Same as last month"
 msgstr "Igual que el mes anterior"
+
+msgid "Enter the exchange rate as a positive number with up to 6 decimals."
+msgstr "Ingresa el tipo de cambio como un número positivo con hasta 6 decimales."
+
+msgid "Movements use this account, so its currency can't be changed."
+msgstr "Hay movimientos en esta cuenta, así que no se puede cambiar su moneda."
+
+msgid "Totals use today's exchange rates."
+msgstr "Los totales usan los tipos de cambio de hoy."
+
+msgid "Enter the exchange rate of {} to your main currency."
+msgstr "Ingresa el tipo de cambio de {} a tu moneda principal."
+
+msgid "1 {} ="
+msgstr "1 {} ="
+
+msgid "Currency"
+msgstr "Moneda"
+
+msgid "Exchange rate"
+msgstr "Tipo de cambio"
+
+msgid "Exchange rates"
+msgstr "Tipos de cambio"
+
+msgid "What one unit of each currency is worth in your main currency. Every total uses these rates."
+msgstr "Cuánto vale una unidad de cada moneda en tu moneda principal. Todos los totales usan estos tipos de cambio."
+
+msgid "Amount that arrives"
+msgstr "Monto que llega"

@@ -15,6 +15,11 @@ export struct TransactionRow {
     transfer: bool,
     to-account-id: int,
     to-account: string,
+    // The currency codes of the source and, for a transfer, the destination account.
+    currency: string,
+    to-currency: string,
+    // The amount that arrives, formatted for the edit field; "" unless a transfer crosses currencies.
+    to-input: string,
     account-id: int,
     account: string,
     has-category: bool,

@@ -97,6 +97,12 @@ export component SummaryTab inherits VerticalLayout {
                 }
             }
 
+            if FinanceStore.summary-uses-rates: Text {
+                text: Strings.rates-note;
+                color: Theme.muted;
+                wrap: word-wrap;
+            }
+
             VerticalLayout {
                 padding-right: 16px;
                 spacing: 12px;

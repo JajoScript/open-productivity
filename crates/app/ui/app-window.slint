@@ -15,6 +15,7 @@ import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
 import { StudyStore } from "study/study-store.slint";
 import { AccountCreator } from "finances/account-creator.slint";
+import { RatesEditor } from "finances/rates-editor.slint";
 import { CategoryCreator } from "finances/category-creator.slint";
 import { CategoryRow, SuggestedCategory } from "finances/category-row.slint";
 import { FinancesView } from "finances/finances-view.slint";
@@ -260,6 +261,7 @@ export component AppWindow inherits Window {
     property <AccountKind> account-edit-kind;
     property <string> account-edit-bank;
     property <string> account-edit-balance;
+    property <string> account-edit-currency;
     property <bool> account-edit-archived;
     property <bool> account-edit-in-use;
     // What the movement modal opens with: a new movement, or the one being edited.
@@ -270,6 +272,9 @@ export component AppWindow inherits Window {
     property <int> tx-edit-to-account;
     property <int> tx-edit-account;
     property <string> tx-edit-amount;
+    property <string> tx-edit-from-currency;
+    property <string> tx-edit-to-currency;
+    property <string> tx-edit-to-amount;
     property <string> tx-edit-amount-label;
     property <Date> tx-edit-date;
     property <string> tx-edit-description;
@@ -389,8 +394,14 @@ export component AppWindow inherits Window {
             account-kind: root.account-edit-kind;
             account-bank: root.account-edit-bank;
             account-balance: root.account-edit-balance;
+            account-currency: root.account-edit-currency;
             account-archived: root.account-edit-archived;
             account-in-use: root.account-edit-in-use;
+            x: (root.width - self.width) / 2;
+            y: 120px;
+        }
+
+        rates-editor := RatesEditor {
             x: (root.width - self.width) / 2;
             y: 120px;
         }
@@ -405,6 +416,9 @@ export component AppWindow inherits Window {
             tx-has-category: root.tx-edit-has-category;
             tx-category-id: root.tx-edit-category;
             tx-amount: root.tx-edit-amount;
+            tx-from-currency: root.tx-edit-from-currency;
+            tx-to-currency: root.tx-edit-to-currency;
+            tx-to-amount: root.tx-edit-to-amount;
             tx-amount-label: root.tx-edit-amount-label;
             tx-date: root.tx-edit-date;
             tx-description: root.tx-edit-description;
@@ -639,6 +653,7 @@ export component AppWindow inherits Window {
                         root.account-edit-kind = AccountKind.checking;
                         root.account-edit-bank = "";
                         root.account-edit-balance = "";
+                        root.account-edit-currency = FinanceStore.main-currency;
                         root.account-edit-archived = false;
                         root.account-edit-in-use = false;
                         account-creator.show();
@@ -650,9 +665,13 @@ export component AppWindow inherits Window {
                         root.account-edit-kind = a.kind;
                         root.account-edit-bank = a.bank;
                         root.account-edit-balance = a.initial;
+                        root.account-edit-currency = a.currency;
                         root.account-edit-archived = a.archived;
                         root.account-edit-in-use = a.in-use;
                         account-creator.show();
+                    }
+                    edit-rates => {
+                        rates-editor.show();
                     }
                     new-transaction => {
                         root.tx-editing = false;
@@ -664,6 +683,9 @@ export component AppWindow inherits Window {
                         root.tx-edit-has-category = false;
                         root.tx-edit-category = 0;
                         root.tx-edit-amount = "";
+                        root.tx-edit-from-currency = FinanceStore.accounts[0].currency;
+                        root.tx-edit-to-currency = FinanceStore.accounts.length > 1 ? FinanceStore.accounts[1].currency : FinanceStore.accounts[0].currency;
+                        root.tx-edit-to-amount = "";
                         root.tx-edit-amount-label = "";
                         root.tx-edit-date = Calendar.today();
                         root.tx-edit-description = "";
@@ -679,6 +701,9 @@ export component AppWindow inherits Window {
                         root.tx-edit-has-category = t.has-category;
                         root.tx-edit-category = t.category-id;
                         root.tx-edit-amount = t.input;
+                        root.tx-edit-from-currency = t.currency;
+                        root.tx-edit-to-currency = t.to-currency;
+                        root.tx-edit-to-amount = t.to-input;
                         root.tx-edit-amount-label = t.amount;
                         root.tx-edit-date = t.date;
                         root.tx-edit-description = t.description;

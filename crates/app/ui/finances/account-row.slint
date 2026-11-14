@@ -9,6 +9,8 @@ export struct AccountRow {
     name: string,
     kind: AccountKind,
     bank: string,
+    // The currency code.
+    currency: string,
     balance: string,
     initial: string,
     archived: bool,
@@ -19,4 +21,12 @@ export struct AccountRow {
 export struct CurrencyRow {
     code: string,
     symbol: string,
+    // Not the main currency and no exchange rate yet: choosing it asks for one.
+    needs-rate: bool,
+}
+
+// A non-main currency some account uses, with its rate to the main one formatted for the edit field.
+export struct RateRow {
+    code: string,
+    rate: string,
 }

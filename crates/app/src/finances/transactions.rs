@@ -8,8 +8,8 @@ use std::rc::Rc;
 use open_productivity_core::calendar::{self, Period};
 use open_productivity_core::chrono::{Local, NaiveDate};
 use open_productivity_core::finances::{
-    self, AccountId, CategoryId, FinanceError, Movement, Transaction, TransactionId, Transfer,
-    TxKind as CoreKind,
+    self, AccountId, CategoryId, Currency, FinanceError, Movement, Transaction, TransactionId,
+    Transfer, TxKind as CoreKind,
 };
 use slint::{ComponentHandle, SharedString};
 
@@ -33,7 +33,7 @@ pub(super) fn ui_kind(k: CoreKind) -> TxKind {
     }
 }
 
-fn tx_row(t: Transaction) -> Result<TransactionRow, String> {
+fn tx_row(t: Transaction, main: &Currency) -> Result<TransactionRow, String> {
     let style = style();
     Ok(TransactionRow {
         id: ui_id(t.id.0)?,
@@ -41,6 +41,9 @@ fn tx_row(t: Transaction) -> Result<TransactionRow, String> {
         transfer: false,
         to_account_id: 0,
         to_account: Default::default(),
+        currency: t.currency.code.into(),
+        to_currency: Default::default(),
+        to_input: Default::default(),
         account_id: ui_id(t.account_id.0)?,
         account: t.account_name.clone().into(),
         has_category: t.category.is_some(),
@@ -48,20 +51,36 @@ fn tx_row(t: Transaction) -> Result<TransactionRow, String> {
         category: t.category_name.clone().unwrap_or_default().into(),
         date: ui_date(t.date),
         description: t.description.clone().into(),
-        amount: finances::format_amount(t.signed(), t.currency, style).into(),
+        amount: finances::format_in(t.signed(), t.currency, main, style).into(),
         input: finances::format_input(t.amount, t.currency, style).into(),
     })
 }
 
-/// The amount of a transfer has no sign: it is neither income nor expense.
-fn transfer_row(t: Transfer) -> Result<TransactionRow, String> {
+/// The amount of a transfer has no sign: it is neither income nor expense. Between different
+/// currencies it shows what leaves and what arrives.
+fn transfer_row(t: Transfer, main: &Currency) -> Result<TransactionRow, String> {
     let style = style();
+    let crossing = t.currency.code != t.to_currency.code;
+    let sent = finances::format_in(t.amount, t.currency, main, style);
+    let amount = if crossing {
+        let arrives = finances::format_in(t.to_amount, t.to_currency, main, style);
+        format!("{sent} \u{2192} {arrives}")
+    } else {
+        sent
+    };
     Ok(TransactionRow {
         id: ui_id(t.id.0)?,
         kind: TxKind::Expense,
         transfer: true,
         to_account_id: ui_id(t.to.0)?,
         to_account: t.to_name.into(),
+        currency: t.currency.code.into(),
+        to_currency: t.to_currency.code.into(),
+        to_input: if crossing {
+            finances::format_input(t.to_amount, t.to_currency, style).into()
+        } else {
+            Default::default()
+        },
         account_id: ui_id(t.from.0)?,
         account: t.from_name.into(),
         has_category: false,
@@ -69,15 +88,15 @@ fn transfer_row(t: Transfer) -> Result<TransactionRow, String> {
         category: Default::default(),
         date: ui_date(t.date),
         description: t.description.into(),
-        amount: finances::format_amount(t.amount, t.currency, style).into(),
+        amount: amount.into(),
         input: finances::format_input(t.amount, t.currency, style).into(),
     })
 }
 
-pub(super) fn row(m: Movement) -> Result<TransactionRow, String> {
+pub(super) fn row(m: Movement, main: &Currency) -> Result<TransactionRow, String> {
     match m {
-        Movement::Tx(t) => tx_row(t),
-        Movement::Transfer(t) => transfer_row(t),
+        Movement::Tx(t) => tx_row(t, main),
+        Movement::Transfer(t) => transfer_row(t, main),
     }
 }
 
@@ -85,10 +104,11 @@ impl State {
     /// Loads the shown month into the list and the title.
     pub fn load_month(&self, w: &AppWindow) -> Result<(), String> {
         let month = self.shown.get();
+        let main = self.main()?;
         let rows = finances::list_month(&self.conn, month)
             .map_err(|e| e.to_string())?
             .into_iter()
-            .map(row)
+            .map(|m| row(m, main))
             .collect::<Result<Vec<_>, _>>()?;
         self.tx_rows.set_vec(rows);
         w.global::<FinanceStore>().set_month(ui_date(month));
@@ -150,13 +170,14 @@ pub fn connect(state: &Rc<State>, store: &FinanceStore<'_>) {
 
     store.on_create_transfer({
         let state = state.clone();
-        move |from, to, amount, date, description| {
+        move |from, to, amount, to_amount, date, description| {
             state.with_date(date, |d| {
                 finances::create_transfer(
                     &state.conn,
                     AccountId(from.into()),
                     AccountId(to.into()),
                     &amount,
+                    &to_amount,
                     d,
                     &description,
                 )
@@ -167,7 +188,7 @@ pub fn connect(state: &Rc<State>, store: &FinanceStore<'_>) {
 
     store.on_update_transfer({
         let state = state.clone();
-        move |id, from, to, amount, date, description| {
+        move |id, from, to, amount, to_amount, date, description| {
             state.with_date(date, |d| {
                 finances::update_transfer(
                     &state.conn,
@@ -175,6 +196,7 @@ pub fn connect(state: &Rc<State>, store: &FinanceStore<'_>) {
                     AccountId(from.into()),
                     AccountId(to.into()),
                     &amount,
+                    &to_amount,
                     d,
                     &description,
                 )

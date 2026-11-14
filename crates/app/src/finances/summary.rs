@@ -33,14 +33,13 @@ impl State {
     pub fn load_summary(&self, w: &AppWindow) -> Result<(), String> {
         let month = self.shown.get();
         let summary = finances::month_summary(&self.conn, month).map_err(|e| e.to_string())?;
-        let c = finances::main_currency(&self.conn)
-            .map_err(|e| e.to_string())?
-            .ok_or("no main currency")?;
+        let c = self.main()?;
         let (store, s) = (w.global::<FinanceStore>(), w.global::<Strings>());
         store.set_summary_income(figure(summary.income, c, &s));
         store.set_summary_expense(figure(summary.expense, c, &s));
         store.set_summary_balance(figure(summary.balance, c, &s));
         store.set_summary_accounts(figure(summary.accounts_total, c, &s));
+        store.set_summary_uses_rates(summary.uses_rates);
         let bars = summary
             .by_category
             .into_iter()
@@ -54,7 +53,7 @@ impl State {
         let recent = summary
             .recent
             .into_iter()
-            .map(row)
+            .map(|m| row(m, c))
             .collect::<Result<Vec<_>, _>>()?;
         store.set_summary_recent(VecModel::from_slice(&recent));
         store.set_month(super::super::dates::ui_date(month));

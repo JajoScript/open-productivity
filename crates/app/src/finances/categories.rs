@@ -60,9 +60,7 @@ impl State {
         let kind = core_kind(store.get_category_kind());
         let totals = finances::category_totals(&self.conn, self.shown.get(), kind)
             .map_err(|e| e.to_string())?;
-        let currency = finances::main_currency(&self.conn)
-            .map_err(|e| e.to_string())?
-            .ok_or("no main currency")?;
+        let currency = self.main()?;
         let style = style();
         let total_of = |id: Option<CategoryId>| {
             totals
