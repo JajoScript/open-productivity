@@ -6,7 +6,8 @@ import { EmptyState } from "../empty-state.slint";
 import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
 import { AccountPreview } from "account-preview.slint";
-import { AccountRow } from "account-row.slint";
+import { AccountKind, AccountRow } from "account-row.slint";
+import { CardLine } from "card-line.slint";
 import { FinanceStore } from "finance-store.slint";
 
 component AccountLine inherits Rectangle {
@@ -118,6 +119,27 @@ export component AccountsTab inherits VerticalLayout {
         VerticalLayout {
             alignment: start;
             for account in FinanceStore.accounts: AccountLine {
+                visible: account.kind != AccountKind.credit;
+                height: account.kind != AccountKind.credit ? 56px : 0px;
+                account: account;
+                opened => {
+                    root.edit-account(account);
+                }
+            }
+
+            if FinanceStore.has-cards: HorizontalLayout {
+                height: 32px;
+                padding-left: 8px;
+                Text {
+                    text: @tr("Credit cards");
+                    color: Theme.muted;
+                    vertical-alignment: bottom;
+                }
+            }
+
+            for account in FinanceStore.accounts: CardLine {
+                visible: account.kind == AccountKind.credit;
+                height: account.kind == AccountKind.credit ? 72px : 0px;
                 account: account;
                 opened => {
                     root.edit-account(account);
@@ -135,6 +157,17 @@ export component AccountsTab inherits VerticalLayout {
             }
 
             for account in FinanceStore.archived-accounts: AccountLine {
+                visible: account.kind != AccountKind.credit;
+                height: account.kind != AccountKind.credit ? 56px : 0px;
+                account: account;
+                opened => {
+                    root.edit-account(account);
+                }
+            }
+
+            for account in FinanceStore.archived-accounts: CardLine {
+                visible: account.kind == AccountKind.credit;
+                height: account.kind == AccountKind.credit ? 72px : 0px;
                 account: account;
                 opened => {
                     root.edit-account(account);

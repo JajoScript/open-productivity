@@ -267,6 +267,9 @@ export component AppWindow inherits Window {
     property <AccountKind> account-edit-kind;
     property <string> account-edit-bank;
     property <string> account-edit-balance;
+    property <string> account-edit-limit;
+    property <string> account-edit-closing;
+    property <string> account-edit-due;
     property <string> account-edit-currency;
     property <bool> account-edit-archived;
     property <bool> account-edit-in-use;
@@ -407,6 +410,9 @@ export component AppWindow inherits Window {
             account-kind: root.account-edit-kind;
             account-bank: root.account-edit-bank;
             account-balance: root.account-edit-balance;
+            account-limit: root.account-edit-limit;
+            account-closing: root.account-edit-closing;
+            account-due: root.account-edit-due;
             account-currency: root.account-edit-currency;
             account-archived: root.account-edit-archived;
             account-in-use: root.account-edit-in-use;
@@ -688,6 +694,9 @@ export component AppWindow inherits Window {
                         root.account-edit-kind = AccountKind.checking;
                         root.account-edit-bank = "";
                         root.account-edit-balance = "";
+                        root.account-edit-limit = "";
+                        root.account-edit-closing = "";
+                        root.account-edit-due = "";
                         root.account-edit-currency = FinanceStore.main-currency;
                         root.account-edit-archived = false;
                         root.account-edit-in-use = false;
@@ -700,6 +709,9 @@ export component AppWindow inherits Window {
                         root.account-edit-kind = a.kind;
                         root.account-edit-bank = a.bank;
                         root.account-edit-balance = a.initial;
+                        root.account-edit-limit = a.limit;
+                        root.account-edit-closing = "\{a.closing-day}";
+                        root.account-edit-due = "\{a.due-day}";
                         root.account-edit-currency = a.currency;
                         root.account-edit-archived = a.archived;
                         root.account-edit-in-use = a.in-use;

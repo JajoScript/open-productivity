@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-export enum AccountKind { checking, demand, savings, cash }
+export enum AccountKind { checking, demand, savings, cash, credit }
 
 // `balance` arrives formatted for display; `initial` formatted for the edit field.
 export struct AccountRow {
@@ -16,6 +16,17 @@ export struct AccountRow {
     archived: bool,
     // Some movement uses it, so it can only be archived.
     in-use: bool,
+    // Credit cards only (empty or 0 otherwise): the limit formatted for the edit field and for
+    // display, the days of the month, and the figures `core` computed.
+    limit: string,
+    limit-text: string,
+    closing-day: int,
+    due-day: int,
+    used: string,
+    available: string,
+    // Used part of the limit in per mille; above 1000 when over it.
+    use-permille: int,
+    over-limit: bool,
 }
 
 export struct CurrencyRow {

@@ -21,6 +21,8 @@ export global FinanceStore {
     // The active accounts; the archived ones are apart.
     in property <[AccountRow]> accounts;
     in property <[AccountRow]> archived-accounts;
+    // Some active account is a credit card.
+    in property <bool> has-cards;
     in property <string> error;
     // The tab shown; Rust loads only what it needs.
     in-out property <FinanceTab> tab: FinanceTab.summary;
@@ -55,6 +57,10 @@ export global FinanceStore {
     // name, kind, bank, currency code, initial balance, exchange rate ("" when it is not asked).
     callback create-account(string, AccountKind, string, string, string, string) -> string;
     callback update-account(int, string, AccountKind, string, string, string, string) -> string;
+    // name, bank, currency code, limit, closing day, due day, exchange rate. The days are the
+    // typed text; core validates them.
+    callback create-card(string, string, string, string, string, string, string) -> string;
+    callback update-card(int, string, string, string, string, string, string, string) -> string;
     // The exchange rates modal reports each field edited, then saves them all or discards them.
     callback edit-rate(string, string);
     callback save-rates() -> string;

@@ -302,7 +302,22 @@ export global Strings {
         if kind == AccountKind.savings {
             return @tr("Savings");
         }
+        if kind == AccountKind.credit {
+            return @tr("Credit card");
+        }
         return @tr("Cash");
+    }
+
+    public pure function card-terms(closing: int, due: int) -> string {
+        return @tr("Closes on day {} · Pay on day {}", closing, due);
+    }
+
+    public pure function card-used(used: string, limit: string) -> string {
+        return @tr("{} of {}", used, limit);
+    }
+
+    public pure function card-available(available: string) -> string {
+        return @tr("{} available", available);
     }
 
     public pure function account-kind-bank(kind: AccountKind, bank: string) -> string {
@@ -402,6 +417,9 @@ export global Strings {
 
     out property <string> finance-invalid-schedule: @tr("Check the installments: there must be at least 2.");
     out property <string> finance-no-scheduled: @tr("That scheduled payment no longer exists.");
+    out property <string> finance-invalid-limit: @tr("The credit limit must be an amount greater than zero.");
+    out property <string> finance-invalid-day: @tr("The days must be numbers from 1 to 31.");
+    out property <string> finance-kind-locked: @tr("A credit card can't become another kind of account, nor the reverse.");
     out property <string> finance-scheduled-done: @tr("That scheduled payment is already finished.");
 
     public pure function account-line-label(name: string, kind: string, balance: string) -> string {

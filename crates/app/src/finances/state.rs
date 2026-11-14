@@ -46,6 +46,7 @@ pub fn core_kind(k: AccountKind) -> CoreKind {
         AccountKind::Demand => CoreKind::Demand,
         AccountKind::Savings => CoreKind::Savings,
         AccountKind::Cash => CoreKind::Cash,
+        AccountKind::Credit => CoreKind::Credit,
     }
 }
 
@@ -55,6 +56,7 @@ fn ui_kind(k: CoreKind) -> AccountKind {
         CoreKind::Demand => AccountKind::Demand,
         CoreKind::Savings => AccountKind::Savings,
         CoreKind::Cash => AccountKind::Cash,
+        CoreKind::Credit => AccountKind::Credit,
     }
 }
 
@@ -72,7 +74,23 @@ pub fn currency_rows(rates: Option<&Rates>) -> Vec<CurrencyRow> {
 
 fn account_row(a: Account, main: &Currency) -> Result<AccountRow, String> {
     let style = style();
+    let (card, usage) = (a.card, a.card_usage());
+    let money = |v: i64| finances::format_in(v, a.currency, main, style);
     Ok(AccountRow {
+        limit: card
+            .map_or_else(String::new, |t| {
+                finances::format_input(t.limit, a.currency, style)
+            })
+            .into(),
+        limit_text: card.map_or_else(String::new, |t| money(t.limit)).into(),
+        closing_day: card.map_or(0, |t| t.closing_day as i32),
+        due_day: card.map_or(0, |t| t.due_day as i32),
+        used: usage.map_or_else(String::new, |u| money(u.used)).into(),
+        available: usage
+            .map_or_else(String::new, |u| money(u.available))
+            .into(),
+        use_permille: usage.map_or(0, |u| i32::try_from(u.per_mille).unwrap_or(i32::MAX)),
+        over_limit: usage.is_some_and(|u| u.over_limit),
         id: ui_id(a.id.0)?,
         name: a.name.into(),
         kind: ui_kind(a.kind),
@@ -117,6 +135,7 @@ impl State {
                 }
             }
         }
+        store.set_has_cards(active.iter().any(|r| r.kind == AccountKind::Credit));
         self.rows.set_vec(active);
         self.archived_account_rows.set_vec(archived);
         store.set_has_currency(has_currency);
@@ -187,6 +206,9 @@ impl State {
             FinanceError::MissingRate(code) => s.invoke_finance_missing_rate(code.into()),
             FinanceError::InvalidRate => s.get_finance_invalid_rate(),
             FinanceError::CurrencyLocked => s.get_finance_currency_locked(),
+            FinanceError::InvalidLimit => s.get_finance_invalid_limit(),
+            FinanceError::InvalidDay => s.get_finance_invalid_day(),
+            FinanceError::KindLocked => s.get_finance_kind_locked(),
             FinanceError::InvalidSchedule => s.get_finance_invalid_schedule(),
             FinanceError::ScheduledNotFound => s.get_finance_no_scheduled(),
             FinanceError::ScheduledDone => s.get_finance_scheduled_done(),

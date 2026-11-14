@@ -25,19 +25,25 @@ component CreatorBody inherits FocusScope {
     in-out property <AccountKind> kind;
     in-out property <string> bank;
     in-out property <string> balance;
+    // Cards only: the limit and the days of the month, as typed.
+    in-out property <string> limit;
+    in-out property <string> closing;
+    in-out property <string> due;
     // The currency code; fixed once the account has movements.
     in-out property <string> currency;
     // The exchange rate typed when the chosen currency has none yet.
     in-out property <string> rate;
     // The picked currency has no rate yet; it opens on the main or the account's own, which never do.
     property <bool> needs-rate;
-    callback save(string, AccountKind, string, string, string, string) -> string;
+    // name, kind, bank, currency, balance, limit, closing day, due day, rate.
+    callback save(string, AccountKind, string, string, string, string, string, string, string) -> string;
     callback toggle-archived() -> string;
     callback delete() -> string;
     callback cancel;
 
     property <string> error;
-    property <[AccountKind]> kinds: [AccountKind.checking, AccountKind.demand, AccountKind.savings, AccountKind.cash];
+    // A card stays a card and an account stays an account, so the other kinds are not offered.
+    property <[AccountKind]> kinds: !root.editing ? [AccountKind.checking, AccountKind.demand, AccountKind.savings, AccountKind.cash, AccountKind.credit] : root.kind == AccountKind.credit ? [AccountKind.credit] : [AccountKind.checking, AccountKind.demand, AccountKind.savings, AccountKind.cash];
 
     capture-key-pressed(event) => {
         if event.text == Key.Escape {
@@ -48,20 +54,20 @@ component CreatorBody inherits FocusScope {
     }
 
     function submit() {
-        root.error = root.save(root.name, root.kind, root.bank, root.currency, root.balance, root.rate);
+        root.error = root.save(root.name, root.kind, root.bank, root.currency, root.balance, root.limit, root.closing, root.due, root.rate);
     }
 
     // Arrow keys move the choice, like the tabs they are drawn as.
     function step(delta: int) {
-        let i = root.kind == AccountKind.checking ? 0 : root.kind == AccountKind.demand ? 1 : root.kind == AccountKind.savings ? 2 : 3;
-        root.kind = root.kinds[max(0, min(3, i + delta))];
+        let i = root.kind == AccountKind.checking ? 0 : root.kind == AccountKind.demand ? 1 : root.kind == AccountKind.savings ? 2 : root.kind == AccountKind.cash ? 3 : 4;
+        root.kind = root.kinds[max(0, min(root.kinds.length - 1, i + delta))];
     }
 
     VerticalLayout {
         padding: 16px;
         spacing: 12px;
         Text {
-            text: root.editing ? @tr("Edit account") : @tr("New account");
+            text: root.kind == AccountKind.credit ? (root.editing ? @tr("Edit card") : @tr("New card")) : (root.editing ? @tr("Edit account") : @tr("New account"));
             font-size: 14px;
             font-weight: 700;
         }
@@ -77,7 +83,7 @@ component CreatorBody inherits FocusScope {
             }
         }
 
-        HorizontalLayout {
+        if root.kinds.length > 1: HorizontalLayout {
             spacing: 0px;
             alignment: start;
             accessible-role: tab-list;
@@ -148,11 +154,38 @@ component CreatorBody inherits FocusScope {
             }
         }
 
-        InkField {
+        if root.kind != AccountKind.credit: InkField {
             text <=> root.balance;
             placeholder-text: @tr("Initial balance");
             accepted(text) => {
                 root.submit();
+            }
+        }
+
+        if root.kind == AccountKind.credit: InkField {
+            text <=> root.limit;
+            placeholder-text: @tr("Credit limit");
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        if root.kind == AccountKind.credit: HorizontalLayout {
+            spacing: 8px;
+            InkField {
+                text <=> root.closing;
+                placeholder-text: @tr("Closing day (1-31)");
+                accepted(text) => {
+                    root.submit();
+                }
+            }
+
+            InkField {
+                text <=> root.due;
+                placeholder-text: @tr("Payment day (1-31)");
+                accepted(text) => {
+                    root.submit();
+                }
             }
         }
 
@@ -252,6 +285,9 @@ export component AccountCreator inherits PopupWindow {
     in property <AccountKind> account-kind;
     in property <string> account-bank;
     in property <string> account-balance;
+    in property <string> account-limit;
+    in property <string> account-closing;
+    in property <string> account-due;
     in property <string> account-currency;
     in property <bool> account-archived;
     in property <bool> account-in-use;
@@ -269,9 +305,12 @@ export component AccountCreator inherits PopupWindow {
             kind: root.account-kind;
             bank: root.account-bank;
             balance: root.account-balance;
+            limit: root.account-limit;
+            closing: root.account-closing;
+            due: root.account-due;
             currency: root.account-currency;
-            save(name, kind, bank, currency, balance, rate) => {
-                let error = root.editing ? FinanceStore.update-account(root.account-id, name, kind, bank, currency, balance, rate) : FinanceStore.create-account(name, kind, bank, currency, balance, rate);
+            save(name, kind, bank, currency, balance, limit, closing, due, rate) => {
+                let error = kind == AccountKind.credit ? (root.editing ? FinanceStore.update-card(root.account-id, name, bank, currency, limit, closing, due, rate) : FinanceStore.create-card(name, bank, currency, limit, closing, due, rate)) : (root.editing ? FinanceStore.update-account(root.account-id, name, kind, bank, currency, balance, rate) : FinanceStore.create-account(name, kind, bank, currency, balance, rate));
                 if error == "" {
                     root.close();
                 }

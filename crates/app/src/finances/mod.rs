@@ -38,6 +38,11 @@ pub(crate) fn style() -> AmountStyle {
     }
 }
 
+/// A day field's text; anything that is not a number becomes 0, which `core` rejects.
+fn day(text: &str) -> u32 {
+    text.trim().parse().unwrap_or(0)
+}
+
 pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     let state = Rc::new(State {
         conn,
@@ -92,6 +97,42 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
                 )
                 .map(|_| ()),
             )
+        }
+    });
+
+    store.on_create_card({
+        let state = state.clone();
+        move |name, bank, currency, limit, closing, due, rate| {
+            state.finish(
+                finances::create_card(
+                    &state.conn,
+                    &name,
+                    &bank,
+                    &currency,
+                    &limit,
+                    day(&closing),
+                    day(&due),
+                    Some(&rate),
+                )
+                .map(|_| ()),
+            )
+        }
+    });
+
+    store.on_update_card({
+        let state = state.clone();
+        move |id, name, bank, currency, limit, closing, due, rate| {
+            state.finish(finances::update_card(
+                &state.conn,
+                AccountId(id.into()),
+                &name,
+                &bank,
+                &currency,
+                &limit,
+                day(&closing),
+                day(&due),
+                Some(&rate),
+            ))
         }
     });
 

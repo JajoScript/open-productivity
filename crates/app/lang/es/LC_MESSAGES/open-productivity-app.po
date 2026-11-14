@@ -1295,3 +1295,42 @@ msgid "{n} scheduled payment uses this account."
 msgid_plural "{n} scheduled payments use this account."
 msgstr[0] "{n} pago programado usa esta cuenta."
 msgstr[1] "{n} pagos programados usan esta cuenta."
+
+msgid "Credit card"
+msgstr "Tarjeta de crédito"
+
+msgid "Credit cards"
+msgstr "Tarjetas de crédito"
+
+msgid "Closes on day {} · Pay on day {}"
+msgstr "Cierra el día {} · Paga el día {}"
+
+msgid "{} of {}"
+msgstr "{} de {}"
+
+msgid "{} available"
+msgstr "{} disponibles"
+
+msgid "The credit limit must be an amount greater than zero."
+msgstr "El cupo debe ser un monto mayor que cero."
+
+msgid "The days must be numbers from 1 to 31."
+msgstr "Los días deben ser números del 1 al 31."
+
+msgid "A credit card can't become another kind of account, nor the reverse."
+msgstr "Una tarjeta de crédito no puede pasar a otro tipo de cuenta, ni al revés."
+
+msgid "Credit limit"
+msgstr "Cupo"
+
+msgid "Closing day (1-31)"
+msgstr "Día de cierre (1-31)"
+
+msgid "Payment day (1-31)"
+msgstr "Día de pago (1-31)"
+
+msgid "Edit card"
+msgstr "Editar tarjeta"
+
+msgid "New card"
+msgstr "Nueva tarjeta"
