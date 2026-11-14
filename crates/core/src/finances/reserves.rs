@@ -86,6 +86,16 @@ pub fn list_archived_reserves(conn: &Connection) -> Result<Vec<Reserve>, Finance
     query(conn, true)
 }
 
+/// What the active reserves hold in total, in the main currency.
+pub fn reserved_total(conn: &Connection) -> Result<i64, FinanceError> {
+    let rates = super::rates::load_rates(conn)?;
+    let mut total = 0i64;
+    for r in list_reserves(conn)? {
+        total = total.saturating_add(rates.to_main(r.balance, r.currency)?);
+    }
+    Ok(total)
+}
+
 pub fn get_reserve(conn: &Connection, id: ReserveId) -> Result<Reserve, FinanceError> {
     match conn.query_row(&format!("{SELECT} WHERE r.id = ?1"), [id.0], row) {
         Ok(r) => r,

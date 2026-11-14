@@ -295,3 +295,18 @@ fn amounts_are_read_in_the_accounts_currency() {
     assert_eq!(list_reserves(&conn).unwrap()[0].balance, 2025);
     assert_eq!(acc(&conn, usd).available(), 8025);
 }
+
+#[test]
+fn reserved_total_sums_active_reserves_in_main_currency() {
+    let (conn, a) = setup("1000");
+    assert_eq!(reserved_total(&conn).unwrap(), 0);
+    let r1 = create_reserve(&conn, "Uno", a).unwrap();
+    let r2 = create_reserve(&conn, "Dos", a).unwrap();
+    put(&conn, r1, "300").unwrap();
+    put(&conn, r2, "200").unwrap();
+    take(&conn, r2, "50").unwrap();
+    assert_eq!(reserved_total(&conn).unwrap(), 450);
+    take(&conn, r2, "150").unwrap();
+    set_reserve_archived(&conn, r2, true).unwrap();
+    assert_eq!(reserved_total(&conn).unwrap(), 300);
+}
