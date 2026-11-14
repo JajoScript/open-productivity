@@ -101,7 +101,7 @@ pub(super) fn kind_sum(
 
 /// Open balances plus every movement dated before `end`, in the main currency; a transfer
 /// between two active accounts nets zero (when it crosses currencies, at today's rates).
-fn accounts_total_before(
+pub(super) fn accounts_total_before(
     conn: &Connection,
     rates: &Rates,
     end: NaiveDate,

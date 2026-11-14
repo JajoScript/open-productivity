@@ -9,7 +9,9 @@ mod accounts;
 mod bills;
 mod budget;
 mod categories;
+mod charts;
 mod money;
+mod overview;
 mod rates;
 mod reserves;
 mod scheduled;
@@ -25,11 +27,15 @@ mod tests_cards;
 #[cfg(test)]
 mod tests_categories;
 #[cfg(test)]
+mod tests_charts;
+#[cfg(test)]
 mod tests_credit_lines;
 #[cfg(test)]
 mod tests_currencies;
 #[cfg(test)]
 mod tests_main_currency;
+#[cfg(test)]
+mod tests_overview;
 #[cfg(test)]
 mod tests_reserves;
 #[cfg(test)]
@@ -50,7 +56,9 @@ pub use accounts::*;
 pub use bills::*;
 pub use budget::*;
 pub use categories::*;
+pub use charts::*;
 pub use money::*;
+pub use overview::*;
 pub use rates::*;
 pub use reserves::*;
 pub use scheduled::*;
