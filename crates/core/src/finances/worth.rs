@@ -17,6 +17,10 @@ pub struct WorthSlice {
     pub value: i64,
     /// Value relative to the biggest slice, in (0, 1].
     pub width: f32,
+    /// Fraction of the assets, in (0, 1]; the donut draws it.
+    pub share: f32,
+    /// Share in whole percent, rounded; 0 for a positive account means "under 1%".
+    pub percent: u32,
 }
 
 #[derive(Debug, PartialEq)]
@@ -44,6 +48,8 @@ pub fn net_worth(conn: &Connection) -> Result<NetWorth, FinanceError> {
                 name: a.name,
                 value,
                 width: 1.0,
+                share: 0.0,
+                percent: 0,
             });
         } else {
             debts = debts.saturating_add(value.saturating_neg());
@@ -53,6 +59,9 @@ pub fn net_worth(conn: &Connection) -> Result<NetWorth, FinanceError> {
     let max = slices.first().map_or(1, |s| s.value);
     for s in &mut slices {
         s.width = s.value as f32 / max as f32;
+        s.share = (s.value as f64 / assets as f64) as f32;
+        let (v, total) = (i128::from(s.value), i128::from(assets));
+        s.percent = ((v * 200 + total) / (total * 2)) as u32;
     }
     Ok(NetWorth {
         total: assets.saturating_sub(debts),

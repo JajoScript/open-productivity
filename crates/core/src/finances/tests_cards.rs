@@ -215,3 +215,29 @@ fn archive_and_delete_like_accounts() {
         Err(FinanceError::AccountInUse)
     ));
 }
+
+#[test]
+fn usage_percent_and_segments() {
+    let usage = |used: i64, limit: i64| CardUsage {
+        used,
+        available: limit - used,
+        per_mille: used * 1000 / limit,
+        over_limit: used > limit,
+    };
+    assert_eq!(
+        (usage(0, 1000).percent(), usage(0, 1000).segments(20)),
+        (0, 0)
+    );
+    // anything used lights the first segment
+    assert_eq!(usage(1, 1000).segments(20), 1);
+    assert_eq!(
+        (usage(500, 1000).percent(), usage(500, 1000).segments(20)),
+        (50, 10)
+    );
+    assert_eq!(usage(1000, 1000).segments(20), 20);
+    // over the limit the bar is full and the percent keeps counting
+    assert_eq!(
+        (usage(1500, 1000).percent(), usage(1500, 1000).segments(20)),
+        (150, 20)
+    );
+}

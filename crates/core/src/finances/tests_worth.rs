@@ -115,3 +115,19 @@ fn a_missing_rate_is_an_error() {
         Err(FinanceError::MissingRate(_))
     ));
 }
+
+#[test]
+fn slices_carry_their_share_and_rounded_percent() {
+    let conn = setup();
+    account(&conn, "Big", AccountKind::Cash, "", "9990").unwrap();
+    account(&conn, "Mid", AccountKind::Cash, "", "5").unwrap();
+    account(&conn, "Tiny", AccountKind::Cash, "", "1").unwrap();
+    let w = net_worth(&conn).unwrap();
+    let got: Vec<_> = w.slices.iter().map(|s| s.percent).collect();
+    assert_eq!(got, [100, 0, 0]);
+    assert!((w.slices[0].share - 0.9994).abs() < 1e-3);
+    account(&conn, "Half", AccountKind::Cash, "", "10000").unwrap();
+    let w = net_worth(&conn).unwrap();
+    let got: Vec<_> = w.slices.iter().map(|s| s.percent).collect();
+    assert_eq!(got, [50, 50, 0, 0]);
+}

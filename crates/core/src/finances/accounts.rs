@@ -74,6 +74,22 @@ pub struct CardUsage {
     pub over_limit: bool,
 }
 
+impl CardUsage {
+    /// The use in whole percent, rounded; it can exceed 100.
+    pub fn percent(&self) -> i64 {
+        (self.per_mille + 5) / 10
+    }
+
+    /// How many of `total` bar segments are filled: the use rounded, at least one when anything
+    /// is used, all of them when over the limit.
+    pub fn segments(&self, total: i64) -> i64 {
+        if self.used == 0 {
+            return 0;
+        }
+        ((self.per_mille.min(1000) * total + 500) / 1000).clamp(1, total)
+    }
+}
+
 #[derive(Debug, PartialEq)]
 pub struct Account {
     pub id: AccountId,
