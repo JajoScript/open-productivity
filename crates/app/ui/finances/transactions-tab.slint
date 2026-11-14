@@ -6,8 +6,11 @@ import { EmptyState } from "../empty-state.slint";
 import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
 import { FinanceStore } from "finance-store.slint";
-import { MonthNav } from "month-nav.slint";
-import { TransactionRow } from "transaction-row.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { FinanceTableHeader, FinanceTxRow } from "finance-table.slint";
+import { MovementFilter, TransactionRow } from "transaction-row.slint";
 
 export component TransactionLine inherits Rectangle {
     in property <TransactionRow> tx;
@@ -90,30 +93,120 @@ export component TransactionLine inherits Rectangle {
     }
 }
 
-// The expenses and income of one month, with the navigation between months.
+// The movements of one month in a card: month navigation, kind filter and the table.
 export component TransactionsTab inherits VerticalLayout {
     callback new-account();
     callback edit-transaction(TransactionRow);
 
-    spacing: 12px;
-
-    MonthNav { }
-
-    if FinanceStore.transactions.length == 0: EmptyState {
-        title: FinanceStore.accounts.length == 0 ? @tr("Create an account first") : @tr("No movements this month.");
-        description: FinanceStore.accounts.length == 0 ? @tr("Expenses and income are recorded against an account. Add one, such as a bank account or cash, to start.") : @tr("Record what you spend and what you earn. Each movement updates the balance of its account.");
-        action: FinanceStore.accounts.length == 0 ? @tr("New account") : "";
-        clicked => {
-            root.new-account();
+    function filter(f: MovementFilter) {
+        if FinanceStore.movement-filter != f {
+            FinanceStore.movement-filter = f;
+            FinanceStore.refresh();
         }
     }
 
-    if FinanceStore.transactions.length > 0: ListView {
+    FinanceCard {
         vertical-stretch: 1;
-        for tx in FinanceStore.transactions: TransactionLine {
-            tx: tx;
-            opened => {
-                root.edit-transaction(tx);
+        FinanceCardHeader {
+            title: Strings.month-year(FinanceStore.month.month, FinanceStore.month.year);
+            SubtleButton {
+                icon: @image-url("../icons/chevron-left.svg");
+                label: @tr("Previous month");
+                color: Palette.foreground;
+                clicked => {
+                    FinanceStore.shift(-1);
+                }
+            }
+
+            SubtleButton {
+                icon: @image-url("../icons/chevron-right.svg");
+                label: @tr("Next month");
+                color: Palette.foreground;
+                clicked => {
+                    FinanceStore.shift(1);
+                }
+            }
+        }
+
+        HorizontalLayout {
+            alignment: start;
+            accessible-role: tab-list;
+            SettingsTab {
+                text: @tr("movement filter" => "All");
+                selected: FinanceStore.movement-filter == MovementFilter.all;
+                chosen => {
+                    root.filter(MovementFilter.all);
+                }
+                step(d) => {
+                    if d > 0 {
+                        root.filter(MovementFilter.income);
+                    }
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Income");
+                selected: FinanceStore.movement-filter == MovementFilter.income;
+                chosen => {
+                    root.filter(MovementFilter.income);
+                }
+                step(d) => {
+                    root.filter(d < 0 ? MovementFilter.all : MovementFilter.expense);
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Expenses");
+                selected: FinanceStore.movement-filter == MovementFilter.expense;
+                chosen => {
+                    root.filter(MovementFilter.expense);
+                }
+                step(d) => {
+                    root.filter(d < 0 ? MovementFilter.income : MovementFilter.transfer);
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Transfers");
+                selected: FinanceStore.movement-filter == MovementFilter.transfer;
+                chosen => {
+                    root.filter(MovementFilter.transfer);
+                }
+                step(d) => {
+                    if d < 0 {
+                        root.filter(MovementFilter.expense);
+                    }
+                }
+            }
+        }
+
+        if FinanceStore.transactions.length == 0: EmptyState {
+            title: FinanceStore.accounts.length == 0 ? @tr("Create an account first") : @tr("No movements this month.");
+            description: FinanceStore.accounts.length == 0 ? @tr("Expenses and income are recorded against an account. Add one, such as a bank account or cash, to start.") : @tr("Record what you spend and what you earn. Each movement updates the balance of its account.");
+            action: FinanceStore.accounts.length == 0 ? @tr("New account") : "";
+            clicked => {
+                root.new-account();
+            }
+        }
+
+        if FinanceStore.transactions.length > 0: VerticalLayout {
+            vertical-stretch: 1;
+            FinanceTableHeader {
+                description: @tr("Description");
+                account: @tr("Account");
+                category: @tr("Category");
+                date: @tr("Date");
+                amount: @tr("Amount");
+            }
+
+            ListView {
+                vertical-stretch: 1;
+                for tx in FinanceStore.transactions: FinanceTxRow {
+                    tx: tx;
+                    opened => {
+                        root.edit-transaction(tx);
+                    }
+                }
             }
         }
     }

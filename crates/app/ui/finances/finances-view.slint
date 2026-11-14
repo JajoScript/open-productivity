@@ -143,12 +143,46 @@ export component FinancesView inherits VerticalLayout {
         }
     }
 
-    Text {
-        text: @tr("Finances");
-        font-size: 24px;
-        font-weight: 700;
-        vertical-alignment: center;
-        overflow: elide;
+    HorizontalLayout {
+        spacing: 12px;
+        VerticalLayout {
+            horizontal-stretch: 1;
+            spacing: 2px;
+            Text {
+                text: @tr("Finances");
+                font-size: 24px;
+                font-weight: 700;
+                overflow: elide;
+            }
+
+            Text {
+                text: @tr("Your money this month: balance, income and expenses.");
+                color: Theme.muted;
+                overflow: elide;
+            }
+        }
+
+        if FinanceStore.has-currency: HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            InkButton {
+                icon: @image-url("../icons/plus.svg");
+                text: @tr("Add account or card");
+                clicked => {
+                    root.new-account();
+                }
+            }
+
+            InkButton {
+                icon: @image-url("../icons/plus.svg");
+                text: @tr("New transaction");
+                // The movement modal needs an account to start from.
+                enabled: FinanceStore.accounts.length > 0;
+                clicked => {
+                    root.new-transaction();
+                }
+            }
+        }
     }
 
     if FinanceStore.has-currency: HorizontalLayout {
@@ -182,24 +216,13 @@ export component FinancesView inherits VerticalLayout {
             }
 
             SettingsTab {
-                text: @tr("To pay");
+                text: @tr("finance tab" => "Scheduled");
                 selected: FinanceStore.tab == FinanceTab.due;
                 chosen => {
                     root.choose(FinanceTab.due);
                 }
                 step(d) => {
-                    root.choose(d < 0 ? FinanceTab.movements : FinanceTab.budget);
-                }
-            }
-
-            SettingsTab {
-                text: @tr("Budget");
-                selected: FinanceStore.tab == FinanceTab.budget;
-                chosen => {
-                    root.choose(FinanceTab.budget);
-                }
-                step(d) => {
-                    root.choose(d < 0 ? FinanceTab.due : FinanceTab.accounts);
+                    root.choose(d < 0 ? FinanceTab.movements : FinanceTab.accounts);
                 }
             }
 
@@ -210,7 +233,7 @@ export component FinancesView inherits VerticalLayout {
                     root.choose(FinanceTab.accounts);
                 }
                 step(d) => {
-                    root.choose(d < 0 ? FinanceTab.budget : FinanceTab.categories);
+                    root.choose(d < 0 ? FinanceTab.due : FinanceTab.categories);
                 }
             }
 
@@ -221,8 +244,19 @@ export component FinancesView inherits VerticalLayout {
                     root.choose(FinanceTab.categories);
                 }
                 step(d) => {
+                    root.choose(d < 0 ? FinanceTab.accounts : FinanceTab.budget);
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Budget");
+                selected: FinanceStore.tab == FinanceTab.budget;
+                chosen => {
+                    root.choose(FinanceTab.budget);
+                }
+                step(d) => {
                     if d < 0 {
-                        root.choose(FinanceTab.accounts);
+                        root.choose(FinanceTab.categories);
                     }
                 }
             }
@@ -233,13 +267,6 @@ export component FinancesView inherits VerticalLayout {
         }
 
         // With no accounts, the empty states carry the button.
-        if FinanceStore.tab == FinanceTab.movements && FinanceStore.accounts.length > 0: InkButton {
-            text: @tr("New movement");
-            clicked => {
-                root.new-transaction();
-            }
-        }
-
         if FinanceStore.tab == FinanceTab.due && FinanceStore.accounts.length > 0: InkButton {
             text: @tr("New scheduled payment");
             clicked => {
@@ -285,12 +312,6 @@ export component FinancesView inherits VerticalLayout {
             }
         }
 
-        if FinanceStore.tab == FinanceTab.accounts && (FinanceStore.accounts.length > 0 || FinanceStore.archived-accounts.length > 0): InkButton {
-            text: @tr("New account");
-            clicked => {
-                root.new-account();
-            }
-        }
     }
 
     if FinanceStore.error != "": Text {

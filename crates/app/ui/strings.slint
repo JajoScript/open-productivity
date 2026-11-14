@@ -176,6 +176,15 @@ export global Strings {
         return @tr("{1}/{0}/{2}", day, month, year);
     }
 
+    // Short date of a table row, e.g. "Nov 14"; translations reorder it ("14 nov").
+    public pure function short-date(day: int, month: int) -> string {
+        return @tr("short date" => "{1} {0}", day, short-month-name(month));
+    }
+
+    pure function short-month-name(month: int) -> string {
+        return month == 1 ? @tr("short month" => "Jan") : month == 2 ? @tr("short month" => "Feb") : month == 3 ? @tr("short month" => "Mar") : month == 4 ? @tr("short month" => "Apr") : month == 5 ? @tr("short month" => "May") : month == 6 ? @tr("short month" => "Jun") : month == 7 ? @tr("short month" => "Jul") : month == 8 ? @tr("short month" => "Aug") : month == 9 ? @tr("short month" => "Sep") : month == 10 ? @tr("short month" => "Oct") : month == 11 ? @tr("short month" => "Nov") : @tr("short month" => "Dec");
+    }
+
     // Date picker header, e.g. "November 2026"; translations may add words ("de").
     public pure function month-year(month: int, year: int) -> string {
         return @tr("{0} {1}", month-name(month), year);
@@ -357,6 +366,11 @@ export global Strings {
 
     public pure function delete-account-question(name: string) -> string {
         return @tr("Delete the account {}? This can't be undone.", name);
+    }
+
+    // Account column of a transfer: where the money leaves and where it arrives.
+    public pure function transfer-accounts(from: string, to: string) -> string {
+        return @tr("{} → {}", from, to);
     }
 
     // Second line of a transfer: the accounts and the date.

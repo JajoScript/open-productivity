@@ -1493,3 +1493,78 @@ msgstr "No hay dinero suficiente para eso."
 
 msgid "Delete the reserve {}? This can't be undone."
 msgstr "¿Eliminar la reserva {}? Esto no se puede deshacer."
+
+msgctxt "finance tab"
+msgid "Scheduled"
+msgstr "Programados"
+
+msgid "Your money this month: balance, income and expenses."
+msgstr "Tu dinero del mes: saldo, ingresos y gastos."
+
+msgid "Add account or card"
+msgstr "Añadir cuenta o tarjeta"
+
+msgid "New transaction"
+msgstr "Nueva transacción"
+
+msgctxt "movement filter"
+msgid "All"
+msgstr "Todo"
+
+msgid "Transfers"
+msgstr "Transferencias"
+
+msgid "Description"
+msgstr "Descripción"
+
+msgctxt "short date"
+msgid "{1} {0}"
+msgstr "{0} {1}"
+
+msgctxt "short month"
+msgid "Jan"
+msgstr "ene"
+
+msgctxt "short month"
+msgid "Feb"
+msgstr "feb"
+
+msgctxt "short month"
+msgid "Mar"
+msgstr "mar"
+
+msgctxt "short month"
+msgid "Apr"
+msgstr "abr"
+
+msgctxt "short month"
+msgid "May"
+msgstr "may"
+
+msgctxt "short month"
+msgid "Jun"
+msgstr "jun"
+
+msgctxt "short month"
+msgid "Jul"
+msgstr "jul"
+
+msgctxt "short month"
+msgid "Aug"
+msgstr "ago"
+
+msgctxt "short month"
+msgid "Sep"
+msgstr "sep"
+
+msgctxt "short month"
+msgid "Oct"
+msgstr "oct"
+
+msgctxt "short month"
+msgid "Nov"
+msgstr "nov"
+
+msgctxt "short month"
+msgid "Dec"
+msgstr "dic"

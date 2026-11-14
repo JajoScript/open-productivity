@@ -1,0 +1,50 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// A raised panel of the Finances tabs: hairline border, paper fill. Its children are the content;
+// start them with a FinanceCardHeader.
+export component FinanceCard inherits Rectangle {
+    background: Palette.background;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        @children
+    }
+}
+
+// The title row of a card: title, optional count ("· 4") and, on the right, the children
+// (filter tabs, arrows, buttons).
+export component FinanceCardHeader inherits HorizontalLayout {
+    in property <string> title;
+    // Shown after the title when it is 0 or more.
+    in property <int> count: -1;
+
+    spacing: 8px;
+
+    Text {
+        text: root.title;
+        font-size: 16px;
+        font-weight: 600;
+        vertical-alignment: center;
+        overflow: elide;
+    }
+
+    if root.count >= 0: Text {
+        text: "· \{root.count}";
+        color: Theme.muted;
+        vertical-alignment: center;
+    }
+
+    Rectangle {
+        horizontal-stretch: 1;
+    }
+
+    @children
+}

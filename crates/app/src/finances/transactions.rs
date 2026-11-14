@@ -8,8 +8,8 @@ use std::rc::Rc;
 use open_productivity_core::calendar::{self, Period};
 use open_productivity_core::chrono::{Local, NaiveDate};
 use open_productivity_core::finances::{
-    self, AccountId, CategoryId, Currency, FinanceError, Movement, Transaction, TransactionId,
-    Transfer, TxKind as CoreKind,
+    self, AccountId, CategoryId, Currency, FinanceError, Movement, MovementFilter as CoreFilter,
+    Transaction, TransactionId, Transfer, TxKind as CoreKind,
 };
 use slint::{ComponentHandle, SharedString};
 
@@ -17,7 +17,7 @@ use super::state::State;
 use super::style;
 use crate::dates::{core_date, ui_date};
 use crate::tasks::ui_id;
-use crate::{AppWindow, Date, FinanceStore, Strings, TransactionRow, TxKind};
+use crate::{AppWindow, Date, FinanceStore, MovementFilter, Strings, TransactionRow, TxKind};
 
 pub(super) fn core_kind(k: TxKind) -> CoreKind {
     match k {
@@ -30,6 +30,15 @@ pub(super) fn ui_kind(k: CoreKind) -> TxKind {
     match k {
         CoreKind::Expense => TxKind::Expense,
         CoreKind::Income => TxKind::Income,
+    }
+}
+
+fn core_filter(f: MovementFilter) -> CoreFilter {
+    match f {
+        MovementFilter::All => CoreFilter::All,
+        MovementFilter::Income => CoreFilter::Income,
+        MovementFilter::Expense => CoreFilter::Expense,
+        MovementFilter::Transfer => CoreFilter::Transfer,
     }
 }
 
@@ -55,7 +64,15 @@ fn tx_row(t: Transaction, main: &Currency) -> Result<TransactionRow, String> {
         category: t.category_name.clone().unwrap_or_default().into(),
         date: ui_date(t.date),
         description: t.description.clone().into(),
-        amount: finances::format_in(t.signed(), t.currency, main, style).into(),
+        amount: {
+            // Income carries a "+" so it reads apart from an expense without color.
+            let sign = if t.signed() > 0 { "+" } else { "" };
+            format!(
+                "{sign}{}",
+                finances::format_in(t.signed(), t.currency, main, style)
+            )
+            .into()
+        },
         input: finances::format_input(t.amount, t.currency, style).into(),
         restorable: t.scheduled.as_ref().is_some_and(|s| s.restorable),
         installment_number: installment.map_or(0, |i| i.0),
@@ -115,7 +132,8 @@ impl State {
     pub fn load_month(&self, w: &AppWindow) -> Result<(), String> {
         let month = self.shown.get();
         let main = self.main()?;
-        let rows = finances::list_month(&self.conn, month)
+        let filter = core_filter(w.global::<FinanceStore>().get_movement_filter());
+        let rows = finances::list_month(&self.conn, month, filter)
             .map_err(|e| e.to_string())?
             .into_iter()
             .map(|m| row(m, main))

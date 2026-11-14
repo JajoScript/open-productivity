@@ -5,6 +5,9 @@ import { Date } from "std-widgets.slint";
 
 export enum TxKind { expense, income }
 
+// Which kind of movement the Movements tab lists.
+export enum MovementFilter { all, income, expense, transfer }
+
 export enum FinanceTab { summary, movements, due, budget, accounts, categories }
 
 // `amount` arrives signed (not for a transfer) and formatted for display; `input` formatted for the edit field.

@@ -2,7 +2,7 @@
 // Copyright (C) 2026 JajoScript
 
 import { Date } from "std-widgets.slint";
-import { FinanceTab, TransactionRow, TxKind } from "transaction-row.slint";
+import { FinanceTab, MovementFilter, TransactionRow, TxKind } from "transaction-row.slint";
 import { AccountKind, AccountRow, CurrencyRow, RateRow } from "account-row.slint";
 import { BillRow } from "bill-row.slint";
 import { BucketRow } from "bucket-row.slint";
@@ -36,6 +36,8 @@ export global FinanceStore {
     // The movements of the month shown; only its month and year matter.
     in property <Date> month;
     in property <[TransactionRow]> transactions;
+    // The kind of movement the Movements tab lists; changing it needs a refresh.
+    in-out property <MovementFilter> movement-filter: MovementFilter.all;
     // The "to pay" tab: what is due in the month shown, and the overdue ones in the current month.
     in property <[ScheduledRow]> due;
     // The card bills due in that month, and the overdue ones in the current month.
