@@ -1,0 +1,148 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ScrollView } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { ChoiceRow } from "../study/session-logger.slint";
+import { RateRow } from "account-row.slint";
+import { FinanceStore } from "finance-store.slint";
+
+// Rebuilt on every show(), so the choice, the fields and the error always start fresh.
+component EditorBody inherits FocusScope {
+    callback cancel;
+
+    property <string> error;
+    property <string> chosen: FinanceStore.main-currency;
+    // The rates asked for when `chosen` becomes the main currency.
+    property <[RateRow]> rows;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    init => {
+        // Drops what a previous, discarded edit left behind.
+        FinanceStore.discard-rates();
+    }
+
+    function submit() {
+        root.error = FinanceStore.change-main-currency(root.chosen);
+        if root.error == "" {
+            root.cancel();
+        }
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: @tr("Main currency");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        ScrollView {
+            height: min(currency-list.preferred-height, 128px);
+            currency-list := VerticalLayout {
+                for c in FinanceStore.currencies: ChoiceRow {
+                    label: c.code + " " + c.symbol;
+                    icon: @image-url("../icons/wallet.svg");
+                    chosen: c.code == root.chosen;
+                    picked => {
+                        root.chosen = c.code;
+                        root.rows = FinanceStore.main-change-rates(c.code);
+                    }
+                }
+            }
+        }
+
+        if root.chosen != FinanceStore.main-currency: Text {
+            text: Strings.main-change-note(root.chosen);
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+
+        ScrollView {
+            height: min(list.preferred-height, 160px);
+            list := VerticalLayout {
+                spacing: 8px;
+                for r in root.rows: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: Strings.rate-prefix(r.code);
+                        min-width: 72px;
+                        vertical-alignment: center;
+                    }
+
+                    InkField {
+                        text: r.rate;
+                        placeholder-text: @tr("Exchange rate");
+                        edited(text) => {
+                            FinanceStore.edit-rate(r.code, text);
+                        }
+                        accepted(text) => {
+                            root.submit();
+                        }
+                    }
+
+                    Text {
+                        text: root.chosen;
+                        vertical-alignment: center;
+                    }
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Save");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+}
+
+// Changes the main currency, asking the exchange rate of every other currency in use.
+// Closing by clicking outside discards the changes.
+export component MainCurrencyEditor inherits PopupWindow {
+    close-policy: close-on-click-outside;
+    width: 400px;
+
+    PopupSurface {
+        EditorBody {
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

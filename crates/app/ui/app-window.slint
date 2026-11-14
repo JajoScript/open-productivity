@@ -15,6 +15,7 @@ import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
 import { StudyStore } from "study/study-store.slint";
 import { AccountCreator } from "finances/account-creator.slint";
+import { MainCurrencyEditor } from "finances/main-currency-editor.slint";
 import { RatesEditor } from "finances/rates-editor.slint";
 import { CategoryCreator } from "finances/category-creator.slint";
 import { CategoryRow, SuggestedCategory } from "finances/category-row.slint";
@@ -406,6 +407,11 @@ export component AppWindow inherits Window {
             y: 120px;
         }
 
+        main-currency-editor := MainCurrencyEditor {
+            x: (root.width - self.width) / 2;
+            y: 120px;
+        }
+
         transaction-creator := TransactionCreator {
             editing: root.tx-editing;
             tx-id: root.tx-edit-id;
@@ -672,6 +678,9 @@ export component AppWindow inherits Window {
                     }
                     edit-rates => {
                         rates-editor.show();
+                    }
+                    edit-main-currency => {
+                        main-currency-editor.show();
                     }
                     new-transaction => {
                         root.tx-editing = false;

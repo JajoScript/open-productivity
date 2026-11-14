@@ -112,8 +112,8 @@ component CreatorBody inherits FocusScope {
         }
 
         if !root.in-use: ScrollView {
-            height: 96px;
-            VerticalLayout {
+            height: min(currency-list.preferred-height, 128px);
+            currency-list := VerticalLayout {
                 for c in FinanceStore.currencies: ChoiceRow {
                     label: c.code + " " + c.symbol;
                     icon: @image-url("../icons/wallet.svg");

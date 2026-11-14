@@ -979,8 +979,8 @@ msgstr "Saldo inicial"
 msgid "Choose your main currency"
 msgstr "Elige tu moneda principal"
 
-msgid "Your accounts and balances will use it. You can't change it later."
-msgstr "Tus cuentas y saldos la usarán. No podrás cambiarla después."
+msgid "Your accounts and balances will use it. You can change it later."
+msgstr "Tus cuentas y saldos la usarán. Podrás cambiarla después."
 
 msgid "Confirm"
 msgstr "Confirmar"
@@ -1200,6 +1200,15 @@ msgstr "1 {} ="
 
 msgid "Currency"
 msgstr "Moneda"
+
+msgid "Main currency: {}"
+msgstr "Moneda principal: {}"
+
+msgid "Main currency"
+msgstr "Moneda principal"
+
+msgid "Amounts stay as they are; only the totals change to {}. Enter what one unit of each currency is worth in {}."
+msgstr "Los montos no cambian; solo los totales pasan a {}. Ingresa cuánto vale una unidad de cada moneda en {}."
 
 msgid "Exchange rate"
 msgstr "Tipo de cambio"

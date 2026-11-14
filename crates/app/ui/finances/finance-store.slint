@@ -56,6 +56,10 @@ export global FinanceStore {
     callback edit-rate(string, string);
     callback save-rates() -> string;
     callback discard-rates();
+    // Changing the main currency: the rates it asks for (suggested ones filled in), then save.
+    // The fields report their edits through edit-rate.
+    callback main-change-rates(string) -> [RateRow];
+    callback change-main-currency(string) -> string;
     callback archive-account(int, bool) -> string;
     callback delete-account(int) -> string;
     callback create-transaction(TxKind, int, bool, int, string, Date, string) -> string;

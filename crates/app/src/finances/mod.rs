@@ -18,7 +18,7 @@ use open_productivity_core::db::Connection;
 use open_productivity_core::finances::{self, AccountId, AmountStyle};
 use slint::{ComponentHandle, ModelRc, VecModel};
 
-use crate::{AppWindow, FinanceStore};
+use crate::{AppWindow, FinanceStore, RateRow};
 use state::{State, core_kind};
 
 static SPANISH: AtomicBool = AtomicBool::new(false);
@@ -136,6 +136,43 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     store.on_discard_rates({
         let state = state.clone();
         move || state.pending_rates.borrow_mut().clear()
+    });
+
+    // Picking a main currency: its rates come suggested, and count as edited until retyped.
+    store.on_main_change_rates({
+        let state = state.clone();
+        move |code| {
+            let suggested = finances::main_change_rates(&state.conn, &code).unwrap_or_default();
+            let mut pending = state.pending_rates.borrow_mut();
+            pending.clear();
+            let rows = suggested.into_iter().map(|r| {
+                let text = r
+                    .rate
+                    .map_or_else(String::new, |v| finances::format_rate(v, style()));
+                pending.push((r.currency.code.to_string(), text.clone()));
+                RateRow {
+                    code: r.currency.code.into(),
+                    rate: text.into(),
+                }
+            });
+            ModelRc::new(VecModel::from(rows.collect::<Vec<_>>()))
+        }
+    });
+
+    store.on_change_main_currency({
+        let state = state.clone();
+        move |code| {
+            let pending = state.pending_rates.borrow().clone();
+            let list: Vec<(&str, &str)> = pending
+                .iter()
+                .map(|(c, t)| (c.as_str(), t.as_str()))
+                .collect();
+            let msg = state.finish(finances::change_main_currency(&state.conn, &code, &list));
+            if msg.is_empty() {
+                state.pending_rates.borrow_mut().clear();
+            }
+            msg
+        }
     });
 
     store.on_save_rates({

@@ -4,6 +4,7 @@
 import { Palette, ListView } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
+import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { AccountRow } from "account-row.slint";
@@ -36,7 +37,7 @@ component CurrencyPicker inherits HorizontalLayout {
         }
 
         Text {
-            text: @tr("Your accounts and balances will use it. You can't change it later.");
+            text: @tr("Your accounts and balances will use it. You can change it later.");
             color: Theme.muted;
             horizontal-alignment: center;
             wrap: word-wrap;
@@ -115,6 +116,7 @@ export component FinancesView inherits VerticalLayout {
     callback new-category();
     callback edit-category(CategoryRow);
     callback edit-rates();
+    callback edit-main-currency();
 
     padding: 24px;
     padding-top: 20px;
@@ -206,6 +208,14 @@ export component FinancesView inherits VerticalLayout {
             text: @tr("New category");
             clicked => {
                 root.new-category();
+            }
+        }
+
+        if FinanceStore.tab == FinanceTab.accounts: SubtleButton {
+            text: Strings.main-currency-button(FinanceStore.main-currency);
+            color: Palette.foreground;
+            clicked => {
+                root.edit-main-currency();
             }
         }
 

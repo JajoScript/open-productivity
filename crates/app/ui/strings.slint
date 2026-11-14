@@ -275,6 +275,14 @@ export global Strings {
         return @tr("1 {} =", currency);
     }
 
+    public pure function main-currency-button(currency: string) -> string {
+        return @tr("Main currency: {}", currency);
+    }
+
+    public pure function main-change-note(currency: string) -> string {
+        return @tr("Amounts stay as they are; only the totals change to {}. Enter what one unit of each currency is worth in {}.", currency, currency);
+    }
+
     public pure function finance-failed(error: string) -> string {
         return @tr("Could not save: {}", error);
     }
