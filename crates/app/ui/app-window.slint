@@ -22,6 +22,9 @@ import { CategoryRow, SuggestedCategory } from "finances/category-row.slint";
 import { FinancesView } from "finances/finances-view.slint";
 import { FinanceStore } from "finances/finance-store.slint";
 import { AccountKind, AccountRow, CurrencyRow } from "finances/account-row.slint";
+import { ScheduledConfirm } from "finances/scheduled-confirm.slint";
+import { ScheduledCreator } from "finances/scheduled-creator.slint";
+import { ScheduleForm, NewScheduled, ScheduledRow } from "finances/scheduled-row.slint";
 import { TransactionCreator } from "finances/transaction-creator.slint";
 import { FinanceTab, TransactionRow, TxKind } from "finances/transaction-row.slint";
 import { SummaryBar, SummaryFigure } from "finances/summary-row.slint";
@@ -106,6 +109,8 @@ export {
     AccountRow,
     FinanceTab,
     TransactionRow,
+    ScheduleForm,
+    ScheduledRow,
     CategoryRow,
     SuggestedCategory,
     TxKind,
@@ -282,6 +287,13 @@ export component AppWindow inherits Window {
     property <bool> tx-edit-has-category;
     property <int> tx-edit-category;
     // What the category modal opens with: a new category of the tab's kind, or the one being edited.
+    property <bool> tx-edit-restorable;
+    property <int> tx-edit-installment-number;
+    property <int> tx-edit-installment-total;
+    property <bool> scheduled-editing;
+    property <ScheduledRow> scheduled-edit;
+    property <ScheduledRow> scheduled-confirm-row;
+
     property <bool> category-editing;
     property <int> category-edit-id;
     property <TxKind> category-edit-kind;
@@ -428,8 +440,25 @@ export component AppWindow inherits Window {
             tx-amount-label: root.tx-edit-amount-label;
             tx-date: root.tx-edit-date;
             tx-description: root.tx-edit-description;
+            tx-restorable: root.tx-edit-restorable;
+            tx-installment-number: root.tx-edit-installment-number;
+            tx-installment-total: root.tx-edit-installment-total;
             x: (root.width - self.width) / 2;
             y: 80px;
+        }
+
+        scheduled-creator := ScheduledCreator {
+            editing: root.scheduled-editing;
+            due: root.scheduled-edit;
+            x: (root.width - self.width) / 2;
+            y: 40px;
+        }
+
+        scheduled-confirm := ScheduledConfirm {
+            due: root.scheduled-confirm-row;
+            today: Calendar.today();
+            x: (root.width - self.width) / 2;
+            y: 120px;
         }
 
         category-creator := CategoryCreator {
@@ -698,6 +727,9 @@ export component AppWindow inherits Window {
                         root.tx-edit-amount-label = "";
                         root.tx-edit-date = Calendar.today();
                         root.tx-edit-description = "";
+                        root.tx-edit-restorable = false;
+                        root.tx-edit-installment-number = 0;
+                        root.tx-edit-installment-total = 0;
                         transaction-creator.show();
                     }
                     edit-transaction(t) => {
@@ -716,7 +748,24 @@ export component AppWindow inherits Window {
                         root.tx-edit-amount-label = t.amount;
                         root.tx-edit-date = t.date;
                         root.tx-edit-description = t.description;
+                        root.tx-edit-restorable = t.restorable;
+                        root.tx-edit-installment-number = t.installment-number;
+                        root.tx-edit-installment-total = t.installment-total;
                         transaction-creator.show();
+                    }
+                    new-scheduled => {
+                        root.scheduled-editing = false;
+                        root.scheduled-edit = NewScheduled.row(FinanceStore.accounts[0].id, FinanceStore.accounts[0].currency, Calendar.today());
+                        scheduled-creator.show();
+                    }
+                    edit-scheduled(d) => {
+                        root.scheduled-editing = true;
+                        root.scheduled-edit = d;
+                        scheduled-creator.show();
+                    }
+                    confirm-scheduled(d) => {
+                        root.scheduled-confirm-row = d;
+                        scheduled-confirm.show();
                     }
                     new-category => {
                         root.category-editing = false;

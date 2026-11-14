@@ -4,6 +4,7 @@
 //! Glue between the Finances view and `core::finances`.
 
 mod categories;
+mod scheduled;
 mod state;
 mod summary;
 mod transactions;
@@ -43,6 +44,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         rows: Rc::default(),
         archived_account_rows: Rc::default(),
         tx_rows: Rc::default(),
+        due_rows: Rc::default(),
         cat_rows: Rc::default(),
         archived_rows: Rc::default(),
         choices: Rc::default(),
@@ -54,6 +56,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     store.set_accounts(ModelRc::from(state.rows.clone()));
     store.set_archived_accounts(ModelRc::from(state.archived_account_rows.clone()));
     store.set_transactions(ModelRc::from(state.tx_rows.clone()));
+    store.set_due(ModelRc::from(state.due_rows.clone()));
     store.set_categories(ModelRc::from(state.cat_rows.clone()));
     store.set_archived_categories(ModelRc::from(state.archived_rows.clone()));
     store.set_category_choices(ModelRc::from(state.choices.clone()));
@@ -66,6 +69,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     });
 
     transactions::connect(&state, &store);
+    scheduled::connect(&state, &store);
     categories::connect(&state, &store);
 
     store.on_choose_currency({

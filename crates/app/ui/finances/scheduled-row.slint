@@ -1,0 +1,56 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date } from "std-widgets.slint";
+import { TxKind } from "transaction-row.slint";
+
+// How a scheduled payment repeats: one-time, weekly, monthly or yearly, or monthly installments.
+export enum ScheduleForm { once, weekly, monthly, yearly, installments }
+
+// An occurrence of the "to pay" list. `amount` arrives signed and formatted for display; `input`
+// formatted for the edit field. `number` and `total` only mean something for installments.
+export struct ScheduledRow {
+    id: int,
+    kind: TxKind,
+    account-id: int,
+    account: string,
+    currency: string,
+    has-category: bool,
+    category-id: int,
+    description: string,
+    form: ScheduleForm,
+    number: int,
+    total: int,
+    // The date of this occurrence; `next-date` is the one confirm and skip act on.
+    date: Date,
+    next-date: Date,
+    amount: string,
+    input: string,
+    is-next: bool,
+    overdue: bool,
+}
+
+// The row a new scheduled payment starts from.
+export global NewScheduled {
+    public pure function row(account: int, currency: string, today: Date) -> ScheduledRow {
+        return {
+            id: 0,
+            kind: TxKind.expense,
+            account-id: account,
+            account: "",
+            currency: currency,
+            has-category: false,
+            category-id: 0,
+            description: "",
+            form: ScheduleForm.once,
+            number: 0,
+            total: 0,
+            date: today,
+            next-date: today,
+            amount: "",
+            input: "",
+            is-next: false,
+            overdue: false,
+        };
+    }
+}

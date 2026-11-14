@@ -1,0 +1,203 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ListView } from "std-widgets.slint";
+import { EmptyState } from "../empty-state.slint";
+import { InkButton } from "../ink-button.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { FinanceStore } from "finance-store.slint";
+import { MonthNav } from "month-nav.slint";
+import { ScheduledRow } from "scheduled-row.slint";
+
+component DueLine inherits Rectangle {
+    in property <ScheduledRow> due;
+    callback opened;
+    callback confirm;
+
+    property <string> title: root.due.description != "" ? root.due.description : Strings.tx-kind(root.due.kind);
+    property <string> day: Strings.date(root.due.date.day, root.due.date.month, root.due.date.year);
+    property <string> kind: Strings.schedule-form(root.due.form, root.due.number, root.due.total);
+    property <string> skip-error;
+
+    height: 56px;
+    border-radius: 6px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background {
+        duration: Theme.fast;
+        easing: Theme.ease-out;
+    }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: Strings.due-line-label(root.title, root.due.account, root.kind, root.day, root.due.amount);
+    accessible-action-default => {
+        root.opened();
+    }
+
+    // Under the row's content, so the buttons take their own clicks.
+    touch := TouchArea {
+        clicked => {
+            root.opened();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 16px; // clears the ListView scroll bar
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.title;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            Text {
+                text: Strings.transaction-detail(root.due.account, root.kind);
+                color: Theme.muted;
+                overflow: elide;
+                accessible-role: none;
+            }
+        }
+
+        Text {
+            text: root.day;
+            // Only an overdue payment is red.
+            color: root.due.overdue ? Theme.critical : Theme.muted;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.due.amount;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            min-width: 80px;
+            accessible-role: none;
+        }
+
+        if root.due.is-next: SubtleButton {
+            text: @tr("Confirm");
+            color: Palette.foreground;
+            clicked => {
+                root.confirm();
+            }
+        }
+
+        if root.due.is-next: SubtleButton {
+            text: @tr("Skip");
+            clicked => {
+                root.skip-error = "";
+                skip-popup.show();
+            }
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.opened();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+
+    skip-popup := PopupWindow {
+        x: root.width - self.width - 8px;
+        y: root.height;
+        width: 320px;
+        PopupSurface {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: Strings.skip-scheduled-question(root.title);
+                    wrap: word-wrap;
+                }
+
+                if root.skip-error != "": Text {
+                    text: root.skip-error;
+                    color: Theme.critical;
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Cancel");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            skip-popup.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Skip");
+                        clicked => {
+                            root.skip-error = FinanceStore.skip-scheduled(root.due.id);
+                            if root.skip-error == "" {
+                                skip-popup.close();
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// What is due in the month shown, with the same navigation between months as the movements.
+export component DueTab inherits VerticalLayout {
+    callback new-account();
+    callback edit-scheduled(ScheduledRow);
+    callback confirm-scheduled(ScheduledRow);
+
+    spacing: 12px;
+
+    MonthNav { }
+
+    if FinanceStore.due.length == 0: EmptyState {
+        title: FinanceStore.accounts.length == 0 ? @tr("Create an account first") : @tr("Nothing to pay this month.");
+        description: FinanceStore.accounts.length == 0 ? @tr("Scheduled payments are recorded against an account. Add one, such as a bank account or cash, to start.") : @tr("Schedule the bills, installments and income you expect, and confirm them when they happen.");
+        action: FinanceStore.accounts.length == 0 ? @tr("New account") : "";
+        clicked => {
+            root.new-account();
+        }
+    }
+
+    if FinanceStore.due.length > 0: ListView {
+        vertical-stretch: 1;
+        for due in FinanceStore.due: DueLine {
+            due: due;
+            opened => {
+                root.edit-scheduled(due);
+            }
+            confirm => {
+                root.confirm-scheduled(due);
+            }
+        }
+    }
+}

@@ -5,6 +5,7 @@ import { Date } from "std-widgets.slint";
 import { FinanceTab, TransactionRow, TxKind } from "transaction-row.slint";
 import { AccountKind, AccountRow, CurrencyRow, RateRow } from "account-row.slint";
 import { CategoryRow } from "category-row.slint";
+import { ScheduleForm, ScheduledRow } from "scheduled-row.slint";
 import { SummaryBar, SummaryFigure } from "summary-row.slint";
 
 // What the Finances views show and ask for. Rust fills the data and answers the callbacks;
@@ -26,6 +27,8 @@ export global FinanceStore {
     // The movements of the month shown; only its month and year matter.
     in property <Date> month;
     in property <[TransactionRow]> transactions;
+    // The "to pay" tab: what is due in the month shown, and the overdue ones in the current month.
+    in property <[ScheduledRow]> due;
     // The Summary tab, for the month shown: each figure with its change versus the month before.
     in property <SummaryFigure> summary-income;
     in property <SummaryFigure> summary-expense;
@@ -66,7 +69,16 @@ export global FinanceStore {
     callback update-transaction(int, TxKind, int, bool, int, string, Date, string) -> string;
     callback create-transfer(int, int, string, string, Date, string) -> string;
     callback update-transfer(int, int, int, string, string, Date, string) -> string;
-    callback delete-transaction(int) -> string;
+    // The second argument returns the scheduled payment the movement came from to the schedule.
+    callback delete-transaction(int, bool) -> string;
+    // kind, account, has category, category, amount, description, first date, form, installments.
+    callback create-scheduled(TxKind, int, bool, int, string, string, Date, ScheduleForm, string) -> string;
+    // id, account, has category, category, amount, description, next date, frequency (recurring only).
+    callback update-scheduled(int, int, bool, int, string, string, Date, ScheduleForm) -> string;
+    // id, date, amount of the movement it records.
+    callback confirm-scheduled(int, Date, string) -> string;
+    callback skip-scheduled(int) -> string;
+    callback delete-scheduled(int) -> string;
     callback create-category(TxKind, string) -> string;
     callback rename-category(int, string) -> string;
     callback archive-category(int, bool) -> string;

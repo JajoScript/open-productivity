@@ -17,7 +17,7 @@ use super::style;
 use crate::tasks::ui_id;
 use crate::{
     AccountKind, AccountRow, AppWindow, CategoryRow, CurrencyRow, FinanceStore, FinanceTab,
-    RateRow, Strings, TransactionRow,
+    RateRow, ScheduledRow, Strings, TransactionRow,
 };
 
 pub struct State {
@@ -26,6 +26,8 @@ pub struct State {
     pub rows: Rc<VecModel<AccountRow>>,
     pub archived_account_rows: Rc<VecModel<AccountRow>>,
     pub tx_rows: Rc<VecModel<TransactionRow>>,
+    /// The To pay tab: what is due in the shown month.
+    pub due_rows: Rc<VecModel<ScheduledRow>>,
     /// The Categories tab: the kind's active categories, then its archived ones.
     pub cat_rows: Rc<VecModel<CategoryRow>>,
     pub archived_rows: Rc<VecModel<CategoryRow>>,
@@ -125,6 +127,10 @@ impl State {
                     self.load_month(w)?;
                     self.load_choices()?;
                 }
+                FinanceTab::Due => {
+                    self.load_due(w)?;
+                    self.load_choices()?;
+                }
                 FinanceTab::Summary => self.load_summary(w)?,
                 FinanceTab::Categories => self.load_categories(w)?,
                 FinanceTab::Accounts => {}
@@ -181,6 +187,12 @@ impl State {
             FinanceError::MissingRate(code) => s.invoke_finance_missing_rate(code.into()),
             FinanceError::InvalidRate => s.get_finance_invalid_rate(),
             FinanceError::CurrencyLocked => s.get_finance_currency_locked(),
+            FinanceError::InvalidSchedule => s.get_finance_invalid_schedule(),
+            FinanceError::ScheduledNotFound => s.get_finance_no_scheduled(),
+            FinanceError::ScheduledDone => s.get_finance_scheduled_done(),
+            FinanceError::AccountHasSchedules(n) => {
+                s.invoke_schedules_use_account(i32::try_from(n).unwrap_or(i32::MAX))
+            }
             e @ (FinanceError::Sqlite(_)
             | FinanceError::UnknownCurrency(_)
             | FinanceError::BadKind(_)

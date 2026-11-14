@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JajoScript
 
 import { AccountKind } from "finances/account-row.slint";
+import { ScheduleForm } from "finances/scheduled-row.slint";
 import { TxKind } from "finances/transaction-row.slint";
 import { SuggestedCategory } from "finances/category-row.slint";
 
@@ -362,6 +363,46 @@ export global Strings {
     public pure function delete-transaction-question(amount: string, date: string) -> string {
         return @tr("Delete the movement of {} on {}? This can't be undone.", amount, date);
     }
+
+    public pure function schedule-form(form: ScheduleForm, number: int, total: int) -> string {
+        if form == ScheduleForm.once {
+            return @tr("One-time");
+        }
+        if form == ScheduleForm.weekly {
+            return @tr("Weekly");
+        }
+        if form == ScheduleForm.monthly {
+            return @tr("Monthly");
+        }
+        if form == ScheduleForm.yearly {
+            return @tr("Yearly");
+        }
+        return @tr("Installment {} of {}", number, total);
+    }
+
+    public pure function due-line-label(title: string, account: string, kind: string, date: string, amount: string) -> string {
+        return @tr("{}, {}, {}, {}, {}", title, account, kind, date, amount);
+    }
+
+    public pure function delete-scheduled-question(title: string) -> string {
+        return @tr("Delete the scheduled payment {}? The movements it already recorded stay. This can't be undone.", title);
+    }
+
+    public pure function skip-scheduled-question(title: string) -> string {
+        return @tr("Skip {}? No movement is recorded and the payment moves on to its next date.", title);
+    }
+
+    public pure function restore-installment(number: int, total: int) -> string {
+        return @tr("Also return installment {} of {} to the schedule", number, total);
+    }
+
+    public pure function schedules-use-account(n: int) -> string {
+        return @tr("{n} scheduled payment uses this account." | "{n} scheduled payments use this account." % n);
+    }
+
+    out property <string> finance-invalid-schedule: @tr("Check the installments: there must be at least 2.");
+    out property <string> finance-no-scheduled: @tr("That scheduled payment no longer exists.");
+    out property <string> finance-scheduled-done: @tr("That scheduled payment is already finished.");
 
     public pure function account-line-label(name: string, kind: string, balance: string) -> string {
         return @tr("{}, {}, {}", name, kind, balance);

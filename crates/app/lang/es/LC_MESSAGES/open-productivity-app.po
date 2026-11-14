@@ -1221,3 +1221,77 @@ msgstr "Cuánto vale una unidad de cada moneda en tu moneda principal. Todos los
 
 msgid "Amount that arrives"
 msgstr "Monto que llega"
+
+msgid "To pay"
+msgstr "Por pagar"
+
+msgid "New scheduled payment"
+msgstr "Nuevo pago programado"
+
+msgid "Edit scheduled payment"
+msgstr "Editar pago programado"
+
+msgid "One-time"
+msgstr "Puntual"
+
+msgid "Recurring"
+msgstr "Recurrente"
+
+msgid "Installments"
+msgstr "Cuotas"
+
+msgid "Installment {} of {}"
+msgstr "Cuota {} de {}"
+
+msgid "Skip"
+msgstr "Omitir"
+
+msgid "{}, {}, {}, {}, {}"
+msgstr "{}, {}, {}, {}, {}"
+
+msgid "Skip {}? No movement is recorded and the payment moves on to its next date."
+msgstr "¿Omitir {}? No se registra ningún movimiento y el pago pasa a su siguiente fecha."
+
+msgid "Delete the scheduled payment {}? The movements it already recorded stay. This can't be undone."
+msgstr "¿Borrar el pago programado {}? Los movimientos que ya registró se quedan. No se puede deshacer."
+
+msgid "Also return installment {} of {} to the schedule"
+msgstr "Devolver también la cuota {} de {}"
+
+msgid "Also mark the scheduled payment as pending again"
+msgstr "Volver a dejar pendiente el pago programado"
+
+msgid "Check the installments: there must be at least 2."
+msgstr "Revisa las cuotas: deben ser al menos 2."
+
+msgid "That scheduled payment no longer exists."
+msgstr "Ese pago programado ya no existe."
+
+msgid "That scheduled payment is already finished."
+msgstr "Ese pago programado ya terminó."
+
+msgid "Confirm payment"
+msgstr "Confirmar pago"
+
+msgid "Next date"
+msgstr "Próxima fecha"
+
+msgid "First date"
+msgstr "Primera fecha"
+
+msgid "Number of installments (2 or more)"
+msgstr "Cantidad de cuotas (2 o más)"
+
+msgid "Nothing to pay this month."
+msgstr "Nada por pagar este mes."
+
+msgid "Scheduled payments are recorded against an account. Add one, such as a bank account or cash, to start."
+msgstr "Los pagos programados se registran en una cuenta. Agrega una, como una cuenta bancaria o efectivo, para empezar."
+
+msgid "Schedule the bills, installments and income you expect, and confirm them when they happen."
+msgstr "Programa las cuentas, cuotas e ingresos que esperas y confírmalos cuando ocurran."
+
+msgid "{n} scheduled payment uses this account."
+msgid_plural "{n} scheduled payments use this account."
+msgstr[0] "{n} pago programado usa esta cuenta."
+msgstr[1] "{n} pagos programados usan esta cuenta."

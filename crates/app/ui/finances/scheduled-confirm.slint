@@ -1,0 +1,156 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkDatePopup } from "../ink-date-popup.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { FinanceStore } from "finance-store.slint";
+import { ScheduledRow } from "scheduled-row.slint";
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component ConfirmBody inherits FocusScope {
+    in property <ScheduledRow> due;
+    in-out property <Date> date;
+    in-out property <string> amount;
+    callback save(Date, string) -> string;
+    callback cancel;
+
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.date, root.amount);
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: @tr("Confirm payment");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        Text {
+            text: root.due.description != "" ? root.due.description : Strings.tx-kind(root.due.kind);
+            color: Theme.muted;
+            overflow: elide;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            InkField {
+                text <=> root.amount;
+                placeholder-text: @tr("Amount");
+                init => {
+                    self.focus();
+                }
+                accepted(text) => {
+                    root.submit();
+                }
+            }
+
+            Text {
+                text: root.due.currency;
+                color: Theme.muted;
+                vertical-alignment: center;
+            }
+        }
+
+        HorizontalLayout {
+            height: 36px;
+            spacing: 8px;
+            alignment: start;
+            Text {
+                text: @tr("Date");
+                color: Theme.muted;
+                vertical-alignment: center;
+            }
+
+            picker := InkDatePopup {
+                y: 36px;
+                day: root.date.day;
+                month: root.date.month;
+                year: root.date.year;
+                picked(date) => {
+                    root.date = date;
+                }
+            }
+
+            SubtleButton {
+                text: Strings.date(root.date.day, root.date.month, root.date.year);
+                icon: @image-url("../icons/calendar.svg");
+                color: Palette.foreground;
+                clicked => {
+                    picker.show();
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Confirm");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+}
+
+// Records the next occurrence of a scheduled payment as a movement, on the date and for the
+// amount the user confirms. Closing by clicking outside discards it.
+export component ScheduledConfirm inherits PopupWindow {
+    // Set by the opener before show(): the occurrence and today.
+    in property <ScheduledRow> due;
+    in property <Date> today;
+
+    close-policy: close-on-click-outside;
+    width: 360px;
+
+    PopupSurface {
+        ConfirmBody {
+            due: root.due;
+            date: root.today;
+            amount: root.due.input;
+            save(date, amount) => {
+                let error = FinanceStore.confirm-scheduled(root.due.id, date, amount);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

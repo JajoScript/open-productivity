@@ -35,6 +35,10 @@ pub(super) fn ui_kind(k: CoreKind) -> TxKind {
 
 fn tx_row(t: Transaction, main: &Currency) -> Result<TransactionRow, String> {
     let style = style();
+    let installment = match t.scheduled.as_ref().and_then(|s| s.installment) {
+        Some((n, total)) => Some((ui_id(n)?, ui_id(total)?)),
+        None => None,
+    };
     Ok(TransactionRow {
         id: ui_id(t.id.0)?,
         kind: ui_kind(t.kind),
@@ -53,6 +57,9 @@ fn tx_row(t: Transaction, main: &Currency) -> Result<TransactionRow, String> {
         description: t.description.clone().into(),
         amount: finances::format_in(t.signed(), t.currency, main, style).into(),
         input: finances::format_input(t.amount, t.currency, style).into(),
+        restorable: t.scheduled.as_ref().is_some_and(|s| s.restorable),
+        installment_number: installment.map_or(0, |i| i.0),
+        installment_total: installment.map_or(0, |i| i.1),
     })
 }
 
@@ -90,6 +97,9 @@ fn transfer_row(t: Transfer, main: &Currency) -> Result<TransactionRow, String> 
         description: t.description.into(),
         amount: amount.into(),
         input: finances::format_input(t.amount, t.currency, style).into(),
+        restorable: false,
+        installment_number: 0,
+        installment_total: 0,
     })
 }
 
@@ -116,7 +126,7 @@ impl State {
     }
 
     /// Runs a save with the picked date; a date the picker cannot produce is an error, never "today".
-    fn with_date(
+    pub(super) fn with_date(
         &self,
         date: Date,
         op: impl FnOnce(NaiveDate) -> Result<(), FinanceError>,
@@ -206,10 +216,11 @@ pub fn connect(state: &Rc<State>, store: &FinanceStore<'_>) {
 
     store.on_delete_transaction({
         let state = state.clone();
-        move |id| {
+        move |id, restore| {
             state.finish(finances::delete_transaction(
                 &state.conn,
                 TransactionId(id.into()),
+                restore,
             ))
         }
     });

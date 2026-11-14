@@ -1,0 +1,442 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette, ScrollView } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkDatePopup } from "../ink-date-popup.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { ChoiceRow } from "../study/session-logger.slint";
+import { Theme } from "../theme.slint";
+import { FinanceStore } from "finance-store.slint";
+import { ScheduleForm, ScheduledRow } from "scheduled-row.slint";
+import { TxKind } from "transaction-row.slint";
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component ScheduledBody inherits FocusScope {
+    in property <bool> editing;
+    // The payment being edited, or the blank one; its account stays pickable even if archived.
+    in property <ScheduledRow> due;
+    in-out property <TxKind> kind;
+    in-out property <int> account-id;
+    in-out property <string> currency;
+    in-out property <bool> has-category;
+    in-out property <int> category-id;
+    in-out property <string> amount;
+    in-out property <string> description;
+    in-out property <Date> date;
+    in-out property <ScheduleForm> form;
+    in-out property <string> installments;
+    callback save(TxKind, int, bool, int, string, string, Date, ScheduleForm, string) -> string;
+    callback delete() -> string;
+    callback cancel;
+
+    property <string> error;
+    property <bool> recurring: root.form == ScheduleForm.weekly || root.form == ScheduleForm.monthly || root.form == ScheduleForm.yearly;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.kind, root.account-id, root.has-category, root.category-id, root.amount, root.description, root.date, root.form, root.installments);
+    }
+
+    function set-kind(kind: TxKind) {
+        if root.kind != kind {
+            root.has-category = false;
+        }
+        root.kind = kind;
+    }
+
+    function set-recurring() {
+        if !root.recurring {
+            root.form = ScheduleForm.monthly;
+        }
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 10px;
+        Text {
+            text: root.editing ? @tr("Edit scheduled payment") : @tr("New scheduled payment");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        // The kind of a saved payment does not change.
+        if !root.editing: HorizontalLayout {
+            spacing: 0px;
+            alignment: start;
+            accessible-role: tab-list;
+            SettingsTab {
+                text: Strings.tx-kind(TxKind.expense);
+                selected: root.kind == TxKind.expense;
+                chosen => {
+                    root.set-kind(TxKind.expense);
+                }
+                step(d) => {
+                    if d > 0 {
+                        root.set-kind(TxKind.income);
+                    }
+                }
+            }
+
+            SettingsTab {
+                text: Strings.tx-kind(TxKind.income);
+                selected: root.kind == TxKind.income;
+                chosen => {
+                    root.set-kind(TxKind.income);
+                }
+                step(d) => {
+                    if d < 0 {
+                        root.set-kind(TxKind.expense);
+                    }
+                }
+            }
+        }
+
+        // The form of a saved payment is fixed; only a recurring one changes its frequency.
+        if !root.editing: HorizontalLayout {
+            spacing: 0px;
+            alignment: start;
+            accessible-role: tab-list;
+            SettingsTab {
+                text: @tr("One-time");
+                selected: root.form == ScheduleForm.once;
+                chosen => {
+                    root.form = ScheduleForm.once;
+                }
+                step(d) => {
+                    if d > 0 {
+                        root.set-recurring();
+                    }
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Recurring");
+                selected: root.recurring;
+                chosen => {
+                    root.set-recurring();
+                }
+                step(d) => {
+                    root.form = d < 0 ? ScheduleForm.once : ScheduleForm.installments;
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Installments");
+                selected: root.form == ScheduleForm.installments;
+                chosen => {
+                    root.form = ScheduleForm.installments;
+                }
+                step(d) => {
+                    if d < 0 {
+                        root.set-recurring();
+                    }
+                }
+            }
+        }
+
+        if root.recurring: HorizontalLayout {
+            spacing: 0px;
+            alignment: start;
+            accessible-role: tab-list;
+            SettingsTab {
+                text: Strings.schedule-form(ScheduleForm.weekly, 0, 0);
+                selected: root.form == ScheduleForm.weekly;
+                chosen => {
+                    root.form = ScheduleForm.weekly;
+                }
+                step(d) => {
+                    if d > 0 {
+                        root.form = ScheduleForm.monthly;
+                    }
+                }
+            }
+
+            SettingsTab {
+                text: Strings.schedule-form(ScheduleForm.monthly, 0, 0);
+                selected: root.form == ScheduleForm.monthly;
+                chosen => {
+                    root.form = ScheduleForm.monthly;
+                }
+                step(d) => {
+                    root.form = d < 0 ? ScheduleForm.weekly : ScheduleForm.yearly;
+                }
+            }
+
+            SettingsTab {
+                text: Strings.schedule-form(ScheduleForm.yearly, 0, 0);
+                selected: root.form == ScheduleForm.yearly;
+                chosen => {
+                    root.form = ScheduleForm.yearly;
+                }
+                step(d) => {
+                    if d < 0 {
+                        root.form = ScheduleForm.monthly;
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: @tr("Account");
+            color: Theme.muted;
+        }
+
+        ScrollView {
+            height: min(account-list.preferred-height, 96px);
+            account-list := VerticalLayout {
+                for account in FinanceStore.accounts: ChoiceRow {
+                    label: account.name;
+                    icon: @image-url("../icons/wallet.svg");
+                    chosen: account.id == root.account-id;
+                    picked => {
+                        root.account-id = account.id;
+                        root.currency = account.currency;
+                    }
+                }
+
+                // The archived account the payment already has stays pickable.
+                for account in FinanceStore.archived-accounts: VerticalLayout {
+                    if account.id == root.due.account-id: ChoiceRow {
+                        label: Strings.archived-account(account.name);
+                        icon: @image-url("../icons/wallet.svg");
+                        chosen: account.id == root.account-id;
+                        picked => {
+                            root.account-id = account.id;
+                            root.currency = account.currency;
+                        }
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: @tr("Category");
+            color: Theme.muted;
+        }
+
+        ScrollView {
+            height: 96px;
+            VerticalLayout {
+                ChoiceRow {
+                    label: @tr("No category");
+                    icon: @image-url("../icons/x.svg");
+                    chosen: !root.has-category;
+                    picked => {
+                        root.has-category = false;
+                    }
+                }
+
+                // Those of the kind, and the archived one the payment already has.
+                for c in FinanceStore.category-choices: VerticalLayout {
+                    if c.kind == root.kind && (!c.archived || (root.has-category && c.id == root.category-id)): ChoiceRow {
+                        label: c.archived ? Strings.archived-category(c.name) : c.name;
+                        icon: @image-url("../icons/tag.svg");
+                        chosen: root.has-category && c.id == root.category-id;
+                        picked => {
+                            root.has-category = true;
+                            root.category-id = c.id;
+                        }
+                    }
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            InkField {
+                text <=> root.amount;
+                placeholder-text: @tr("Amount");
+                init => {
+                    self.focus();
+                }
+                accepted(text) => {
+                    root.submit();
+                }
+            }
+
+            Text {
+                text: root.currency;
+                color: Theme.muted;
+                vertical-alignment: center;
+            }
+        }
+
+        if root.form == ScheduleForm.installments && !root.editing: InkField {
+            text <=> root.installments;
+            placeholder-text: @tr("Number of installments (2 or more)");
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        HorizontalLayout {
+            height: 36px;
+            spacing: 8px;
+            alignment: start;
+            Text {
+                text: root.editing ? @tr("Next date") : @tr("First date");
+                color: Theme.muted;
+                vertical-alignment: center;
+            }
+
+            picker := InkDatePopup {
+                y: 36px;
+                day: root.date.day;
+                month: root.date.month;
+                year: root.date.year;
+                picked(date) => {
+                    root.date = date;
+                }
+            }
+
+            SubtleButton {
+                text: Strings.date(root.date.day, root.date.month, root.date.year);
+                icon: @image-url("../icons/calendar.svg");
+                color: Palette.foreground;
+                clicked => {
+                    picker.show();
+                }
+            }
+        }
+
+        InkField {
+            text <=> root.description;
+            placeholder-text: @tr("Description (optional)");
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            if root.editing: SubtleButton {
+                text: @tr("Delete");
+                color: Palette.foreground;
+                clicked => {
+                    confirm.show();
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: root.editing ? @tr("Save") : @tr("Create");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+
+    confirm := PopupWindow {
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        width: 320px;
+        PopupSurface {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: Strings.delete-scheduled-question(root.description != "" ? root.description : Strings.tx-kind(root.kind));
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Cancel");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            confirm.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Delete");
+                        clicked => {
+                            confirm.close();
+                            root.error = root.delete();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Creates a scheduled payment or edits one, depending on how it is opened. Closing by clicking
+// outside discards it.
+export component ScheduledCreator inherits PopupWindow {
+    // Set by the opener before show().
+    in property <bool> editing;
+    in property <ScheduledRow> due;
+
+    close-policy: close-on-click-outside;
+    width: 400px;
+
+    PopupSurface {
+        ScheduledBody {
+            editing: root.editing;
+            due: root.due;
+            kind: root.due.kind;
+            account-id: root.due.account-id;
+            currency: root.due.currency;
+            has-category: root.due.has-category;
+            category-id: root.due.category-id;
+            amount: root.due.input;
+            description: root.due.description;
+            date: root.due.next-date;
+            form: root.due.form;
+            installments: "";
+            save(kind, account, has-category, category, amount, description, date, form, installments) => {
+                let error = root.editing ? FinanceStore.update-scheduled(root.due.id, account, has-category, category, amount, description, date, form) : FinanceStore.create-scheduled(kind, account, has-category, category, amount, description, date, form, installments);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            delete => {
+                let error = FinanceStore.delete-scheduled(root.due.id);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

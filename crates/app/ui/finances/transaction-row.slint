@@ -5,7 +5,7 @@ import { Date } from "std-widgets.slint";
 
 export enum TxKind { expense, income }
 
-export enum FinanceTab { summary, movements, accounts, categories }
+export enum FinanceTab { summary, movements, due, accounts, categories }
 
 // `amount` arrives signed (not for a transfer) and formatted for display; `input` formatted for the edit field.
 export struct TransactionRow {
@@ -30,4 +30,9 @@ export struct TransactionRow {
     description: string,
     amount: string,
     input: string,
+    // Came from a scheduled payment that deleting it can return to the schedule.
+    restorable: bool,
+    // For an installment: its number and the total; 0 otherwise.
+    installment-number: int,
+    installment-total: int,
 }

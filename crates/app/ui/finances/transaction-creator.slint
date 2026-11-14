@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JajoScript
 
 import { Date, Palette, ScrollView } from "std-widgets.slint";
+import { InkCheck } from "../ink-check.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkDatePopup } from "../ink-date-popup.slint";
 import { InkField } from "../ink-field.slint";
@@ -40,11 +41,17 @@ component CreatorBody inherits FocusScope {
     in-out property <string> to-amount;
     in-out property <Date> date;
     in-out property <string> description;
+    // The movement came from a scheduled payment that deleting it can return to the schedule;
+    // `number` and `total` tell the installment, 0 for a one-time payment.
+    in property <bool> restorable;
+    in property <int> installment-number;
+    in property <int> installment-total;
     callback save(bool, TxKind, int, int, bool, int, string, string, Date, string) -> string;
-    callback delete() -> string;
+    callback delete(bool) -> string;
     callback cancel;
 
     property <string> error;
+    property <bool> restore;
 
     capture-key-pressed(event) => {
         if event.text == Key.Escape {
@@ -353,6 +360,24 @@ component CreatorBody inherits FocusScope {
                     wrap: word-wrap;
                 }
 
+                if root.restorable: HorizontalLayout {
+                    spacing: 4px;
+                    InkCheck {
+                        checked: root.restore;
+                        label: restore-text.text;
+                        toggled(on) => {
+                            root.restore = on;
+                        }
+                    }
+
+                    restore-text := Text {
+                        text: root.installment-total > 0 ? Strings.restore-installment(root.installment-number, root.installment-total) : @tr("Also mark the scheduled payment as pending again");
+                        wrap: word-wrap;
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                    }
+                }
+
                 HorizontalLayout {
                     spacing: 8px;
                     alignment: end;
@@ -371,7 +396,7 @@ component CreatorBody inherits FocusScope {
                         text: @tr("Delete");
                         clicked => {
                             confirm.close();
-                            root.error = root.delete();
+                            root.error = root.delete(root.restorable && root.restore);
                         }
                     }
                 }
@@ -399,6 +424,9 @@ export component TransactionCreator inherits PopupWindow {
     in property <string> tx-amount-label;
     in property <Date> tx-date;
     in property <string> tx-description;
+    in property <bool> tx-restorable;
+    in property <int> tx-installment-number;
+    in property <int> tx-installment-total;
 
     close-policy: close-on-click-outside;
     width: 400px;
@@ -422,6 +450,9 @@ export component TransactionCreator inherits PopupWindow {
             to-amount: root.tx-to-amount;
             date: root.tx-date;
             description: root.tx-description;
+            restorable: root.tx-restorable;
+            installment-number: root.tx-installment-number;
+            installment-total: root.tx-installment-total;
             save(transfer, kind, account, to-account, has-category, category, amount, to-amount, date, description) => {
                 let error = transfer ? (root.editing ? FinanceStore.update-transfer(root.tx-id, account, to-account, amount, to-amount, date, description) : FinanceStore.create-transfer(account, to-account, amount, to-amount, date, description)) : (root.editing ? FinanceStore.update-transaction(root.tx-id, kind, account, has-category, category, amount, date, description) : FinanceStore.create-transaction(kind, account, has-category, category, amount, date, description));
                 if error == "" {
@@ -429,8 +460,8 @@ export component TransactionCreator inherits PopupWindow {
                 }
                 return error;
             }
-            delete => {
-                let error = FinanceStore.delete-transaction(root.tx-id);
+            delete(restore) => {
+                let error = FinanceStore.delete-transaction(root.tx-id, restore);
                 if error == "" {
                     root.close();
                 }

@@ -14,6 +14,8 @@ import { CategoryRow } from "category-row.slint";
 import { FinanceStore } from "finance-store.slint";
 import { FinanceTab, TransactionRow } from "transaction-row.slint";
 import { SummaryTab } from "summary-tab.slint";
+import { DueTab } from "due-tab.slint";
+import { ScheduledRow } from "scheduled-row.slint";
 import { TransactionsTab } from "transactions-tab.slint";
 
 // First use: the main currency has no default, the user chooses it once.
@@ -113,6 +115,9 @@ export component FinancesView inherits VerticalLayout {
     callback edit-account(AccountRow);
     callback new-transaction();
     callback edit-transaction(TransactionRow);
+    callback new-scheduled();
+    callback edit-scheduled(ScheduledRow);
+    callback confirm-scheduled(ScheduledRow);
     callback new-category();
     callback edit-category(CategoryRow);
     callback edit-rates();
@@ -163,7 +168,18 @@ export component FinancesView inherits VerticalLayout {
                     root.choose(FinanceTab.movements);
                 }
                 step(d) => {
-                    root.choose(d < 0 ? FinanceTab.summary : FinanceTab.accounts);
+                    root.choose(d < 0 ? FinanceTab.summary : FinanceTab.due);
+                }
+            }
+
+            SettingsTab {
+                text: @tr("To pay");
+                selected: FinanceStore.tab == FinanceTab.due;
+                chosen => {
+                    root.choose(FinanceTab.due);
+                }
+                step(d) => {
+                    root.choose(d < 0 ? FinanceTab.movements : FinanceTab.accounts);
                 }
             }
 
@@ -174,7 +190,7 @@ export component FinancesView inherits VerticalLayout {
                     root.choose(FinanceTab.accounts);
                 }
                 step(d) => {
-                    root.choose(d < 0 ? FinanceTab.movements : FinanceTab.categories);
+                    root.choose(d < 0 ? FinanceTab.due : FinanceTab.categories);
                 }
             }
 
@@ -201,6 +217,13 @@ export component FinancesView inherits VerticalLayout {
             text: @tr("New movement");
             clicked => {
                 root.new-transaction();
+            }
+        }
+
+        if FinanceStore.tab == FinanceTab.due && FinanceStore.accounts.length > 0: InkButton {
+            text: @tr("New scheduled payment");
+            clicked => {
+                root.new-scheduled();
             }
         }
 
@@ -257,6 +280,19 @@ export component FinancesView inherits VerticalLayout {
         }
         edit-transaction(t) => {
             root.edit-transaction(t);
+        }
+    }
+
+    if FinanceStore.has-currency && FinanceStore.tab == FinanceTab.due: DueTab {
+        vertical-stretch: 1;
+        new-account => {
+            root.new-account();
+        }
+        edit-scheduled(d) => {
+            root.edit-scheduled(d);
+        }
+        confirm-scheduled(d) => {
+            root.confirm-scheduled(d);
         }
     }
 
