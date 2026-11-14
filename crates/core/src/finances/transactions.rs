@@ -169,7 +169,8 @@ pub fn delete_transaction(conn: &Connection, id: TransactionId) -> Result<(), Fi
 
 pub(super) const SELECT: &str =
     "SELECT t.id, t.kind, t.account_id, a.name, a.currency, t.amount, t.date,
-    t.description, t.category_id, c.name, t.to_account_id, b.name FROM finance_transaction t
+    t.description, t.category_id, c.name, t.to_account_id, b.name, t.to_amount, b.currency
+    FROM finance_transaction t
     JOIN finance_account a ON a.id = t.account_id
     LEFT JOIN finance_account b ON b.id = t.to_account_id
     LEFT JOIN finance_category c ON c.id = t.category_id";

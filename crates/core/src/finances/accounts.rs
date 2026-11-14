@@ -7,6 +7,7 @@ use rusqlite::Connection;
 
 use super::FinanceError;
 use super::money::{Currency, currency, parse_amount};
+use super::rates::ensure_rate;
 use crate::instance_settings;
 
 const MAIN_CURRENCY_KEY: &str = "finance.main_currency";
@@ -87,40 +88,67 @@ fn validate<'a>(
     Ok((name, bank.trim(), amount))
 }
 
-/// The account is born in the main currency.
+fn pick_currency(code: &str) -> Result<&'static Currency, FinanceError> {
+    currency(code).ok_or_else(|| FinanceError::UnknownCurrency(code.to_string()))
+}
+
+/// `currency` is any code of the list. A non-main currency without a rate yet needs `rate`,
+/// which is saved in the same transaction as the account.
 pub fn create_account(
     conn: &Connection,
     name: &str,
     kind: AccountKind,
     bank: &str,
+    currency: &str,
     initial_balance: &str,
+    rate: Option<&str>,
 ) -> Result<AccountId, FinanceError> {
-    let c = main_currency(conn)?.ok_or(FinanceError::NoMainCurrency)?;
+    let main = main_currency(conn)?.ok_or(FinanceError::NoMainCurrency)?;
+    let c = pick_currency(currency)?;
     let (name, bank, amount) = validate(name, bank, initial_balance, c)?;
-    conn.execute(
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
         "INSERT INTO finance_account (name, kind, bank, currency, initial_balance)
          VALUES (?1, ?2, ?3, ?4, ?5)",
         (name, kind.as_str(), bank, c.code, amount),
     )?;
-    Ok(AccountId(conn.last_insert_rowid()))
+    let id = AccountId(tx.last_insert_rowid());
+    ensure_rate(&tx, main, c, rate)?;
+    tx.commit()?;
+    Ok(id)
 }
 
-/// The currency never changes; the amount is read in the account's currency.
+/// The currency can change only while the account has no movements; the amount is read in it.
+// One argument per field the form edits; a struct would only move the list.
+#[allow(clippy::too_many_arguments)]
 pub fn update_account(
     conn: &Connection,
     id: AccountId,
     name: &str,
     kind: AccountKind,
     bank: &str,
+    currency: &str,
     initial_balance: &str,
+    rate: Option<&str>,
 ) -> Result<(), FinanceError> {
-    let c = get_account(conn, id)?.currency;
+    let main = main_currency(conn)?.ok_or(FinanceError::NoMainCurrency)?;
+    let current = get_account(conn, id)?;
+    let c = pick_currency(currency)?;
+    if c.code != current.currency.code && current.in_use {
+        return Err(FinanceError::CurrencyLocked);
+    }
     let (name, bank, amount) = validate(name, bank, initial_balance, c)?;
-    conn.execute(
-        "UPDATE finance_account SET name = ?1, kind = ?2, bank = ?3, initial_balance = ?4
-         WHERE id = ?5",
-        (name, kind.as_str(), bank, amount, id.0),
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "UPDATE finance_account
+         SET name = ?1, kind = ?2, bank = ?3, currency = ?4, initial_balance = ?5
+         WHERE id = ?6",
+        (name, kind.as_str(), bank, c.code, amount, id.0),
     )?;
+    if c.code != current.currency.code {
+        ensure_rate(&tx, main, c, rate)?;
+    }
+    tx.commit()?;
     Ok(())
 }
 
@@ -128,7 +156,7 @@ pub fn update_account(
 const SELECT: &str = "SELECT a.id, a.name, a.kind, a.bank, a.currency, a.initial_balance,
     a.initial_balance + coalesce((SELECT sum(CASE WHEN t.account_id = a.id
             THEN CASE t.kind WHEN 'income' THEN t.amount ELSE -t.amount END
-            ELSE t.amount END)
+            ELSE coalesce(t.to_amount, t.amount) END)
         FROM finance_transaction t WHERE t.account_id = a.id OR t.to_account_id = a.id), 0)
         AS balance, a.archived,
     EXISTS (SELECT 1 FROM finance_transaction t WHERE t.account_id = a.id OR t.to_account_id = a.id)

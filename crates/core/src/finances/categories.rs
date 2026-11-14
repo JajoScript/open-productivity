@@ -7,6 +7,8 @@ use chrono::{Months, NaiveDate};
 use rusqlite::Connection;
 
 use super::FinanceError;
+use super::money::currency;
+use super::rates::load_rates;
 use super::transactions::TxKind;
 use crate::calendar::month_start;
 
@@ -199,10 +201,9 @@ pub fn create_suggested(
     Ok(())
 }
 
-/// Sum of the month's movements of `kind` by category, biggest first; only categories with
-/// movements appear.
-// shortcut: sums amounts as they are, as every account is in the main currency today; convert
-// with the exchange rates when other currencies arrive (slice 6).
+/// Sum of the month's movements of `kind` by category, biggest first, in the main currency;
+/// only categories with movements appear. Each amount converts from its account's currency
+/// before adding (saturating).
 pub fn category_totals(
     conn: &Connection,
     month: NaiveDate,
@@ -212,11 +213,13 @@ pub fn category_totals(
     let Some(to) = from.checked_add_months(Months::new(1)) else {
         return Ok(Vec::new());
     };
+    let rates = load_rates(conn)?;
     let mut stmt = conn.prepare(
-        "SELECT t.category_id, c.name, SUM(t.amount) AS total
-         FROM finance_transaction t LEFT JOIN finance_category c ON c.id = t.category_id
-         WHERE t.date >= ?1 AND t.date < ?2 AND t.kind = ?3
-         GROUP BY t.category_id ORDER BY total DESC, lower(c.name), t.category_id",
+        "SELECT t.category_id, c.name, a.currency, t.amount
+         FROM finance_transaction t
+         JOIN finance_account a ON a.id = t.account_id
+         LEFT JOIN finance_category c ON c.id = t.category_id
+         WHERE t.date >= ?1 AND t.date < ?2 AND t.kind = ?3",
     )?;
     let rows = stmt.query_map(
         (
@@ -225,12 +228,35 @@ pub fn category_totals(
             kind.as_str(),
         ),
         |r| {
-            Ok(CategoryTotal {
-                category: r.get::<_, Option<i64>>(0)?.map(CategoryId),
-                name: r.get(1)?,
-                total: r.get(2)?,
-            })
+            Ok((
+                r.get::<_, Option<i64>>(0)?,
+                r.get::<_, Option<String>>(1)?,
+                r.get::<_, String>(2)?,
+                r.get::<_, i64>(3)?,
+            ))
         },
     )?;
-    Ok(rows.collect::<Result<_, _>>()?)
+    let mut totals: Vec<CategoryTotal> = Vec::new();
+    for row in rows {
+        let (category, name, code, amount) = row?;
+        let c = currency(&code).ok_or(FinanceError::UnknownCurrency(code))?;
+        let amount = rates.to_main(amount, c)?;
+        let category = category.map(CategoryId);
+        match totals.iter_mut().find(|t| t.category == category) {
+            Some(t) => t.total = t.total.saturating_add(amount),
+            None => totals.push(CategoryTotal {
+                category,
+                name,
+                total: amount,
+            }),
+        }
+    }
+    totals.sort_by_cached_key(|t| {
+        (
+            std::cmp::Reverse(t.total),
+            t.name.as_ref().map(|n| n.to_lowercase()),
+            t.category.map(|c| c.0),
+        )
+    });
+    Ok(totals)
 }

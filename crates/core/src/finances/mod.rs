@@ -1,18 +1,21 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-//! Finances: accounts and their balance, in the instance's main currency.
+//! Finances: accounts, movements, categories, exchange rates and the month summary.
 
 use std::fmt;
 
 mod accounts;
 mod categories;
 mod money;
+mod rates;
 mod summary;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod tests_categories;
+#[cfg(test)]
+mod tests_currencies;
 #[cfg(test)]
 mod tests_summary;
 #[cfg(test)]
@@ -25,6 +28,7 @@ mod transfers;
 pub use accounts::*;
 pub use categories::*;
 pub use money::*;
+pub use rates::*;
 pub use summary::*;
 pub use transactions::*;
 pub use transfers::*;
@@ -61,6 +65,12 @@ pub enum FinanceError {
     AccountInUse,
     /// An archived account cannot be newly used by a movement.
     AccountArchived,
+    /// A non-main currency needs its exchange rate to the main one.
+    MissingRate(String),
+    /// The rate is malformed, not positive, too large or for the main currency.
+    InvalidRate,
+    /// The account has movements, so its currency cannot change.
+    CurrencyLocked,
     Sqlite(rusqlite::Error),
 }
 
@@ -85,6 +95,9 @@ impl fmt::Display for FinanceError {
             FinanceError::SameAccount => write!(f, "the accounts are the same"),
             FinanceError::AccountInUse => write!(f, "the account is in use"),
             FinanceError::AccountArchived => write!(f, "the account is archived"),
+            FinanceError::MissingRate(c) => write!(f, "missing exchange rate for {c}"),
+            FinanceError::InvalidRate => write!(f, "the exchange rate is not valid"),
+            FinanceError::CurrencyLocked => write!(f, "the account's currency is locked"),
             FinanceError::Sqlite(e) => write!(f, "database error: {e}"),
         }
     }

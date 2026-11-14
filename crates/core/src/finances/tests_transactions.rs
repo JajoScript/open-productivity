@@ -5,6 +5,7 @@
 
 use chrono::NaiveDate;
 
+use super::tests::account;
 use super::*;
 use crate::db;
 
@@ -15,7 +16,7 @@ fn d(s: &str) -> NaiveDate {
 fn setup(code: &str) -> (rusqlite::Connection, AccountId) {
     let conn = db::test_conn();
     set_main_currency(&conn, code).unwrap();
-    let a = create_account(&conn, "A", AccountKind::Cash, "", "1000").unwrap();
+    let a = account(&conn, "A", AccountKind::Cash, "", "1000").unwrap();
     (conn, a)
 }
 
@@ -90,7 +91,7 @@ fn usd_amounts_and_future_dates() {
 #[test]
 fn update_recalculates_both_accounts() {
     let (conn, a) = setup("CLP");
-    let b = create_account(&conn, "B", AccountKind::Cash, "", "50").unwrap();
+    let b = account(&conn, "B", AccountKind::Cash, "", "50").unwrap();
     let id =
         create_transaction(&conn, TxKind::Expense, a, "100", d("2026-03-05"), "x", None).unwrap();
     update_transaction(

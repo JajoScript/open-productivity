@@ -6,6 +6,7 @@
 use chrono::NaiveDate;
 use rusqlite::Connection;
 
+use super::tests::account;
 use super::*;
 use crate::db;
 
@@ -16,7 +17,7 @@ fn d(s: &str) -> NaiveDate {
 fn setup() -> (Connection, AccountId) {
     let conn = db::test_conn();
     set_main_currency(&conn, "CLP").unwrap();
-    let a = create_account(&conn, "A", AccountKind::Cash, "", "1000").unwrap();
+    let a = account(&conn, "A", AccountKind::Cash, "", "1000").unwrap();
     (conn, a)
 }
 

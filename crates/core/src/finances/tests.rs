@@ -12,6 +12,18 @@ fn conn_with(code: &str) -> rusqlite::Connection {
     conn
 }
 
+/// An account in the main currency.
+pub(super) fn account(
+    conn: &rusqlite::Connection,
+    name: &str,
+    kind: AccountKind,
+    bank: &str,
+    balance: &str,
+) -> Result<AccountId, FinanceError> {
+    let main = main_currency(conn)?.map_or("", |c| c.code);
+    create_account(conn, name, kind, bank, main, balance, None)
+}
+
 #[test]
 fn migration_creates_table() {
     let conn = db::test_conn();
@@ -39,17 +51,17 @@ fn main_currency_set_and_unknown() {
 fn create_requires_main_currency_name_and_amount() {
     let conn = db::test_conn();
     assert!(matches!(
-        create_account(&conn, "A", AccountKind::Cash, "", "0"),
+        account(&conn, "A", AccountKind::Cash, "", "0"),
         Err(FinanceError::NoMainCurrency)
     ));
     set_main_currency(&conn, "USD").unwrap();
     assert!(matches!(
-        create_account(&conn, "  ", AccountKind::Cash, "", "0"),
+        account(&conn, "  ", AccountKind::Cash, "", "0"),
         Err(FinanceError::EmptyName)
     ));
     for bad in ["", "x", "-1", "1.2.3"] {
         assert!(matches!(
-            create_account(&conn, "A", AccountKind::Cash, "", bad),
+            account(&conn, "A", AccountKind::Cash, "", bad),
             Err(FinanceError::InvalidAmount)
         ));
     }
@@ -59,7 +71,7 @@ fn create_requires_main_currency_name_and_amount() {
 #[test]
 fn create_trims_and_uses_main_currency() {
     let conn = conn_with("USD");
-    let id = create_account(
+    let id = account(
         &conn,
         "  Main ",
         AccountKind::Checking,
@@ -73,15 +85,15 @@ fn create_trims_and_uses_main_currency() {
     assert_eq!(a.kind, AccountKind::Checking);
     assert_eq!(a.currency.code, "USD");
     assert_eq!((a.initial_balance, a.balance), (123450, 123450));
-    let z = create_account(&conn, "Zero", AccountKind::Cash, "", "0").unwrap();
+    let z = account(&conn, "Zero", AccountKind::Cash, "", "0").unwrap();
     assert_eq!(get_account(&conn, z).unwrap().balance, 0);
 }
 
 #[test]
 fn list_in_creation_order() {
     let conn = conn_with("CLP");
-    let b = create_account(&conn, "B", AccountKind::Savings, "", "1").unwrap();
-    let a = create_account(&conn, "A", AccountKind::Demand, "", "2").unwrap();
+    let b = account(&conn, "B", AccountKind::Savings, "", "1").unwrap();
+    let a = account(&conn, "A", AccountKind::Demand, "", "2").unwrap();
     let ids: Vec<_> = list_accounts(&conn).unwrap().iter().map(|x| x.id).collect();
     assert_eq!(ids, [b, a]);
 }
@@ -89,9 +101,19 @@ fn list_in_creation_order() {
 #[test]
 fn update_keeps_currency_and_validates() {
     let conn = conn_with("CLP");
-    let id = create_account(&conn, "A", AccountKind::Cash, "", "100").unwrap();
+    let id = account(&conn, "A", AccountKind::Cash, "", "100").unwrap();
     set_main_currency(&conn, "USD").unwrap();
-    update_account(&conn, id, " New ", AccountKind::Savings, "B", "17.062").unwrap();
+    update_account(
+        &conn,
+        id,
+        " New ",
+        AccountKind::Savings,
+        "B",
+        "CLP",
+        "17.062",
+        None,
+    )
+    .unwrap();
     let a = get_account(&conn, id).unwrap();
     assert_eq!(
         (a.name.as_str(), a.kind, a.bank.as_str()),
@@ -99,15 +121,24 @@ fn update_keeps_currency_and_validates() {
     );
     assert_eq!((a.currency.code, a.initial_balance), ("CLP", 17062));
     assert!(matches!(
-        update_account(&conn, id, "", AccountKind::Cash, "", "1"),
+        update_account(&conn, id, "", AccountKind::Cash, "", "CLP", "1", None),
         Err(FinanceError::EmptyName)
     ));
     assert!(matches!(
-        update_account(&conn, id, "A", AccountKind::Cash, "", "1,5"),
+        update_account(&conn, id, "A", AccountKind::Cash, "", "CLP", "1,5", None),
         Err(FinanceError::InvalidAmount)
     ));
     assert!(matches!(
-        update_account(&conn, AccountId(99), "A", AccountKind::Cash, "", "1"),
+        update_account(
+            &conn,
+            AccountId(99),
+            "A",
+            AccountKind::Cash,
+            "",
+            "CLP",
+            "1",
+            None
+        ),
         Err(FinanceError::AccountNotFound)
     ));
     assert!(matches!(
@@ -119,7 +150,7 @@ fn update_keeps_currency_and_validates() {
 #[test]
 fn unknown_stored_values_are_errors() {
     let conn = conn_with("CLP");
-    let id = create_account(&conn, "A", AccountKind::Cash, "", "1").unwrap();
+    let id = account(&conn, "A", AccountKind::Cash, "", "1").unwrap();
     conn.execute("UPDATE finance_account SET currency = 'ZZZ'", [])
         .unwrap();
     assert!(matches!(

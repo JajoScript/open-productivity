@@ -9,6 +9,8 @@ use rusqlite::{Connection, ToSql};
 
 use super::FinanceError;
 use super::categories::{CategoryId, category_totals};
+use super::money::{Rates, currency};
+use super::rates::{list_rates, load_rates};
 use super::transactions::{DATE_FORMAT, Movement, SELECT, TxKind, row};
 use crate::calendar::month_start;
 
@@ -51,49 +53,71 @@ pub struct MonthSummary {
     pub by_category: Vec<CategoryBar>,
     /// The newest movements of the month.
     pub recent: Vec<Movement>,
+    /// Some account is in a non-main currency, so the totals depend on the exchange rates.
+    pub uses_rates: bool,
 }
 
 fn text(d: NaiveDate) -> String {
     d.format(DATE_FORMAT).to_string()
 }
 
-/// Adds the first column of every row, saturating (SQL's own SUM would fail on overflow).
-fn sum(conn: &Connection, sql: &str, params: &[&dyn ToSql]) -> Result<i64, FinanceError> {
+/// Converts to the main currency the amount (first column) of every row, by the currency code
+/// (second column), and adds them, saturating (SQL's own SUM would fail on overflow).
+fn sum(
+    conn: &Connection,
+    rates: &Rates,
+    sql: &str,
+    params: &[&dyn ToSql],
+) -> Result<i64, FinanceError> {
     let mut stmt = conn.prepare(sql)?;
-    let rows = stmt.query_map(params, |r| r.get::<_, i64>(0))?;
+    let rows = stmt.query_map(params, |r| {
+        Ok((r.get::<_, i64>(0)?, r.get::<_, String>(1)?))
+    })?;
     let mut total = 0i64;
-    for amount in rows {
-        total = total.saturating_add(amount?);
+    for row in rows {
+        let (amount, code) = row?;
+        let c = currency(&code).ok_or(FinanceError::UnknownCurrency(code))?;
+        total = total.saturating_add(rates.to_main(amount, c)?);
     }
     Ok(total)
 }
 
 fn kind_sum(
     conn: &Connection,
+    rates: &Rates,
     kind: TxKind,
     from: NaiveDate,
     to: NaiveDate,
 ) -> Result<i64, FinanceError> {
     sum(
         conn,
-        "SELECT amount FROM finance_transaction WHERE kind = ?1 AND date >= ?2 AND date < ?3",
+        rates,
+        "SELECT t.amount, a.currency FROM finance_transaction t
+         JOIN finance_account a ON a.id = t.account_id
+         WHERE t.kind = ?1 AND t.date >= ?2 AND t.date < ?3",
         &[&kind.as_str(), &text(from), &text(to)],
     )
 }
 
-/// Open balances plus every movement dated before `end`; a transfer between two active
-/// accounts nets zero.
-fn accounts_total_before(conn: &Connection, end: NaiveDate) -> Result<i64, FinanceError> {
+/// Open balances plus every movement dated before `end`, in the main currency; a transfer
+/// between two active accounts nets zero (when it crosses currencies, at today's rates).
+fn accounts_total_before(
+    conn: &Connection,
+    rates: &Rates,
+    end: NaiveDate,
+) -> Result<i64, FinanceError> {
     let opening = sum(
         conn,
-        "SELECT initial_balance FROM finance_account WHERE archived = 0",
+        rates,
+        "SELECT initial_balance, currency FROM finance_account WHERE archived = 0",
         &[],
     )?;
     let moved = sum(
         conn,
+        rates,
         "SELECT CASE WHEN t.account_id = a.id
                 THEN CASE t.kind WHEN 'income' THEN t.amount ELSE -t.amount END
-                ELSE t.amount END
+                ELSE coalesce(t.to_amount, t.amount) END, a.currency
          FROM finance_transaction t
          JOIN finance_account a ON a.id = t.account_id OR a.id = t.to_account_id
          WHERE a.archived = 0 AND t.date < ?1",
@@ -103,8 +127,6 @@ fn accounts_total_before(conn: &Connection, end: NaiveDate) -> Result<i64, Finan
 }
 
 /// The summary of the month holding `month` (any day of it works) against the month before.
-// shortcut: sums amounts as they are, as every account is in the main currency today; convert
-// with the exchange rates when other currencies arrive (slice 6).
 pub fn month_summary(conn: &Connection, month: NaiveDate) -> Result<MonthSummary, FinanceError> {
     let from = month_start(month);
     let zero = Figure {
@@ -122,12 +144,14 @@ pub fn month_summary(conn: &Connection, month: NaiveDate) -> Result<MonthSummary
             accounts_total: zero,
             by_category: Vec::new(),
             recent: Vec::new(),
+            uses_rates: false,
         });
     };
+    let rates = load_rates(conn)?;
     let figure = |kind| -> Result<Figure, FinanceError> {
         Ok(Figure {
-            value: kind_sum(conn, kind, from, to)?,
-            previous: kind_sum(conn, kind, before, from)?,
+            value: kind_sum(conn, &rates, kind, from, to)?,
+            previous: kind_sum(conn, &rates, kind, before, from)?,
         })
     };
     let (income, expense) = (figure(TxKind::Income)?, figure(TxKind::Expense)?);
@@ -136,8 +160,8 @@ pub fn month_summary(conn: &Connection, month: NaiveDate) -> Result<MonthSummary
         previous: income.previous.saturating_sub(expense.previous),
     };
     let accounts_total = Figure {
-        value: accounts_total_before(conn, to)?,
-        previous: accounts_total_before(conn, from)?,
+        value: accounts_total_before(conn, &rates, to)?,
+        previous: accounts_total_before(conn, &rates, from)?,
     };
 
     let totals = category_totals(conn, from, TxKind::Expense)?;
@@ -148,7 +172,7 @@ pub fn month_summary(conn: &Connection, month: NaiveDate) -> Result<MonthSummary
             category: t.category,
             name: t.name,
             total: t.total,
-            width: t.total as f32 / max as f32,
+            width: t.total as f32 / max.max(1) as f32,
         })
         .collect();
 
@@ -167,5 +191,6 @@ pub fn month_summary(conn: &Connection, month: NaiveDate) -> Result<MonthSummary
         accounts_total,
         by_category,
         recent,
+        uses_rates: !list_rates(conn)?.is_empty(),
     })
 }

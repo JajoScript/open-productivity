@@ -86,6 +86,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0020_finance_transaction.sql"),
     include_str!("../migrations/0021_finance_category.sql"),
     include_str!("../migrations/0022_finance_transfer.sql"),
+    include_str!("../migrations/0023_finance_currencies.sql"),
 ];
 
 pub fn open(path: &Path) -> Result<Connection, DbError> {

@@ -6,6 +6,7 @@
 use chrono::NaiveDate;
 use rusqlite::Connection;
 
+use super::tests::account;
 use super::*;
 use crate::db;
 
@@ -20,8 +21,8 @@ fn fig(value: i64, previous: i64) -> Figure {
 fn setup() -> (Connection, AccountId, AccountId) {
     let conn = db::test_conn();
     set_main_currency(&conn, "CLP").unwrap();
-    let a = create_account(&conn, "A", AccountKind::Cash, "", "1000").unwrap();
-    let b = create_account(&conn, "B", AccountKind::Cash, "", "500").unwrap();
+    let a = account(&conn, "A", AccountKind::Cash, "", "1000").unwrap();
+    let b = account(&conn, "B", AccountKind::Cash, "", "500").unwrap();
     (conn, a, b)
 }
 
@@ -48,7 +49,7 @@ fn figures_and_changes() {
 #[test]
 fn transfers_move_money_between_accounts_without_counting() {
     let (conn, a, b) = setup();
-    create_transfer(&conn, a, b, "300", d("2026-03-05"), "").unwrap();
+    create_transfer(&conn, a, b, "300", "", d("2026-03-05"), "").unwrap();
     let s = month_summary(&conn, d("2026-03-01")).unwrap();
     assert_eq!((s.income.value, s.expense.value), (0, 0));
     assert_eq!(s.accounts_total, fig(1500, 1500));
@@ -59,7 +60,7 @@ fn transfers_move_money_between_accounts_without_counting() {
 #[test]
 fn archived_accounts_are_left_out_of_the_total() {
     let (conn, a, b) = setup();
-    create_transfer(&conn, a, b, "300", d("2026-03-05"), "").unwrap();
+    create_transfer(&conn, a, b, "300", "", d("2026-03-05"), "").unwrap();
     tx(&conn, TxKind::Expense, b, "2026-03-06", "50");
     set_account_archived(&conn, b, true).unwrap();
     let s = month_summary(&conn, d("2026-03-01")).unwrap();
@@ -145,6 +146,7 @@ fn empty_month_gives_zeros() {
             accounts_total: zero,
             by_category: Vec::new(),
             recent: Vec::new(),
+            uses_rates: false,
         }
     );
     assert_eq!(zero.change(), 0);
