@@ -92,12 +92,13 @@ pub fn format_in(amount: i64, c: &Currency, main: &Currency, style: AmountStyle)
     format!("{sign}{digits} {}", c.code)
 }
 
-/// The amount (>= 0) as a user would type it: no symbol, no grouping. `parse_amount` reads it back.
+/// The amount as a user would type it: no symbol, no grouping. `parse_amount` reads it back.
 pub fn format_input(amount: i64, c: &Currency, style: AmountStyle) -> String {
     let (_, decimal) = style.separators();
-    let scale = 10i64.pow(c.decimals);
-    let frac = amount % scale;
-    let mut out = (amount / scale).to_string();
+    let scale = 10u64.pow(c.decimals);
+    let (abs, sign) = (amount.unsigned_abs(), if amount < 0 { "-" } else { "" });
+    let frac = abs % scale;
+    let mut out = format!("{sign}{}", abs / scale);
     if frac != 0 {
         out.push(decimal);
         out.push_str(&format!("{:0w$}", frac, w = c.decimals as usize));

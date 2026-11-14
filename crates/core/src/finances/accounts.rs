@@ -23,6 +23,8 @@ pub enum AccountKind {
     Cash,
     /// A credit card: it has `CardTerms` and its balance is the debt (negative).
     Credit,
+    /// A credit line: a limit and no closing/due days; its balance can go down to `-limit`.
+    CreditLine,
 }
 
 impl AccountKind {
@@ -33,6 +35,7 @@ impl AccountKind {
             AccountKind::Savings => "savings",
             AccountKind::Cash => "cash",
             AccountKind::Credit => "credit",
+            AccountKind::CreditLine => "credit_line",
         }
     }
 
@@ -43,6 +46,7 @@ impl AccountKind {
             "savings" => AccountKind::Savings,
             "cash" => AccountKind::Cash,
             "credit" => AccountKind::Credit,
+            "credit_line" => AccountKind::CreditLine,
             other => return Err(FinanceError::BadKind(other.to_string())),
         })
     }
@@ -82,20 +86,22 @@ pub struct Account {
     pub archived: bool,
     /// `Some` exactly when the kind is `Credit`.
     pub card: Option<CardTerms>,
+    /// `Some` for a card or a credit line.
+    pub credit_limit: Option<i64>,
     /// Some movement uses it, as source or destination.
     pub in_use: bool,
 }
 
 impl Account {
-    /// The card's figures from its balance; `None` for a plain account.
-    pub fn card_usage(&self) -> Option<CardUsage> {
-        let card = self.card?;
+    /// The figures of a card or line from its balance; `None` for a plain account.
+    pub fn credit_usage(&self) -> Option<CardUsage> {
+        let limit = self.credit_limit?;
         let used = self.balance.saturating_neg().max(0);
         Some(CardUsage {
             used,
-            available: card.limit.saturating_sub(used),
-            per_mille: (i128::from(used) * 1000 / i128::from(card.limit)) as i64,
-            over_limit: used > card.limit,
+            available: limit.saturating_sub(used),
+            per_mille: (i128::from(used) * 1000 / i128::from(limit)) as i64,
+            over_limit: used > limit,
         })
     }
 }
@@ -145,7 +151,7 @@ pub fn create_account(
     initial_balance: &str,
     rate: Option<&str>,
 ) -> Result<AccountId, FinanceError> {
-    if kind == AccountKind::Credit {
+    if matches!(kind, AccountKind::Credit | AccountKind::CreditLine) {
         return Err(FinanceError::KindLocked);
     }
     let main = main_currency(conn)?.ok_or(FinanceError::NoMainCurrency)?;
@@ -178,7 +184,9 @@ pub fn update_account(
 ) -> Result<(), FinanceError> {
     let main = main_currency(conn)?.ok_or(FinanceError::NoMainCurrency)?;
     let current = get_account(conn, id)?;
-    if kind == AccountKind::Credit || current.card.is_some() {
+    if matches!(kind, AccountKind::Credit | AccountKind::CreditLine)
+        || current.credit_limit.is_some()
+    {
         return Err(FinanceError::KindLocked);
     }
     let c = pick_currency(currency)?;
@@ -296,6 +304,91 @@ pub fn update_card(
     Ok(())
 }
 
+/// Like `validate`, but the amount may start with `-`: a line starts with its current debt.
+fn validate_signed<'a>(
+    name: &'a str,
+    bank: &'a str,
+    amount: &str,
+    c: &Currency,
+) -> Result<(&'a str, &'a str, i64), FinanceError> {
+    let amount = amount.trim();
+    let (negative, digits) = match amount.strip_prefix('-') {
+        Some(rest) => (true, rest.trim_start()),
+        None => (false, amount),
+    };
+    let (name, bank, value) = validate(name, bank, digits, c)?;
+    Ok((name, bank, if negative { -value } else { value }))
+}
+
+/// Limit in the line's currency, > 0.
+fn line_limit(limit: &str, c: &Currency) -> Result<i64, FinanceError> {
+    parse_amount(limit, c)
+        .filter(|l| *l > 0)
+        .ok_or(FinanceError::InvalidLimit)
+}
+
+/// A credit line; the initial balance may be negative (the current debt). Rate rules are
+/// those of `create_account`.
+pub fn create_credit_line(
+    conn: &Connection,
+    name: &str,
+    bank: &str,
+    currency: &str,
+    initial_balance: &str,
+    limit: &str,
+    rate: Option<&str>,
+) -> Result<AccountId, FinanceError> {
+    let main = main_currency(conn)?.ok_or(FinanceError::NoMainCurrency)?;
+    let c = pick_currency(currency)?;
+    let (name, bank, amount) = validate_signed(name, bank, initial_balance, c)?;
+    let limit = line_limit(limit, c)?;
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "INSERT INTO finance_account
+            (name, kind, bank, currency, initial_balance, credit_limit)
+         VALUES (?1, 'credit_line', ?2, ?3, ?4, ?5)",
+        (name, bank, c.code, amount, limit),
+    )?;
+    let id = AccountId(tx.last_insert_rowid());
+    ensure_rate(&tx, main, c, rate)?;
+    tx.commit()?;
+    Ok(id)
+}
+
+/// Only a credit line can be updated here. Currency and rate rules are those of `update_account`.
+#[allow(clippy::too_many_arguments)]
+pub fn update_credit_line(
+    conn: &Connection,
+    id: AccountId,
+    name: &str,
+    bank: &str,
+    currency: &str,
+    initial_balance: &str,
+    limit: &str,
+    rate: Option<&str>,
+) -> Result<(), FinanceError> {
+    let main = main_currency(conn)?.ok_or(FinanceError::NoMainCurrency)?;
+    let current = get_account(conn, id)?;
+    if current.kind != AccountKind::CreditLine {
+        return Err(FinanceError::KindLocked);
+    }
+    let c = pick_currency(currency)?;
+    check_currency_change(conn, &current, c)?;
+    let (name, bank, amount) = validate_signed(name, bank, initial_balance, c)?;
+    let limit = line_limit(limit, c)?;
+    let tx = conn.unchecked_transaction()?;
+    tx.execute(
+        "UPDATE finance_account SET name = ?1, bank = ?2, currency = ?3,
+            initial_balance = ?4, credit_limit = ?5 WHERE id = ?6",
+        (name, bank, c.code, amount, limit, id.0),
+    )?;
+    if c.code != current.currency.code {
+        ensure_rate(&tx, main, c, rate)?;
+    }
+    tx.commit()?;
+    Ok(())
+}
+
 /// The balance is summed in SQL; an integer overflow there is an error, not a panic.
 const SELECT: &str = "SELECT a.id, a.name, a.kind, a.bank, a.currency, a.initial_balance,
     a.initial_balance + coalesce((SELECT sum(CASE WHEN t.account_id = a.id
@@ -313,7 +406,8 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Account, FinanceError>> {
     let (id, name, bank, initial_balance, balance) =
         (r.get(0)?, r.get(1)?, r.get(3)?, r.get(5)?, r.get(6)?);
     let (archived, in_use): (bool, bool) = (r.get(7)?, r.get(11)?);
-    let card = match (r.get(8)?, r.get(9)?, r.get(10)?) {
+    let credit_limit: Option<i64> = r.get(8)?;
+    let card = match (credit_limit, r.get(9)?, r.get(10)?) {
         (Some(limit), Some(closing_day), Some(due_day)) => Some(CardTerms {
             limit,
             closing_day,
@@ -332,6 +426,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Account, FinanceError>> {
             balance,
             archived,
             card,
+            credit_limit,
             in_use,
         })
     }))

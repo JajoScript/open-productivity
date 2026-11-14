@@ -105,7 +105,7 @@ fn kind_is_locked_both_ways() {
 #[test]
 fn usage_figures() {
     let (conn, card) = setup();
-    let usage = || get_account(&conn, card).unwrap().card_usage().unwrap();
+    let usage = || get_account(&conn, card).unwrap().credit_usage().unwrap();
     assert_eq!(
         usage(),
         CardUsage {
@@ -163,7 +163,7 @@ fn usage_figures() {
     assert_eq!(get_account(&conn, card).unwrap().balance, 100);
     assert_eq!(
         account(&conn, "P", AccountKind::Cash, "", "0")
-            .map(|id| { get_account(&conn, id).unwrap().card_usage() })
+            .map(|id| { get_account(&conn, id).unwrap().credit_usage() })
             .unwrap(),
         None
     );

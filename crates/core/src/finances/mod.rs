@@ -21,6 +21,8 @@ mod tests_cards;
 #[cfg(test)]
 mod tests_categories;
 #[cfg(test)]
+mod tests_credit_lines;
+#[cfg(test)]
 mod tests_currencies;
 #[cfg(test)]
 mod tests_main_currency;
