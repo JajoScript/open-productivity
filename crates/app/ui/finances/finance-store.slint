@@ -40,6 +40,11 @@ export global FinanceStore {
     in property <[ScheduledRow]> due;
     // The card bills due in that month, and the overdue ones in the current month.
     in property <[BillRow]> bills;
+    // The Accounts tab's net worth: the total, the assets and debts, and the biggest positive accounts as bars.
+    in property <string> worth-total;
+    in property <string> worth-assets;
+    in property <string> worth-debts;
+    in property <[SummaryBar]> worth-bars;
     // The Summary tab, for the month shown: each figure with its change versus the month before.
     in property <SummaryFigure> summary-income;
     in property <SummaryFigure> summary-expense;

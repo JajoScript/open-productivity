@@ -1168,6 +1168,12 @@ msgstr "Balance"
 msgid "Total in accounts"
 msgstr "Total en cuentas"
 
+msgid "Net worth"
+msgstr "Patrimonio"
+
+msgid "Assets {} · Debts {}"
+msgstr "Activos {} · Deudas {}"
+
 msgid "Expenses by category"
 msgstr "Gastos por categoría"
 

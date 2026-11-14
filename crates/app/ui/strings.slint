@@ -275,6 +275,10 @@ export global Strings {
     out property <string> bucket-savings: @tr("Savings");
     out property <string> finance-category-archived: @tr("That category is archived. Restore it to use it.");
 
+    public pure function worth-line(assets: string, debts: string) -> string {
+        return @tr("Assets {} · Debts {}", assets, debts);
+    }
+
     public pure function vs-last-month(change: string) -> string {
         return @tr("{} vs last month", change);
     }

@@ -11,6 +11,7 @@ mod scheduled;
 mod state;
 mod summary;
 mod transactions;
+mod worth;
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;

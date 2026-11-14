@@ -190,7 +190,10 @@ impl State {
                     self.load_choices()?;
                 }
                 FinanceTab::Categories => self.load_categories(w)?,
-                FinanceTab::Accounts => self.load_reserves()?,
+                FinanceTab::Accounts => {
+                    self.load_reserves()?;
+                    self.load_worth(w)?;
+                }
             }
         }
         Ok(())

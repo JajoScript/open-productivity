@@ -208,6 +208,57 @@ export component AccountsTab inherits VerticalLayout {
         vertical-stretch: 1;
         VerticalLayout {
             alignment: start;
+            VerticalLayout {
+                padding-left: 8px;
+                padding-right: 16px; // clears the scroll bar
+                padding-bottom: 12px;
+                spacing: 6px;
+                Text {
+                    text: @tr("Net worth");
+                    color: Theme.muted;
+                }
+
+                Text {
+                    text: FinanceStore.worth-total;
+                    font-size: 28px;
+                    font-weight: 700;
+                }
+
+                Text {
+                    text: Strings.worth-line(FinanceStore.worth-assets, FinanceStore.worth-debts);
+                    color: Theme.muted;
+                }
+
+                for bar in FinanceStore.worth-bars: VerticalLayout {
+                    spacing: 4px;
+                    accessible-role: text;
+                    accessible-label: bar.name + ", " + bar.total;
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: bar.name;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                        }
+
+                        Text {
+                            text: bar.total;
+                            color: Theme.muted;
+                        }
+                    }
+
+                    Rectangle {
+                        height: 6px;
+                        background: Theme.hairline;
+                        Rectangle {
+                            x: 0;
+                            width: parent.width * bar.width;
+                            background: Theme.ink;
+                        }
+                    }
+                }
+            }
+
             for account in FinanceStore.accounts: AccountLine {
                 visible: !(account.kind == AccountKind.credit || account.kind == AccountKind.credit-line);
                 height: !(account.kind == AccountKind.credit || account.kind == AccountKind.credit-line) ? 56px : 0px;
