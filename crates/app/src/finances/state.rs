@@ -106,6 +106,7 @@ impl State {
                     self.load_month(w)?;
                     self.load_choices()?;
                 }
+                FinanceTab::Summary => self.load_summary(w)?,
                 FinanceTab::Categories => self.load_categories(w)?,
                 FinanceTab::Accounts => {}
             }

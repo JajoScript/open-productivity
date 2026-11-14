@@ -1155,3 +1155,30 @@ msgstr "Cuenta de origen"
 
 msgid "To account"
 msgstr "Cuenta de destino"
+
+msgid "Summary"
+msgstr "Resumen"
+
+msgid "Expenses"
+msgstr "Gastos"
+
+msgid "Balance"
+msgstr "Balance"
+
+msgid "Total in accounts"
+msgstr "Total en cuentas"
+
+msgid "Expenses by category"
+msgstr "Gastos por categoría"
+
+msgid "No expenses this month."
+msgstr "Sin gastos este mes."
+
+msgid "Latest movements"
+msgstr "Últimos movimientos"
+
+msgid "{} vs last month"
+msgstr "{} respecto al mes anterior"
+
+msgid "Same as last month"
+msgstr "Igual que el mes anterior"

@@ -1,0 +1,168 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ScrollView } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+import { FinanceStore } from "finance-store.slint";
+import { MonthNav } from "month-nav.slint";
+import { SummaryFigure } from "summary-row.slint";
+import { TransactionRow } from "transaction-row.slint";
+import { TransactionLine } from "transactions-tab.slint";
+
+component FigureCard inherits Rectangle {
+    in property <string> label;
+    in property <SummaryFigure> figure;
+
+    min-width: 150px;
+    preferred-width: 150px; // equal start, so both columns stretch to the same width
+    horizontal-stretch: 1;
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+    accessible-role: text;
+    accessible-label: root.label + ", " + root.figure.amount + ", " + root.figure.change;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 2px;
+        Text {
+            text: root.label;
+            color: Theme.muted;
+            overflow: elide;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.figure.amount;
+            font-size: 20px;
+            font-weight: 700;
+            overflow: elide;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.figure.change;
+            color: Palette.foreground.with-alpha(0.7);
+            overflow: elide;
+            accessible-role: none;
+        }
+    }
+}
+
+component SectionTitle inherits Text {
+    font-weight: 700;
+    color: Palette.foreground.with-alpha(0.7);
+}
+
+// The month at a glance: figures against the month before, expenses by category and the latest movements.
+export component SummaryTab inherits VerticalLayout {
+    callback edit-transaction(TransactionRow);
+
+    spacing: 12px;
+
+    MonthNav { }
+
+    ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            spacing: 20px;
+            padding-bottom: 72px; // clears the floating add button
+            HorizontalLayout {
+                padding-right: 16px; // clears the scroll bar
+                spacing: 12px;
+                FigureCard {
+                    label: @tr("Income");
+                    figure: FinanceStore.summary-income;
+                }
+
+                FigureCard {
+                    label: @tr("Expenses");
+                    figure: FinanceStore.summary-expense;
+                }
+            }
+
+            HorizontalLayout {
+                padding-right: 16px;
+                spacing: 12px;
+                FigureCard {
+                    label: @tr("Balance");
+                    figure: FinanceStore.summary-balance;
+                }
+
+                FigureCard {
+                    label: @tr("Total in accounts");
+                    figure: FinanceStore.summary-accounts;
+                }
+            }
+
+            VerticalLayout {
+                padding-right: 16px;
+                spacing: 12px;
+                SectionTitle {
+                    text: @tr("Expenses by category");
+                }
+
+                if FinanceStore.summary-bars.length == 0: Text {
+                    text: @tr("No expenses this month.");
+                    color: Theme.muted;
+                }
+
+                for bar in FinanceStore.summary-bars: VerticalLayout {
+                    spacing: 4px;
+                    accessible-role: text;
+                    accessible-label: bar.name + ", " + bar.total;
+                    HorizontalLayout {
+                        spacing: 8px;
+                        Text {
+                            text: bar.name;
+                            overflow: elide;
+                            horizontal-stretch: 1;
+                        }
+
+                        Text {
+                            text: bar.total;
+                            color: Theme.muted;
+                        }
+                    }
+
+                    Rectangle {
+                        height: 6px;
+                        background: Theme.hairline;
+                        Rectangle {
+                            x: 0;
+                            width: parent.width * bar.width;
+                            background: Theme.ink;
+                            animate width {
+                                duration: Theme.enter;
+                                easing: Theme.ease-out;
+                            }
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                spacing: 12px;
+                SectionTitle {
+                    text: @tr("Latest movements");
+                }
+
+                if FinanceStore.summary-recent.length == 0: Text {
+                    text: @tr("No movements this month.");
+                    color: Theme.muted;
+                }
+
+                VerticalLayout {
+                    for tx in FinanceStore.summary-recent: TransactionLine {
+                        tx: tx;
+                        opened => {
+                            root.edit-transaction(tx);
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

@@ -11,6 +11,7 @@ import { CategoriesTab } from "categories-tab.slint";
 import { CategoryRow } from "category-row.slint";
 import { FinanceStore } from "finance-store.slint";
 import { FinanceTab, TransactionRow } from "transaction-row.slint";
+import { SummaryTab } from "summary-tab.slint";
 import { TransactionsTab } from "transactions-tab.slint";
 
 // First use: the main currency has no default, the user chooses it once.
@@ -103,7 +104,7 @@ component CurrencyPicker inherits HorizontalLayout {
     }
 }
 
-// Movements, accounts and categories in tabs; the main currency is chosen the first time.
+// Summary, movements, accounts and categories in tabs; the main currency is chosen the first time.
 export component FinancesView inherits VerticalLayout {
     // Open the window's modals: a new or existing account, a new or existing movement.
     callback new-account();
@@ -139,15 +140,26 @@ export component FinancesView inherits VerticalLayout {
             alignment: start;
             accessible-role: tab-list;
             SettingsTab {
+                text: @tr("Summary");
+                selected: FinanceStore.tab == FinanceTab.summary;
+                chosen => {
+                    root.choose(FinanceTab.summary);
+                }
+                step(d) => {
+                    if d > 0 {
+                        root.choose(FinanceTab.movements);
+                    }
+                }
+            }
+
+            SettingsTab {
                 text: @tr("Movements");
                 selected: FinanceStore.tab == FinanceTab.movements;
                 chosen => {
                     root.choose(FinanceTab.movements);
                 }
                 step(d) => {
-                    if d > 0 {
-                        root.choose(FinanceTab.accounts);
-                    }
+                    root.choose(d < 0 ? FinanceTab.summary : FinanceTab.accounts);
                 }
             }
 
@@ -210,6 +222,13 @@ export component FinancesView inherits VerticalLayout {
     }
 
     if !FinanceStore.has-currency: CurrencyPicker { }
+
+    if FinanceStore.has-currency && FinanceStore.tab == FinanceTab.summary: SummaryTab {
+        vertical-stretch: 1;
+        edit-transaction(t) => {
+            root.edit-transaction(t);
+        }
+    }
 
     if FinanceStore.has-currency && FinanceStore.tab == FinanceTab.movements: TransactionsTab {
         vertical-stretch: 1;

@@ -74,7 +74,7 @@ fn transfer_row(t: Transfer) -> Result<TransactionRow, String> {
     })
 }
 
-fn row(m: Movement) -> Result<TransactionRow, String> {
+pub(super) fn row(m: Movement) -> Result<TransactionRow, String> {
     match m {
         Movement::Tx(t) => tx_row(t),
         Movement::Transfer(t) => transfer_row(t),

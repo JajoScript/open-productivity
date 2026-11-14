@@ -1,0 +1,18 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+// A figure of the month, already formatted.
+export struct SummaryFigure {
+    amount: string,
+    // The change versus the month before, with its sign and "vs last month"; or "Same as last month".
+    change: string,
+}
+
+// One category of the expense bars.
+export struct SummaryBar {
+    // The uncategorized row carries the "No category" text.
+    name: string,
+    total: string,
+    // Total relative to the biggest, 0..1.
+    width: float,
+}

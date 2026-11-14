@@ -5,6 +5,7 @@ import { Date } from "std-widgets.slint";
 import { FinanceTab, TransactionRow, TxKind } from "transaction-row.slint";
 import { AccountKind, AccountRow, CurrencyRow } from "account-row.slint";
 import { CategoryRow } from "category-row.slint";
+import { SummaryBar, SummaryFigure } from "summary-row.slint";
 
 // What the Finances views show and ask for. Rust fills the data and answers the callbacks;
 // the views read and call it directly instead of forwarding it through the window.
@@ -17,10 +18,17 @@ export global FinanceStore {
     in property <[AccountRow]> archived-accounts;
     in property <string> error;
     // The tab shown; Rust loads only what it needs.
-    in-out property <FinanceTab> tab: FinanceTab.movements;
+    in-out property <FinanceTab> tab: FinanceTab.summary;
     // The movements of the month shown; only its month and year matter.
     in property <Date> month;
     in property <[TransactionRow]> transactions;
+    // The Summary tab, for the month shown: each figure with its change versus the month before.
+    in property <SummaryFigure> summary-income;
+    in property <SummaryFigure> summary-expense;
+    in property <SummaryFigure> summary-balance;
+    in property <SummaryFigure> summary-accounts;
+    in property <[SummaryBar]> summary-bars;
+    in property <[TransactionRow]> summary-recent;
     // The kind the Categories tab lists.
     in-out property <TxKind> category-kind: TxKind.expense;
     // False only while there are no categories at all, which offers the suggested ones.

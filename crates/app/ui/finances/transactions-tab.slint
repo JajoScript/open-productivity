@@ -9,7 +9,7 @@ import { FinanceStore } from "finance-store.slint";
 import { MonthNav } from "month-nav.slint";
 import { TransactionRow } from "transaction-row.slint";
 
-component TransactionLine inherits Rectangle {
+export component TransactionLine inherits Rectangle {
     in property <TransactionRow> tx;
     callback opened;
 

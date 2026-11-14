@@ -5,6 +5,7 @@
 
 mod categories;
 mod state;
+mod summary;
 mod transactions;
 
 use std::cell::Cell;
