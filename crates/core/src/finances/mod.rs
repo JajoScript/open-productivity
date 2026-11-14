@@ -40,8 +40,11 @@ mod tests_summary;
 mod tests_transactions;
 #[cfg(test)]
 mod tests_transfers;
+#[cfg(test)]
+mod tests_worth;
 mod transactions;
 mod transfers;
+mod worth;
 
 pub use accounts::*;
 pub use bills::*;
@@ -54,6 +57,7 @@ pub use scheduled::*;
 pub use summary::*;
 pub use transactions::*;
 pub use transfers::*;
+pub use worth::*;
 
 #[derive(Debug)]
 pub enum FinanceError {
