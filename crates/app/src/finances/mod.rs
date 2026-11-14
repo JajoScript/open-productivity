@@ -58,8 +58,6 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         reserve_rows: Rc::default(),
         bucket_rows: Rc::default(),
         archived_bucket_rows: Rc::default(),
-        cat_rows: Rc::default(),
-        archived_rows: Rc::default(),
         choices: Rc::default(),
         summary_account_rows: Rc::default(),
         charts: RefCell::default(),
@@ -77,8 +75,6 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     store.set_reserves(ModelRc::from(state.reserve_rows.clone()));
     store.set_buckets(ModelRc::from(state.bucket_rows.clone()));
     store.set_archived_buckets(ModelRc::from(state.archived_bucket_rows.clone()));
-    store.set_categories(ModelRc::from(state.cat_rows.clone()));
-    store.set_archived_categories(ModelRc::from(state.archived_rows.clone()));
     store.set_category_choices(ModelRc::from(state.choices.clone()));
     store.set_currencies(ModelRc::new(VecModel::from(state::currency_rows(None))));
     state.show_load();

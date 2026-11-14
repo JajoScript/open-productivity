@@ -9,15 +9,11 @@ import { AccountRow } from "account-row.slint";
 import { AccountsCard, CardsCard } from "accounts-list.slint";
 import { CreditUsageCard, NetWorthCard } from "accounts-side.slint";
 import { FinanceStore } from "finance-store.slint";
-import { ReserveRow } from "reserve-row.slint";
-import { ReservesCard } from "reserves-card.slint";
 
 // The accounts and cards with their balances on the left; net worth and credit use on the right.
 export component AccountsTab inherits VerticalLayout {
     callback new-account();
     callback edit-account(AccountRow);
-    callback new-reserve();
-    callback edit-reserve(ReserveRow);
 
     property <string> error;
 
@@ -72,15 +68,6 @@ export component AccountsTab inherits VerticalLayout {
                         }
                         archive(a) => {
                             root.archive(a);
-                        }
-                    }
-
-                    ReservesCard {
-                        new-reserve => {
-                            root.new-reserve();
-                        }
-                        edit-reserve(r) => {
-                            root.edit-reserve(r);
                         }
                     }
                 }

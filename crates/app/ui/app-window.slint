@@ -877,10 +877,10 @@ export component AppWindow inherits Window {
                         root.bucket-edit-archived = b.archived;
                         bucket-creator.show();
                     }
-                    new-category => {
+                    new-category(kind) => {
                         root.category-editing = false;
                         root.category-edit-id = 0;
-                        root.category-edit-kind = FinanceStore.category-kind;
+                        root.category-edit-kind = kind;
                         root.category-edit-name = "";
                         root.category-edit-archived = false;
                         root.category-edit-in-use = false;

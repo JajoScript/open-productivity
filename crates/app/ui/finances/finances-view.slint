@@ -14,7 +14,7 @@ import { BucketRow } from "bucket-row.slint";
 import { CategoriesTab } from "categories-tab.slint";
 import { CategoryRow } from "category-row.slint";
 import { FinanceStore } from "finance-store.slint";
-import { FinanceTab, TransactionRow } from "transaction-row.slint";
+import { FinanceTab, TransactionRow, TxKind } from "transaction-row.slint";
 import { SummaryTab } from "summary-tab.slint";
 import { DueTab } from "due-tab.slint";
 import { ReserveRow } from "reserve-row.slint";
@@ -127,7 +127,7 @@ export component FinancesView inherits VerticalLayout {
     callback edit-reserve(ReserveRow);
     callback new-bucket();
     callback edit-bucket(BucketRow);
-    callback new-category();
+    callback new-category(TxKind);
     callback edit-category(CategoryRow);
     callback edit-rates();
     callback edit-main-currency();
@@ -266,20 +266,6 @@ export component FinancesView inherits VerticalLayout {
             horizontal-stretch: 1;
         }
 
-        if FinanceStore.tab == FinanceTab.budget: InkButton {
-            text: @tr("New bucket");
-            clicked => {
-                root.new-bucket();
-            }
-        }
-
-        if FinanceStore.tab == FinanceTab.categories && FinanceStore.has-categories: InkButton {
-            text: @tr("New category");
-            clicked => {
-                root.new-category();
-            }
-        }
-
         if FinanceStore.tab == FinanceTab.accounts: SubtleButton {
             text: Strings.main-currency-button(FinanceStore.main-currency);
             color: Palette.foreground;
@@ -350,6 +336,12 @@ export component FinancesView inherits VerticalLayout {
         edit-bucket(b) => {
             root.edit-bucket(b);
         }
+        new-reserve => {
+            root.new-reserve();
+        }
+        edit-reserve(r) => {
+            root.edit-reserve(r);
+        }
     }
 
     if FinanceStore.has-currency && FinanceStore.tab == FinanceTab.accounts: AccountsTab {
@@ -360,18 +352,12 @@ export component FinancesView inherits VerticalLayout {
         edit-account(a) => {
             root.edit-account(a);
         }
-        new-reserve => {
-            root.new-reserve();
-        }
-        edit-reserve(r) => {
-            root.edit-reserve(r);
-        }
     }
 
     if FinanceStore.has-currency && FinanceStore.tab == FinanceTab.categories: CategoriesTab {
         vertical-stretch: 1;
-        new-category => {
-            root.new-category();
+        new-category(k) => {
+            root.new-category(k);
         }
         edit-category(c) => {
             root.edit-category(c);

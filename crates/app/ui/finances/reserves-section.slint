@@ -5,7 +5,8 @@ import { Palette } from "std-widgets.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
-import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { ArchiveTabs } from "accounts-list.slint";
+import { FinanceColumns } from "finance-table.slint";
 import { FinanceStore } from "finance-store.slint";
 import { ReserveRow } from "reserve-row.slint";
 
@@ -13,7 +14,7 @@ component ReserveLine inherits Rectangle {
     in property <ReserveRow> reserve;
     callback opened;
 
-    height: 56px;
+    height: 44px;
     border-radius: 6px;
     background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
     animate background {
@@ -30,33 +31,27 @@ component ReserveLine inherits Rectangle {
     HorizontalLayout {
         padding-left: 8px;
         padding-right: 8px;
-        spacing: 8px;
-        Image {
-            source: @image-url("../icons/archive.svg");
-            colorize: Theme.muted;
-            width: 16px;
-            image-fit: contain;
-            accessible-role: none;
-        }
-
-        VerticalLayout {
-            alignment: center;
+        spacing: FinanceColumns.gap;
+        Text {
+            text: root.reserve.name;
+            opacity: root.reserve.archived ? 0.55 : 1;
+            overflow: elide;
+            vertical-alignment: center;
             horizontal-stretch: 1;
             min-width: 0px;
             preferred-width: 0px;
-            Text {
-                text: root.reserve.name;
-                opacity: root.reserve.archived ? 0.55 : 1;
-                overflow: elide;
-                accessible-role: none;
-            }
+            accessible-role: none;
+        }
 
-            Text {
-                text: root.reserve.account-name;
-                color: Theme.muted;
-                overflow: elide;
-                accessible-role: none;
-            }
+        Text {
+            text: "\{root.reserve.account-name} (\{root.reserve.currency})";
+            color: Theme.muted;
+            overflow: elide;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            min-width: 0px;
+            preferred-width: 0px;
+            accessible-role: none;
         }
 
         Text {
@@ -65,6 +60,7 @@ component ReserveLine inherits Rectangle {
             font-weight: 600;
             vertical-alignment: center;
             horizontal-alignment: right;
+            width: 150px;
             accessible-role: none;
         }
     }
@@ -99,25 +95,73 @@ component ReserveLine inherits Rectangle {
     }
 }
 
-// The reserves of the accounts, active then archived; they move to the Budget tab later.
-export component ReservesCard inherits FinanceCard {
+// The reserves of the accounts, active or archived, with what they hold; lives under the buckets.
+export component ReservesSection inherits VerticalLayout {
     callback new-reserve();
     callback edit-reserve(ReserveRow);
 
-    FinanceCardHeader {
-        title: @tr("Reserves");
+    // Reserving and withdrawing work on the first active reserve, which the list puts first.
+    property <bool> has-active: FinanceStore.reserves.length > 0 && !FinanceStore.reserves[0].archived;
+
+    spacing: 12px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            text: @tr("Reserves");
+            font-size: 16px;
+            font-weight: 600;
+            vertical-alignment: center;
+        }
+
+        Text {
+            text: Strings.reserved-line(FinanceStore.reserved-total);
+            color: Theme.muted;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+        }
+
         if FinanceStore.has-reservable: SubtleButton {
-            text: @tr("New reserve");
+            text: @tr("Create");
             color: Palette.foreground;
+            outlined: true;
             clicked => {
                 root.new-reserve();
             }
         }
+
+        SubtleButton {
+            text: @tr("reserve action" => "Reserve");
+            color: Palette.foreground;
+            outlined: true;
+            enabled: root.has-active;
+            clicked => {
+                root.edit-reserve(FinanceStore.reserves[0]);
+            }
+        }
+
+        SubtleButton {
+            text: @tr("Withdraw");
+            color: Palette.foreground;
+            outlined: true;
+            enabled: root.has-active;
+            clicked => {
+                root.edit-reserve(FinanceStore.reserves[0]);
+            }
+        }
     }
+
+    tabs := ArchiveTabs { }
 
     VerticalLayout {
         for reserve in FinanceStore.reserves: ReserveLine {
             reserve: reserve;
+            visible: reserve.archived == tabs.archived;
+            height: reserve.archived == tabs.archived ? 44px : 0px;
             opened => {
                 root.edit-reserve(reserve);
             }

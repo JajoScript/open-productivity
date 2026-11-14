@@ -6,13 +6,13 @@
 use std::rc::Rc;
 
 use open_productivity_core::finances::{self, Category, CategoryId, Suggested, TxKind as CoreKind};
-use slint::ComponentHandle;
+use slint::{ComponentHandle, ModelRc, VecModel};
 
 use super::state::State;
 use super::style;
 use super::transactions::{core_kind, ui_kind};
 use crate::tasks::ui_id;
-use crate::{AppWindow, CategoryRow, FinanceStore, Strings, SuggestedCategory};
+use crate::{AppWindow, BucketRow, CategoryRow, FinanceStore, Strings, SuggestedCategory};
 
 fn ui_suggested(s: Suggested) -> SuggestedCategory {
     match s {
@@ -28,7 +28,7 @@ fn ui_suggested(s: Suggested) -> SuggestedCategory {
     }
 }
 
-fn row(c: Category, total: String) -> Result<CategoryRow, String> {
+fn row(c: Category, total: String, bucket_name: String) -> Result<CategoryRow, String> {
     Ok(CategoryRow {
         id: ui_id(c.id.0)?,
         name: c.name.into(),
@@ -36,6 +36,7 @@ fn row(c: Category, total: String) -> Result<CategoryRow, String> {
         archived: c.archived,
         in_use: c.in_use,
         bucket_id: c.bucket.map_or(Ok(0), |b| ui_id(b.0))?,
+        bucket_name: bucket_name.into(),
         total: total.into(),
     })
 }
@@ -46,44 +47,68 @@ impl State {
         let mut rows = Vec::new();
         for kind in [CoreKind::Expense, CoreKind::Income] {
             for c in finances::list_categories(&self.conn, kind).map_err(|e| e.to_string())? {
-                rows.push(row(c, String::new())?);
+                rows.push(row(c, String::new(), String::new())?);
             }
         }
         self.choices.set_vec(rows);
         Ok(())
     }
 
-    /// Loads the kind's categories with the shown month's totals.
+    /// Loads both kinds' categories with the shown month's totals, and the buckets to pick from.
     pub fn load_categories(&self, w: &AppWindow) -> Result<(), String> {
         let store = w.global::<FinanceStore>();
         let has = finances::has_categories(&self.conn).map_err(|e| e.to_string())?;
         store.set_has_categories(has);
-        let kind = core_kind(store.get_category_kind());
-        let totals = finances::category_totals(&self.conn, self.shown.get(), kind)
-            .map_err(|e| e.to_string())?;
         let currency = self.main()?;
         let style = style();
-        let total_of = |id: Option<CategoryId>| {
-            totals
-                .iter()
-                .find(|t| t.category == id)
-                .map(|t| finances::format_amount(t.total, currency, style))
-                .unwrap_or_default()
-        };
-        let (mut active, mut archived) = (Vec::new(), Vec::new());
-        for c in finances::list_categories(&self.conn, kind).map_err(|e| e.to_string())? {
-            let is_archived = c.archived;
-            let total = total_of(Some(c.id));
-            let r = row(c, total)?;
-            if is_archived {
-                archived.push(r);
+        let buckets = finances::list_buckets(&self.conn).map_err(|e| e.to_string())?;
+        let mut choices = Vec::new();
+        for b in buckets.iter().filter(|b| !b.archived) {
+            choices.push(BucketRow {
+                id: ui_id(b.id.0)?,
+                name: b.name.as_str().into(),
+                ..Default::default()
+            });
+        }
+        store.set_bucket_choices(ModelRc::new(VecModel::from(choices)));
+        let models = |active: Vec<CategoryRow>| ModelRc::new(VecModel::from(active));
+        for kind in [CoreKind::Expense, CoreKind::Income] {
+            let totals = finances::category_totals(&self.conn, self.shown.get(), kind)
+                .map_err(|e| e.to_string())?;
+            let total_of = |id: Option<CategoryId>| {
+                totals
+                    .iter()
+                    .find(|t| t.category == id)
+                    .map(|t| finances::format_amount(t.total, currency, style))
+                    .unwrap_or_default()
+            };
+            let (mut active, mut archived) = (Vec::new(), Vec::new());
+            for c in finances::list_categories(&self.conn, kind).map_err(|e| e.to_string())? {
+                let is_archived = c.archived;
+                let total = total_of(Some(c.id));
+                let bucket = c
+                    .bucket
+                    .and_then(|id| buckets.iter().find(|b| b.id == id))
+                    .map(|b| b.name.clone())
+                    .unwrap_or_default();
+                let r = row(c, total, bucket)?;
+                if is_archived {
+                    archived.push(r);
+                } else {
+                    active.push(r);
+                }
+            }
+            let uncategorized = total_of(None).into();
+            if kind == CoreKind::Expense {
+                store.set_expense_categories(models(active));
+                store.set_archived_expense_categories(models(archived));
+                store.set_uncategorized_expense(uncategorized);
             } else {
-                active.push(r);
+                store.set_income_categories(models(active));
+                store.set_archived_income_categories(models(archived));
+                store.set_uncategorized_income(uncategorized);
             }
         }
-        self.cat_rows.set_vec(active);
-        self.archived_rows.set_vec(archived);
-        store.set_uncategorized_total(total_of(None).into());
         Ok(())
     }
 }

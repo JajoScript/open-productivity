@@ -393,6 +393,22 @@ export global Strings {
         return @tr("{0} of {1}", spent, assigned);
     }
 
+    public pure function bucket-spent-line(amount: string) -> string {
+        return @tr("Spent {}", amount);
+    }
+
+    public pure function bucket-remaining-line(amount: string) -> string {
+        return @tr("Remaining {}", amount);
+    }
+
+    public pure function delete-label(name: string) -> string {
+        return @tr("Delete {}", name);
+    }
+
+    public pure function category-bucket-label(name: string) -> string {
+        return @tr("Bucket of {}", name);
+    }
+
     public pure function bucket-left(amount: string) -> string {
         return @tr("{} left", amount);
     }

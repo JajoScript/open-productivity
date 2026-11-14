@@ -1,18 +1,18 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-//! The reserves of the Accounts tab and their modals' callbacks.
+//! The reserves of the Budget tab and their modals' callbacks.
 
 use std::rc::Rc;
 
 use open_productivity_core::finances::{self, AccountId, Currency, Reserve, ReserveId};
-use slint::{ModelRc, VecModel};
+use slint::{ComponentHandle, ModelRc, VecModel};
 
 use super::state::State;
 use super::style;
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
-use crate::{FinanceStore, ReserveDetail, ReserveMoveRow, ReserveRow};
+use crate::{AppWindow, FinanceStore, ReserveDetail, ReserveMoveRow, ReserveRow};
 
 fn reserve_row(r: Reserve, main: &Currency) -> Result<ReserveRow, String> {
     Ok(ReserveRow {
@@ -28,7 +28,7 @@ fn reserve_row(r: Reserve, main: &Currency) -> Result<ReserveRow, String> {
 
 impl State {
     /// Loads the active reserves, then the archived ones.
-    pub fn load_reserves(&self) -> Result<(), String> {
+    pub fn load_reserves(&self, w: &AppWindow) -> Result<(), String> {
         let main = self.main()?;
         let rows = finances::list_reserves(&self.conn)
             .and_then(|a| Ok((a, finances::list_archived_reserves(&self.conn)?)))
@@ -40,6 +40,9 @@ impl State {
             .map(|r| reserve_row(r, main))
             .collect::<Result<Vec<_>, _>>()?;
         self.reserve_rows.set_vec(rows);
+        let total = finances::reserved_total(&self.conn).map_err(|e| e.to_string())?;
+        w.global::<FinanceStore>()
+            .set_reserved_total(finances::format_amount(total, main, style()).into());
         Ok(())
     }
 

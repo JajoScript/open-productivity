@@ -9,6 +9,7 @@ export component InkField {
     in-out property <string> text <=> input.text;
     in property <string> placeholder-text;
     in property <bool> enabled: true;
+    out property <bool> has-focus: input.has-focus;
     callback accepted(string);
     // The text changed because the user typed.
     callback edited(string);

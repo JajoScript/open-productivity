@@ -1686,3 +1686,22 @@ msgstr "Editar {}"
 
 msgid "Archive {}"
 msgstr "Archivar {}"
+
+msgid "Spent {}"
+msgstr "Gastado {}"
+
+msgid "Remaining {}"
+msgstr "Restante {}"
+
+msgid "Delete {}"
+msgstr "Eliminar {}"
+
+msgid "Bucket of {}"
+msgstr "Bolsa de {}"
+
+msgid "No bucket"
+msgstr "Sin bolsa"
+
+msgctxt "reserve action"
+msgid "Reserve"
+msgstr "Reservar"

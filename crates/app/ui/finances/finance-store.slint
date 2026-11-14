@@ -26,9 +26,9 @@ export global FinanceStore {
     in property <[AccountRow]> archived-accounts;
     // Some active account is a credit card.
     in property <bool> has-cards;
-    // The Accounts tab: some active account is plain, so it can hold a reserve.
+    // Some active account is plain, so it can hold a reserve.
     in property <bool> has-reservable;
-    // The reserves, active then archived.
+    // The Budget tab's reserves, active then archived.
     in property <[ReserveRow]> reserves;
     in property <string> error;
     // The tab shown; Rust loads only what it needs.
@@ -101,15 +101,20 @@ export global FinanceStore {
     in property <string> budget-unassigned;
     // The setting: use the previous month's income instead of the shown month's.
     in property <bool> budget-previous;
-    // The kind the Categories tab lists.
-    in-out property <TxKind> category-kind: TxKind.expense;
     // False only while there are no categories at all, which offers the suggested ones.
     in property <bool> has-categories;
-    // Of `category-kind`: active ones with their total of the month; then the archived ones.
-    in property <[CategoryRow]> categories;
-    in property <[CategoryRow]> archived-categories;
-    // The month's total of that kind without category, "" when there is none.
-    in property <string> uncategorized-total;
+    // The Categories tab, per kind: active ones with their total of the month; then the archived.
+    in property <[CategoryRow]> expense-categories;
+    in property <[CategoryRow]> archived-expense-categories;
+    in property <[CategoryRow]> income-categories;
+    in property <[CategoryRow]> archived-income-categories;
+    // The month's total of each kind without category, "" when there is none.
+    in property <string> uncategorized-expense;
+    in property <string> uncategorized-income;
+    // The active buckets an expense category can count in (id and name only).
+    in property <[BucketRow]> bucket-choices;
+    // What the active reserves hold, in the main currency.
+    in property <string> reserved-total;
     // Every category of both kinds, for the movement modal to pick from.
     in property <[CategoryRow]> category-choices;
 

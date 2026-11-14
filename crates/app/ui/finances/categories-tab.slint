@@ -3,20 +3,116 @@
 
 import { Palette, ScrollView } from "std-widgets.slint";
 import { EmptyState } from "../empty-state.slint";
-import { SettingsTab } from "../settings/settings-tab.slint";
+import { InkButton } from "../ink-button.slint";
+import { PopupSurface } from "../popup-surface.slint";
 import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
+import { ArchiveTabs } from "accounts-list.slint";
 import { CategoryRow } from "category-row.slint";
+import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { FinanceColumns } from "finance-table.slint";
 import { FinanceStore } from "finance-store.slint";
-import { MonthNav } from "month-nav.slint";
 import { TxKind } from "transaction-row.slint";
 
+// Column sizes shared by the rows of both cards.
+global CategoryColumns {
+    out property <length> bucket: 130px;
+    out property <length> total: 110px;
+    out property <length> actions: 92px;
+}
+
+component BucketItem inherits Rectangle {
+    in property <string> label;
+    in property <bool> chosen;
+    callback clicked;
+
+    height: 30px;
+    border-radius: 4px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    accessible-role: button;
+    accessible-label: root.label;
+    accessible-action-default => {
+        root.clicked();
+    }
+    Text {
+        x: 8px;
+        width: parent.width - 16px;
+        text: root.label;
+        font-weight: root.chosen ? 700 : 400;
+        vertical-alignment: center;
+        overflow: elide;
+        accessible-role: none;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.clicked();
+        }
+    }
+}
+
+// The bucket an expense category counts in: a button with its name that lists the buckets.
+component BucketPicker inherits Rectangle {
+    in property <CategoryRow> category;
+    // bucket, true to put the category in it; returns the failure to show.
+    callback assign(int, bool) -> string;
+    callback failed(string);
+
+    width: CategoryColumns.bucket;
+    height: 28px;
+
+    SubtleButton {
+        width: parent.width;
+        text: root.category.bucket-name != "" ? root.category.bucket-name : "—";
+        label: Strings.category-bucket-label(root.category.name);
+        color: Palette.foreground;
+        outlined: true;
+        clicked => {
+            menu.show();
+        }
+    }
+
+    menu := PopupWindow {
+        x: 0px;
+        y: root.height + 2px;
+        width: 180px;
+        PopupSurface {
+            VerticalLayout {
+                padding: 4px;
+                BucketItem {
+                    label: @tr("No bucket");
+                    chosen: root.category.bucket-id == 0;
+                    clicked => {
+                        menu.close();
+                        root.failed(root.assign(0, false));
+                    }
+                }
+
+                for b in FinanceStore.bucket-choices: BucketItem {
+                    label: b.name;
+                    chosen: root.category.bucket-id == b.id;
+                    clicked => {
+                        menu.close();
+                        root.failed(root.assign(b.id, true));
+                    }
+                }
+            }
+        }
+    }
+}
+
+// One category: name, its bucket (expenses), the month's total and the buttons.
 component CategoryLine inherits Rectangle {
     in property <CategoryRow> category;
     // The "no category" row only shows its total.
     in property <bool> editable: true;
     in property <string> label: root.category.name;
     callback opened;
+    callback archive;
+    callback delete;
+    callback assign(int, bool) -> string;
+    callback failed(string);
 
     height: 44px;
     border-radius: 6px;
@@ -25,7 +121,6 @@ component CategoryLine inherits Rectangle {
         duration: Theme.fast;
         easing: Theme.ease-out;
     }
-    forward-focus: focus;
     accessible-role: button;
     accessible-label: root.category.total != "" ? Strings.category-line-label(root.label, root.category.total) : root.label;
     accessible-action-default => {
@@ -34,27 +129,78 @@ component CategoryLine inherits Rectangle {
         }
     }
 
+    // Under the row's content, so the buttons take their own clicks.
+    touch := TouchArea {
+        enabled: root.editable;
+        clicked => {
+            root.opened();
+        }
+    }
+
     HorizontalLayout {
         padding-left: 8px;
-        padding-right: 16px; // clears the ListView scroll bar
-        spacing: 8px;
+        padding-right: 8px;
+        spacing: FinanceColumns.gap;
         Text {
             text: root.label;
             color: root.editable ? Palette.foreground : Theme.muted;
             overflow: elide;
             vertical-alignment: center;
             horizontal-stretch: 1;
+            min-width: 0px;
+            preferred-width: 0px;
             opacity: root.category.archived ? 0.55 : 1;
             accessible-role: none;
         }
 
+        if root.editable && root.category.kind == TxKind.expense && !root.category.archived: BucketPicker {
+            category: root.category;
+            assign(b, on) => {
+                return root.assign(b, on);
+            }
+            failed(e) => {
+                root.failed(e);
+            }
+        }
+
         Text {
-            text: root.category.total;
-            font-weight: 600;
+            text: root.category.total != "" ? root.category.total : "—";
+            font-weight: root.category.total != "" ? 600 : 400;
+            color: root.category.total != "" ? Palette.foreground : Theme.muted;
             vertical-alignment: center;
             horizontal-alignment: right;
+            width: CategoryColumns.total;
             opacity: root.category.archived ? 0.55 : 1;
             accessible-role: none;
+        }
+
+        HorizontalLayout {
+            width: CategoryColumns.actions;
+            alignment: end;
+            spacing: 4px;
+            if root.editable: SubtleButton {
+                icon: @image-url("../icons/pencil.svg");
+                label: Strings.edit-account-label(root.category.name);
+                clicked => {
+                    root.opened();
+                }
+            }
+
+            if root.editable: SubtleButton {
+                icon: root.category.archived ? @image-url("../icons/archive-restore.svg") : @image-url("../icons/archive.svg");
+                label: root.category.archived ? Strings.restore-account-label(root.category.name) : Strings.archive-account-label(root.category.name);
+                clicked => {
+                    root.archive();
+                }
+            }
+
+            if root.editable && !root.category.in-use: SubtleButton {
+                icon: @image-url("../icons/trash-2.svg");
+                label: Strings.delete-label(root.category.name);
+                clicked => {
+                    root.delete();
+                }
+            }
         }
     }
 
@@ -63,49 +209,101 @@ component CategoryLine inherits Rectangle {
         height: 1px;
         background: Theme.hairline;
     }
+}
 
-    touch := TouchArea {
-        enabled: root.editable;
-        clicked => {
-            root.opened();
-        }
-    }
+// The card of one kind: its title with the count and the button, then its rows.
+component KindCard inherits FinanceCard {
+    in property <TxKind> kind;
+    in property <string> title;
+    in property <bool> archived;
+    in property <[CategoryRow]> active;
+    in property <[CategoryRow]> archived-rows;
+    in property <string> uncategorized;
+    callback new-category;
+    callback edit(CategoryRow);
+    callback archive(CategoryRow);
+    callback delete(CategoryRow);
+    // category, true to put it in the bucket, bucket.
+    callback assign(int, bool, int) -> string;
+    callback failed(string);
 
-    focus := FocusScope {
-        width: 0px; // keyboard only; clicks go to the TouchArea
-        enabled: root.editable;
-        key-pressed(event) => {
-            if event.text == Key.Space || event.text == Key.Return {
-                root.opened();
-                return accept;
+    property <[CategoryRow]> shown: root.archived ? root.archived-rows : root.active;
+
+    FinanceCardHeader {
+        title: root.title;
+        count: root.active.length;
+        InkButton {
+            icon: @image-url("../icons/plus.svg");
+            text: @tr("New category");
+            clicked => {
+                root.new-category();
             }
-            reject
         }
     }
 
-    if focus.has-focus: Rectangle {
-        border-radius: root.border-radius;
-        border-width: 2px;
-        border-color: Palette.foreground;
+    VerticalLayout {
+        for c in root.shown: CategoryLine {
+            category: c;
+            opened => {
+                root.edit(c);
+            }
+            archive => {
+                root.archive(c);
+            }
+            delete => {
+                root.delete(c);
+            }
+            assign(b, on) => {
+                return root.assign(c.id, on, b);
+            }
+            failed(e) => {
+                root.failed(e);
+            }
+        }
+
+        if !root.archived && root.uncategorized != "": CategoryLine {
+            editable: false;
+            label: @tr("No category");
+            category: {
+                id: 0,
+                name: "",
+                kind: root.kind,
+                archived: false,
+                in-use: false,
+                bucket-id: 0,
+                bucket-name: "",
+                total: root.uncategorized,
+            };
+        }
+
+        if root.shown.length == 0 && (root.archived || root.uncategorized == ""): Text {
+            text: @tr("Nothing here.");
+            color: Theme.muted;
+            height: 40px;
+            vertical-alignment: center;
+            horizontal-alignment: center;
+        }
     }
 }
 
-// The categories of one kind with what each took in the month, and the suggested ones to start.
+// The categories of both kinds with what each took in the month, and the suggested ones to start.
 export component CategoriesTab inherits VerticalLayout {
-    callback new-category();
+    callback new-category(TxKind);
     callback edit-category(CategoryRow);
 
-    property <[TxKind]> kinds: [TxKind.expense, TxKind.income];
-    // Failure of the suggested ones, shown over the empty state.
+    // Failure of the suggested ones or of a change in a row, shown over the cards.
     property <string> error;
-    property <bool> empty: FinanceStore.categories.length == 0 && FinanceStore.archived-categories.length == 0 && FinanceStore.uncategorized-total == "";
+    property <bool> archived;
+    property <CategoryRow> pending;
 
     spacing: 12px;
 
-    // Arrow keys move the choice, like the tabs they are drawn as.
-    function step(delta: int) {
-        FinanceStore.category-kind = delta > 0 ? TxKind.income : TxKind.expense;
-        FinanceStore.refresh();
+    function archive(c: CategoryRow) {
+        root.error = FinanceStore.archive-category(c.id, !c.archived);
+    }
+
+    function assign(category: int, on: bool, bucket: int) -> string {
+        return FinanceStore.assign-category(category, bucket, on);
     }
 
     if !FinanceStore.has-categories: EmptyState {
@@ -117,87 +315,122 @@ export component CategoriesTab inherits VerticalLayout {
         }
     }
 
-    if !FinanceStore.has-categories && root.error != "": Text {
+    if FinanceStore.has-categories: ArchiveTabs {
+        archived <=> root.archived;
+    }
+
+    if root.error != "": Text {
         text: root.error;
         color: Theme.critical;
         wrap: word-wrap;
     }
 
-    if FinanceStore.has-categories: HorizontalLayout {
-        spacing: 8px;
+    if FinanceStore.has-categories: ScrollView {
+        vertical-stretch: 1;
         HorizontalLayout {
-            horizontal-stretch: 0;
-            spacing: 0px;
-            alignment: start;
-            accessible-role: tab-list;
-            for k in root.kinds: SettingsTab {
-                text: Strings.tx-kind(k);
-                selected: FinanceStore.category-kind == k;
-                chosen => {
-                    if FinanceStore.category-kind != k {
-                        FinanceStore.category-kind = k;
-                        FinanceStore.refresh();
+            spacing: 12px;
+            padding-right: 12px; // clears the scroll bar
+            VerticalLayout {
+                horizontal-stretch: 1;
+                min-width: 0px;
+                preferred-width: 0px;
+                alignment: start;
+                KindCard {
+                    kind: TxKind.expense;
+                    title: @tr("Expenses");
+                    archived: root.archived;
+                    active: FinanceStore.expense-categories;
+                    archived-rows: FinanceStore.archived-expense-categories;
+                    uncategorized: FinanceStore.uncategorized-expense;
+                    new-category => {
+                        root.new-category(TxKind.expense);
+                    }
+                    edit(c) => {
+                        root.edit-category(c);
+                    }
+                    archive(c) => {
+                        root.archive(c);
+                    }
+                    delete(c) => {
+                        root.pending = c;
+                        confirm.show();
+                    }
+                    assign(c, on, b) => {
+                        return root.assign(c, on, b);
+                    }
+                    failed(e) => {
+                        root.error = e;
                     }
                 }
-                step(d) => {
-                    root.step(d);
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 1;
+                min-width: 0px;
+                preferred-width: 0px;
+                alignment: start;
+                KindCard {
+                    kind: TxKind.income;
+                    title: @tr("summary card" => "Income");
+                    archived: root.archived;
+                    active: FinanceStore.income-categories;
+                    archived-rows: FinanceStore.archived-income-categories;
+                    uncategorized: FinanceStore.uncategorized-income;
+                    new-category => {
+                        root.new-category(TxKind.income);
+                    }
+                    edit(c) => {
+                        root.edit-category(c);
+                    }
+                    archive(c) => {
+                        root.archive(c);
+                    }
+                    delete(c) => {
+                        root.pending = c;
+                        confirm.show();
+                    }
+                    failed(e) => {
+                        root.error = e;
+                    }
                 }
             }
         }
-
-        MonthNav {
-            horizontal-stretch: 1;
-        }
     }
 
-    if FinanceStore.has-categories && root.empty: EmptyState {
-        title: FinanceStore.category-kind == TxKind.expense ? @tr("No expense categories") : @tr("No income categories");
-        description: @tr("Create one to classify the movements of this type.");
-        action: @tr("New category");
-        clicked => {
-            root.new-category();
-        }
-    }
-
-    if FinanceStore.has-categories && !root.empty: ScrollView {
-        vertical-stretch: 1;
-        VerticalLayout {
-            alignment: start;
-            for c in FinanceStore.categories: CategoryLine {
-                category: c;
-                opened => {
-                    root.edit-category(c);
-                }
-            }
-
-            if FinanceStore.uncategorized-total != "": CategoryLine {
-                editable: false;
-                label: @tr("No category");
-                category: {
-                    id: 0,
-                    name: "",
-                    kind: FinanceStore.category-kind,
-                    archived: false,
-                    in-use: false,
-                    bucket-id: 0,
-                    total: FinanceStore.uncategorized-total,
-                };
-            }
-
-            if FinanceStore.archived-categories.length > 0: HorizontalLayout {
-                height: 32px;
-                padding-left: 8px;
+    confirm := PopupWindow {
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        width: 320px;
+        PopupSurface {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
                 Text {
-                    text: @tr("Archived");
-                    color: Theme.muted;
-                    vertical-alignment: bottom;
+                    text: Strings.delete-category-question(root.pending.name);
+                    wrap: word-wrap;
                 }
-            }
 
-            for c in FinanceStore.archived-categories: CategoryLine {
-                category: c;
-                opened => {
-                    root.edit-category(c);
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Cancel");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            confirm.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Delete");
+                        clicked => {
+                            confirm.close();
+                            root.error = FinanceStore.delete-category(root.pending.id);
+                        }
+                    }
                 }
             }
         }

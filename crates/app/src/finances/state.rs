@@ -42,12 +42,9 @@ pub struct State {
     pub due_rows: Rc<VecModel<ScheduledRow>>,
     /// The To pay tab: the card bills due in the shown month.
     pub bill_rows: Rc<VecModel<BillRow>>,
-    /// The Categories tab: the kind's active categories, then its archived ones.
-    pub cat_rows: Rc<VecModel<CategoryRow>>,
-    pub archived_rows: Rc<VecModel<CategoryRow>>,
     /// Every category of both kinds, for the movement modal.
     pub choices: Rc<VecModel<CategoryRow>>,
-    /// The Accounts tab: the active reserves, then the archived ones.
+    /// The Budget tab: the active reserves, then the archived ones.
     pub reserve_rows: Rc<VecModel<ReserveRow>>,
     /// The Budget tab: the active buckets of the shown month, then the archived ones.
     pub bucket_rows: Rc<VecModel<BucketRow>>,
@@ -239,10 +236,10 @@ impl State {
                 FinanceTab::Budget => {
                     self.load_budget(w)?;
                     self.load_choices()?;
+                    self.load_reserves(w)?;
                 }
                 FinanceTab::Categories => self.load_categories(w)?,
                 FinanceTab::Accounts => {
-                    self.load_reserves()?;
                     self.load_worth(w)?;
                 }
             }
