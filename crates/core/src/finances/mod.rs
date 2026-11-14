@@ -6,16 +6,24 @@
 use std::fmt;
 
 mod accounts;
+mod categories;
 mod money;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tests_categories;
+#[cfg(test)]
 mod tests_transactions;
+#[cfg(test)]
+mod tests_transfers;
 mod transactions;
+mod transfers;
 
 pub use accounts::*;
+pub use categories::*;
 pub use money::*;
 pub use transactions::*;
+pub use transfers::*;
 
 #[derive(Debug)]
 pub enum FinanceError {
@@ -32,6 +40,23 @@ pub enum FinanceError {
     /// A stored movement date that cannot be read.
     BadDate(String),
     TransactionNotFound,
+    CategoryNotFound,
+    /// Another active category of the same kind has that name.
+    DuplicateName,
+    /// Some movement uses the category.
+    InUse,
+    /// The suggested categories can only be created in an instance without categories.
+    CategoriesExist,
+    /// The category's kind differs from the movement's.
+    CategoryKindMismatch,
+    /// An archived category cannot be newly assigned to a movement.
+    CategoryArchived,
+    /// A transfer needs two different accounts.
+    SameAccount,
+    /// Some movement uses the account.
+    AccountInUse,
+    /// An archived account cannot be newly used by a movement.
+    AccountArchived,
     Sqlite(rusqlite::Error),
 }
 
@@ -47,6 +72,15 @@ impl fmt::Display for FinanceError {
             FinanceError::BadTxKind(k) => write!(f, "invalid stored movement kind: {k}"),
             FinanceError::BadDate(d) => write!(f, "invalid stored movement date: {d}"),
             FinanceError::TransactionNotFound => write!(f, "movement not found"),
+            FinanceError::CategoryNotFound => write!(f, "category not found"),
+            FinanceError::DuplicateName => write!(f, "a category with that name exists"),
+            FinanceError::InUse => write!(f, "the category is in use"),
+            FinanceError::CategoriesExist => write!(f, "categories already exist"),
+            FinanceError::CategoryKindMismatch => write!(f, "the category kind differs"),
+            FinanceError::CategoryArchived => write!(f, "the category is archived"),
+            FinanceError::SameAccount => write!(f, "the accounts are the same"),
+            FinanceError::AccountInUse => write!(f, "the account is in use"),
+            FinanceError::AccountArchived => write!(f, "the account is archived"),
             FinanceError::Sqlite(e) => write!(f, "database error: {e}"),
         }
     }

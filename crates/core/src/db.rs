@@ -84,6 +84,8 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0018_study_session_date.sql"),
     include_str!("../migrations/0019_finance_account.sql"),
     include_str!("../migrations/0020_finance_transaction.sql"),
+    include_str!("../migrations/0021_finance_category.sql"),
+    include_str!("../migrations/0022_finance_transfer.sql"),
 ];
 
 pub fn open(path: &Path) -> Result<Connection, DbError> {
@@ -286,6 +288,35 @@ mod tests {
         );
         drop(conn);
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn transfer_migration_keeps_existing_movements() {
+        let mut conn = Connection::open_in_memory().unwrap();
+        conn.pragma_update(None, "foreign_keys", true).unwrap();
+        migrate(&mut conn, &MIGRATIONS[..21]).unwrap();
+        conn.execute_batch(
+            "INSERT INTO finance_account (name, kind, currency, initial_balance)
+                 VALUES ('A', 'cash', 'CLP', 0), ('B', 'cash', 'CLP', 0);
+             INSERT INTO finance_transaction (kind, account_id, amount, date)
+                 VALUES ('expense', 1, 5, '2026-03-01'), ('income', 2, 7, '2026-03-02');",
+        )
+        .unwrap();
+        migrate(&mut conn, MIGRATIONS).unwrap();
+        let rows: Vec<(String, Option<i64>)> = conn
+            .prepare("SELECT kind, to_account_id FROM finance_transaction ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?)))
+            .unwrap()
+            .collect::<Result<_, _>>()
+            .unwrap();
+        assert_eq!(rows, [("expense".into(), None), ("income".into(), None)]);
+        let archived: i64 = conn
+            .query_row("SELECT sum(archived) FROM finance_account", [], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(archived, 0);
     }
 
     #[test]

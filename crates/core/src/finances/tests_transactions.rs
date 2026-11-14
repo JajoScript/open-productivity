@@ -26,10 +26,18 @@ fn balance(conn: &rusqlite::Connection, a: AccountId) -> i64 {
 #[test]
 fn expense_and_income_move_the_balance() {
     let (conn, a) = setup("CLP");
-    let e =
-        create_transaction(&conn, TxKind::Expense, a, "300", d("2026-03-05"), " Lunch ").unwrap();
+    let e = create_transaction(
+        &conn,
+        TxKind::Expense,
+        a,
+        "300",
+        d("2026-03-05"),
+        " Lunch ",
+        None,
+    )
+    .unwrap();
     assert_eq!(balance(&conn, a), 700);
-    create_transaction(&conn, TxKind::Income, a, "1.500", d("2026-03-06"), "").unwrap();
+    create_transaction(&conn, TxKind::Income, a, "1.500", d("2026-03-06"), "", None).unwrap();
     assert_eq!(balance(&conn, a), 2200);
     assert_eq!(list_accounts(&conn).unwrap()[0].balance, 2200);
     let t = get_transaction(&conn, e).unwrap();
@@ -43,7 +51,7 @@ fn invalid_amounts_and_missing_account() {
     let (conn, a) = setup("CLP");
     for bad in ["", "  ", "0", "-5", "abc", "1.2.3"] {
         assert!(matches!(
-            create_transaction(&conn, TxKind::Expense, a, bad, d("2026-03-05"), ""),
+            create_transaction(&conn, TxKind::Expense, a, bad, d("2026-03-05"), "", None),
             Err(FinanceError::InvalidAmount)
         ));
     }
@@ -54,7 +62,8 @@ fn invalid_amounts_and_missing_account() {
             AccountId(99),
             "5",
             d("2026-03-05"),
-            ""
+            "",
+            None
         ),
         Err(FinanceError::AccountNotFound)
     ));
@@ -64,7 +73,16 @@ fn invalid_amounts_and_missing_account() {
 #[test]
 fn usd_amounts_and_future_dates() {
     let (conn, a) = setup("USD");
-    create_transaction(&conn, TxKind::Expense, a, "12,34", d("2999-01-01"), "").unwrap();
+    create_transaction(
+        &conn,
+        TxKind::Expense,
+        a,
+        "12,34",
+        d("2999-01-01"),
+        "",
+        None,
+    )
+    .unwrap();
     assert_eq!(balance(&conn, a), 100_000 - 1234);
     assert_eq!(list_month(&conn, d("2999-01-01")).unwrap().len(), 1);
 }
@@ -73,8 +91,19 @@ fn usd_amounts_and_future_dates() {
 fn update_recalculates_both_accounts() {
     let (conn, a) = setup("CLP");
     let b = create_account(&conn, "B", AccountKind::Cash, "", "50").unwrap();
-    let id = create_transaction(&conn, TxKind::Expense, a, "100", d("2026-03-05"), "x").unwrap();
-    update_transaction(&conn, id, TxKind::Income, b, "30", d("2026-04-01"), " y ").unwrap();
+    let id =
+        create_transaction(&conn, TxKind::Expense, a, "100", d("2026-03-05"), "x", None).unwrap();
+    update_transaction(
+        &conn,
+        id,
+        TxKind::Income,
+        b,
+        "30",
+        d("2026-04-01"),
+        " y ",
+        None,
+    )
+    .unwrap();
     assert_eq!((balance(&conn, a), balance(&conn, b)), (1000, 80));
     let t = get_transaction(&conn, id).unwrap();
     assert_eq!(
@@ -88,7 +117,7 @@ fn update_recalculates_both_accounts() {
         (TxKind::Income, b, 30, d("2026-04-01"), "y")
     );
     assert!(matches!(
-        update_transaction(&conn, id, TxKind::Income, b, "0", d("2026-04-01"), ""),
+        update_transaction(&conn, id, TxKind::Income, b, "0", d("2026-04-01"), "", None),
         Err(FinanceError::InvalidAmount)
     ));
     assert!(matches!(
@@ -99,7 +128,8 @@ fn update_recalculates_both_accounts() {
             AccountId(99),
             "1",
             d("2026-04-01"),
-            ""
+            "",
+            None
         ),
         Err(FinanceError::AccountNotFound)
     ));
@@ -111,7 +141,8 @@ fn update_recalculates_both_accounts() {
             b,
             "1",
             d("2026-04-01"),
-            ""
+            "",
+            None
         ),
         Err(FinanceError::TransactionNotFound)
     ));
@@ -121,7 +152,8 @@ fn update_recalculates_both_accounts() {
 #[test]
 fn delete_returns_the_balance_and_missing_fails() {
     let (conn, a) = setup("CLP");
-    let id = create_transaction(&conn, TxKind::Expense, a, "100", d("2026-03-05"), "").unwrap();
+    let id =
+        create_transaction(&conn, TxKind::Expense, a, "100", d("2026-03-05"), "", None).unwrap();
     delete_transaction(&conn, id).unwrap();
     assert_eq!(balance(&conn, a), 1000);
     assert!(matches!(
@@ -138,7 +170,7 @@ fn delete_returns_the_balance_and_missing_fails() {
 fn list_month_bounds_and_order() {
     let (conn, a) = setup("CLP");
     let mk = |date: &str| {
-        create_transaction(&conn, TxKind::Expense, a, "1", d(date), "")
+        create_transaction(&conn, TxKind::Expense, a, "1", d(date), "", None)
             .unwrap()
             .0
     };
@@ -153,7 +185,10 @@ fn list_month_bounds_and_order() {
         list_month(&conn, d(day))
             .unwrap()
             .iter()
-            .map(|t| t.id.0)
+            .map(|m| match m {
+                Movement::Tx(t) => t.id.0,
+                Movement::Transfer(t) => t.id.0,
+            })
             .collect()
     };
     assert_eq!(ids("2026-12-01"), [last, mid2, mid, first]);
@@ -164,7 +199,7 @@ fn list_month_bounds_and_order() {
 #[test]
 fn unreadable_stored_values_are_errors() {
     let (conn, a) = setup("CLP");
-    let id = create_transaction(&conn, TxKind::Expense, a, "1", d("2026-03-05"), "").unwrap();
+    let id = create_transaction(&conn, TxKind::Expense, a, "1", d("2026-03-05"), "", None).unwrap();
     assert!(matches!(
         TxKind::parse("x"),
         Err(FinanceError::BadTxKind(_))

@@ -52,6 +52,9 @@ pub struct Account {
     pub currency: &'static Currency,
     pub initial_balance: i64,
     pub balance: i64,
+    pub archived: bool,
+    /// Some movement uses it, as source or destination.
+    pub in_use: bool,
 }
 
 pub fn main_currency(conn: &Connection) -> Result<Option<&'static Currency>, FinanceError> {
@@ -123,8 +126,12 @@ pub fn update_account(
 
 /// The balance is summed in SQL; an integer overflow there is an error, not a panic.
 const SELECT: &str = "SELECT a.id, a.name, a.kind, a.bank, a.currency, a.initial_balance,
-    a.initial_balance + coalesce((SELECT sum(CASE t.kind WHEN 'income' THEN t.amount ELSE -t.amount END)
-        FROM finance_transaction t WHERE t.account_id = a.id), 0) AS balance
+    a.initial_balance + coalesce((SELECT sum(CASE WHEN t.account_id = a.id
+            THEN CASE t.kind WHEN 'income' THEN t.amount ELSE -t.amount END
+            ELSE t.amount END)
+        FROM finance_transaction t WHERE t.account_id = a.id OR t.to_account_id = a.id), 0)
+        AS balance, a.archived,
+    EXISTS (SELECT 1 FROM finance_transaction t WHERE t.account_id = a.id OR t.to_account_id = a.id)
     FROM finance_account a";
 
 fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Account, FinanceError>> {
@@ -132,6 +139,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Account, FinanceError>> {
     let code: String = r.get(4)?;
     let (id, name, bank, initial_balance, balance) =
         (r.get(0)?, r.get(1)?, r.get(3)?, r.get(5)?, r.get(6)?);
+    let (archived, in_use): (bool, bool) = (r.get(7)?, r.get(8)?);
     Ok(AccountKind::parse(&kind).and_then(|kind| {
         Ok(Account {
             id: AccountId(id),
@@ -141,6 +149,8 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Account, FinanceError>> {
             currency: currency(&code).ok_or(FinanceError::UnknownCurrency(code))?,
             initial_balance,
             balance,
+            archived,
+            in_use,
         })
     }))
 }
@@ -158,4 +168,39 @@ pub fn get_account(conn: &Connection, id: AccountId) -> Result<Account, FinanceE
         Err(rusqlite::Error::QueryReturnedNoRows) => Err(FinanceError::AccountNotFound),
         Err(e) => Err(e.into()),
     }
+}
+
+pub fn set_account_archived(
+    conn: &Connection,
+    id: AccountId,
+    archived: bool,
+) -> Result<(), FinanceError> {
+    match conn.execute(
+        "UPDATE finance_account SET archived = ?1 WHERE id = ?2",
+        (archived, id.0),
+    )? {
+        0 => Err(FinanceError::AccountNotFound),
+        _ => Ok(()),
+    }
+}
+
+/// Only an account without movements (as source or destination) can be deleted.
+pub fn delete_account(conn: &Connection, id: AccountId) -> Result<(), FinanceError> {
+    if get_account(conn, id)?.in_use {
+        return Err(FinanceError::AccountInUse);
+    }
+    conn.execute("DELETE FROM finance_account WHERE id = ?1", [id.0])?;
+    Ok(())
+}
+
+/// The account must exist and, unless the movement already had it, not be archived.
+pub(super) fn check_account(
+    conn: &Connection,
+    id: AccountId,
+    current: Option<AccountId>,
+) -> Result<(), FinanceError> {
+    if get_account(conn, id)?.archived && current != Some(id) {
+        return Err(FinanceError::AccountArchived);
+    }
+    Ok(())
 }
