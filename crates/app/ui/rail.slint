@@ -124,7 +124,7 @@ export component Rail inherits Rectangle {
                     x: 0px;
                     width: 40px;
                     height: parent.height;
-                    source: @image-url("app-icons/fill-white.svg");
+                    source: Theme.dark ? @image-url("app-icons/fill-white.svg") : @image-url("app-icons/outline-black.svg");
                     colorize: Palette.foreground;
                     image-fit: contain;
                     accessible-role: image;
