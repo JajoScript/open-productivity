@@ -308,20 +308,46 @@ pub fn get_transaction(conn: &Connection, id: TransactionId) -> Result<Transacti
     }
 }
 
+/// Which movements a month listing keeps.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum MovementFilter {
+    All,
+    Income,
+    Expense,
+    Transfer,
+}
+
+impl MovementFilter {
+    /// The `t.kind` value it keeps; `None` keeps every kind.
+    fn kind(self) -> Option<&'static str> {
+        match self {
+            MovementFilter::All => None,
+            MovementFilter::Income => Some("income"),
+            MovementFilter::Expense => Some("expense"),
+            MovementFilter::Transfer => Some("transfer"),
+        }
+    }
+}
+
 /// The movements of the month holding `month` (any day of it works: it is normalized to day 1),
-/// newest first.
-pub fn list_month(conn: &Connection, month: NaiveDate) -> Result<Vec<Movement>, FinanceError> {
+/// newest first, of the kind `filter` keeps.
+pub fn list_month(
+    conn: &Connection,
+    month: NaiveDate,
+    filter: MovementFilter,
+) -> Result<Vec<Movement>, FinanceError> {
     let from = month_start(month);
     let Some(to) = from.checked_add_months(Months::new(1)) else {
         return Ok(Vec::new());
     };
     let mut stmt = conn.prepare(&format!(
-        "{SELECT} WHERE t.date >= ?1 AND t.date < ?2 ORDER BY t.date DESC, t.id DESC"
+        "{SELECT} WHERE t.date >= ?1 AND t.date < ?2 AND (?3 IS NULL OR t.kind = ?3)          ORDER BY t.date DESC, t.id DESC"
     ))?;
     let rows = stmt.query_map(
-        [
+        rusqlite::params![
             from.format(DATE_FORMAT).to_string(),
             to.format(DATE_FORMAT).to_string(),
+            filter.kind(),
         ],
         row,
     )?;

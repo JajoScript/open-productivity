@@ -68,7 +68,11 @@ fn invalid_amounts_and_missing_account() {
         ),
         Err(FinanceError::AccountNotFound)
     ));
-    assert!(list_month(&conn, d("2026-03-01")).unwrap().is_empty());
+    assert!(
+        list_month(&conn, d("2026-03-01"), MovementFilter::All)
+            .unwrap()
+            .is_empty()
+    );
 }
 
 #[test]
@@ -85,7 +89,12 @@ fn usd_amounts_and_future_dates() {
     )
     .unwrap();
     assert_eq!(balance(&conn, a), 100_000 - 1234);
-    assert_eq!(list_month(&conn, d("2999-01-01")).unwrap().len(), 1);
+    assert_eq!(
+        list_month(&conn, d("2999-01-01"), MovementFilter::All)
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[test]
@@ -183,7 +192,7 @@ fn list_month_bounds_and_order() {
     mk("2027-01-01");
     // Any day of the month selects the whole month.
     let ids = |day: &str| -> Vec<i64> {
-        list_month(&conn, d(day))
+        list_month(&conn, d(day), MovementFilter::All)
             .unwrap()
             .iter()
             .map(|m| match m {
@@ -194,7 +203,12 @@ fn list_month_bounds_and_order() {
     };
     assert_eq!(ids("2026-12-01"), [last, mid2, mid, first]);
     assert_eq!(ids("2026-12-20"), ids("2026-12-01"));
-    assert_eq!(list_month(&conn, d("2027-01-01")).unwrap().len(), 1);
+    assert_eq!(
+        list_month(&conn, d("2027-01-01"), MovementFilter::All)
+            .unwrap()
+            .len(),
+        1
+    );
 }
 
 #[test]

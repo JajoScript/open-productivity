@@ -94,6 +94,20 @@ fn transactions_and_transfers_do_not_mix() {
 }
 
 #[test]
+fn month_list_filters_by_kind() {
+    let (conn, a, b) = setup();
+    let m = d("2026-03-01");
+    create_transaction(&conn, TxKind::Expense, a, "10", m, "", None).unwrap();
+    create_transaction(&conn, TxKind::Income, a, "20", m, "", None).unwrap();
+    create_transfer(&conn, a, b, "300", "", m, "").unwrap();
+    let n = |f| list_month(&conn, m, f).unwrap().len();
+    assert_eq!(n(MovementFilter::All), 3);
+    assert_eq!(n(MovementFilter::Expense), 1);
+    assert_eq!(n(MovementFilter::Income), 1);
+    assert_eq!(n(MovementFilter::Transfer), 1);
+}
+
+#[test]
 fn month_list_mixes_transfers_in_order_and_totals_ignore_them() {
     let (conn, a, b) = setup();
     let c = create_category(&conn, TxKind::Expense, "Food").unwrap();
@@ -108,7 +122,7 @@ fn month_list_mixes_transfers_in_order_and_totals_ignore_them() {
     )
     .unwrap();
     let t = create_transfer(&conn, a, b, "300", "", d("2026-03-05"), "").unwrap();
-    let list = list_month(&conn, d("2026-03-01")).unwrap();
+    let list = list_month(&conn, d("2026-03-01"), MovementFilter::All).unwrap();
     assert!(matches!(&list[0], Movement::Transfer(x) if x.id == t));
     assert!(matches!(&list[1], Movement::Tx(x) if x.id == e));
     for (kind, want) in [(TxKind::Expense, 10), (TxKind::Income, 0)] {

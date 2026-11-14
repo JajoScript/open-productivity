@@ -51,7 +51,7 @@ fn state(conn: &Conn, id: ScheduledId) -> (NaiveDate, i64, bool) {
 }
 
 fn txs(conn: &Conn, month: &str) -> Vec<Transaction> {
-    list_month(conn, d(month))
+    list_month(conn, d(month), MovementFilter::All)
         .unwrap()
         .into_iter()
         .filter_map(|m| match m {
