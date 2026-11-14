@@ -10,6 +10,7 @@ use super::FinanceError;
 use super::accounts::{AccountId, check_account, get_account};
 use super::categories::{CategoryId, get_category};
 use super::money::{Currency, currency, parse_amount};
+use super::scheduled::ScheduledId;
 use super::transfers::{Transfer, transfer_row};
 use crate::calendar::month_start;
 
@@ -54,6 +55,18 @@ pub struct Transaction {
     pub description: String,
     pub category: Option<CategoryId>,
     pub category_name: Option<String>,
+    /// The scheduled payment that created it, if it still exists.
+    pub scheduled: Option<ScheduledLink>,
+}
+
+/// What a movement that came from a scheduled payment tells the UI.
+#[derive(Debug, PartialEq)]
+pub struct ScheduledLink {
+    pub id: ScheduledId,
+    /// (number, total) when it paid an installment.
+    pub installment: Option<(i64, i64)>,
+    /// Deleting it can return the payment to the schedule (`delete_transaction`'s `restore`).
+    pub restorable: bool,
 }
 
 impl Transaction {
@@ -82,7 +95,7 @@ fn validate<'a>(
 
 /// The category must exist, match the movement's kind and, unless the movement already had it,
 /// not be archived.
-fn check_category(
+pub(super) fn check_category(
     conn: &Connection,
     category: Option<CategoryId>,
     kind: TxKind,
@@ -111,9 +124,35 @@ pub fn create_transaction(
     let (amount, description) = validate(conn, account, amount, description)?;
     check_account(conn, account, None)?;
     check_category(conn, category, kind, None)?;
+    insert(
+        conn,
+        kind,
+        account,
+        amount,
+        date,
+        description,
+        category,
+        None,
+    )
+}
+
+/// Inserts an already validated movement; `from` is the scheduled payment and installment number
+/// that created it.
+#[allow(clippy::too_many_arguments)]
+pub(super) fn insert(
+    conn: &Connection,
+    kind: TxKind,
+    account: AccountId,
+    amount: i64,
+    date: NaiveDate,
+    description: &str,
+    category: Option<CategoryId>,
+    from: Option<(ScheduledId, Option<i64>)>,
+) -> Result<TransactionId, FinanceError> {
     conn.execute(
-        "INSERT INTO finance_transaction (kind, account_id, amount, date, description, category_id)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        "INSERT INTO finance_transaction
+             (kind, account_id, amount, date, description, category_id, scheduled_id, installment)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         (
             kind.as_str(),
             account.0,
@@ -121,6 +160,8 @@ pub fn create_transaction(
             date.format(DATE_FORMAT).to_string(),
             description,
             category.map(|c| c.0),
+            from.map(|f| f.0.0),
+            from.and_then(|f| f.1),
         ),
     )?;
     Ok(TransactionId(conn.last_insert_rowid()))
@@ -160,20 +201,49 @@ pub fn update_transaction(
     Ok(())
 }
 
-pub fn delete_transaction(conn: &Connection, id: TransactionId) -> Result<(), FinanceError> {
-    match conn.execute("DELETE FROM finance_transaction WHERE id = ?1", [id.0])? {
-        0 => Err(FinanceError::TransactionNotFound),
-        _ => Ok(()),
+/// With `restore`, a movement that came from a one-time or installments schedule returns its
+/// payment: the schedule is pending again (an installment goes back to the unpaid ones, at the
+/// end of the series). A recurring schedule has nothing to return.
+pub fn delete_transaction(
+    conn: &Connection,
+    id: TransactionId,
+    restore: bool,
+) -> Result<(), FinanceError> {
+    let tx = conn.unchecked_transaction()?;
+    let scheduled: Option<i64> = match tx.query_row(
+        "SELECT scheduled_id FROM finance_transaction WHERE id = ?1",
+        [id.0],
+        |r| r.get(0),
+    ) {
+        Ok(s) => s,
+        Err(rusqlite::Error::QueryReturnedNoRows) => {
+            return Err(FinanceError::TransactionNotFound);
+        }
+        Err(e) => return Err(e.into()),
+    };
+    tx.execute("DELETE FROM finance_transaction WHERE id = ?1", [id.0])?;
+    if let (true, Some(sid)) = (restore, scheduled) {
+        tx.execute(
+            "UPDATE finance_scheduled
+             SET done = 0, installments_paid = CASE form
+                 WHEN 'installments' THEN max(installments_paid - 1, 0) ELSE installments_paid END
+             WHERE id = ?1 AND form IN ('once', 'installments')",
+            [sid],
+        )?;
     }
+    tx.commit()?;
+    Ok(())
 }
 
 pub(super) const SELECT: &str =
     "SELECT t.id, t.kind, t.account_id, a.name, a.currency, t.amount, t.date,
-    t.description, t.category_id, c.name, t.to_account_id, b.name, t.to_amount, b.currency
+    t.description, t.category_id, c.name, t.to_account_id, b.name, t.to_amount, b.currency,
+    t.scheduled_id, t.installment, s.form, s.installments_total, s.installments_paid, s.done
     FROM finance_transaction t
     JOIN finance_account a ON a.id = t.account_id
     LEFT JOIN finance_account b ON b.id = t.to_account_id
-    LEFT JOIN finance_category c ON c.id = t.category_id";
+    LEFT JOIN finance_category c ON c.id = t.category_id
+    LEFT JOIN finance_scheduled s ON s.id = t.scheduled_id";
 
 /// A movement of the month list: a transaction or a transfer between accounts.
 #[derive(Debug, PartialEq)]
@@ -192,6 +262,20 @@ pub(super) fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Movement, Financ
     let (id, account_id, account_name, amount, description) =
         (r.get(0)?, r.get(2)?, r.get(3)?, r.get(5)?, r.get(7)?);
     let (category, category_name): (Option<i64>, Option<String>) = (r.get(8)?, r.get(9)?);
+    let scheduled: Option<i64> = r.get(14)?;
+    let number: Option<i64> = r.get(15)?;
+    let form: Option<String> = r.get(16)?;
+    let total: Option<i64> = r.get(17)?;
+    let (paid, done): (Option<i64>, Option<bool>) = (r.get(18)?, r.get(19)?);
+    let scheduled = scheduled.map(|sid| ScheduledLink {
+        id: ScheduledId(sid),
+        installment: number.zip(total),
+        restorable: match form.as_deref() {
+            Some("once") => done == Some(true),
+            Some("installments") => paid.is_some_and(|p| p > 0),
+            _ => false,
+        },
+    });
     Ok(TxKind::parse(&kind).and_then(|kind| {
         Ok(Movement::Tx(Transaction {
             id: TransactionId(id),
@@ -205,6 +289,7 @@ pub(super) fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Movement, Financ
             description,
             category: category.map(CategoryId),
             category_name,
+            scheduled,
         }))
     }))
 }

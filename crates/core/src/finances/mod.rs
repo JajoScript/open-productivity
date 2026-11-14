@@ -9,6 +9,7 @@ mod accounts;
 mod categories;
 mod money;
 mod rates;
+mod scheduled;
 mod summary;
 #[cfg(test)]
 mod tests;
@@ -18,6 +19,8 @@ mod tests_categories;
 mod tests_currencies;
 #[cfg(test)]
 mod tests_main_currency;
+#[cfg(test)]
+mod tests_scheduled;
 #[cfg(test)]
 mod tests_summary;
 #[cfg(test)]
@@ -31,6 +34,7 @@ pub use accounts::*;
 pub use categories::*;
 pub use money::*;
 pub use rates::*;
+pub use scheduled::*;
 pub use summary::*;
 pub use transactions::*;
 pub use transfers::*;
@@ -73,6 +77,13 @@ pub enum FinanceError {
     InvalidRate,
     /// The account has movements, so its currency cannot change.
     CurrencyLocked,
+    /// A scheduled payment's form, frequency or installments are not valid.
+    InvalidSchedule,
+    ScheduledNotFound,
+    /// A finished scheduled payment cannot be edited, confirmed or skipped.
+    ScheduledDone,
+    /// The account has this many pending scheduled payments.
+    AccountHasSchedules(i64),
     Sqlite(rusqlite::Error),
 }
 
@@ -100,6 +111,12 @@ impl fmt::Display for FinanceError {
             FinanceError::MissingRate(c) => write!(f, "missing exchange rate for {c}"),
             FinanceError::InvalidRate => write!(f, "the exchange rate is not valid"),
             FinanceError::CurrencyLocked => write!(f, "the account's currency is locked"),
+            FinanceError::InvalidSchedule => write!(f, "the scheduled payment is not valid"),
+            FinanceError::ScheduledNotFound => write!(f, "scheduled payment not found"),
+            FinanceError::ScheduledDone => write!(f, "the scheduled payment is finished"),
+            FinanceError::AccountHasSchedules(n) => {
+                write!(f, "the account has {n} scheduled payments")
+            }
             FinanceError::Sqlite(e) => write!(f, "database error: {e}"),
         }
     }

@@ -72,6 +72,7 @@ impl Suggested {
 
 const SELECT: &str = "SELECT c.id, c.name, c.kind, c.archived,
     EXISTS (SELECT 1 FROM finance_transaction t WHERE t.category_id = c.id)
+        OR EXISTS (SELECT 1 FROM finance_scheduled s WHERE s.category_id = c.id)
     FROM finance_category c";
 
 fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Category, FinanceError>> {

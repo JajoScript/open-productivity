@@ -134,7 +134,7 @@ pub fn update_account(
     let main = main_currency(conn)?.ok_or(FinanceError::NoMainCurrency)?;
     let current = get_account(conn, id)?;
     let c = pick_currency(currency)?;
-    if c.code != current.currency.code && current.in_use {
+    if c.code != current.currency.code && (current.in_use || pending_schedules(conn, id)? > 0) {
         return Err(FinanceError::CurrencyLocked);
     }
     let (name, bank, amount) = validate(name, bank, initial_balance, c)?;
@@ -203,6 +203,12 @@ pub fn set_account_archived(
     id: AccountId,
     archived: bool,
 ) -> Result<(), FinanceError> {
+    if archived {
+        match pending_schedules(conn, id)? {
+            0 => {}
+            n => return Err(FinanceError::AccountHasSchedules(n)),
+        }
+    }
     match conn.execute(
         "UPDATE finance_account SET archived = ?1 WHERE id = ?2",
         (archived, id.0),
@@ -216,6 +222,15 @@ pub fn set_account_archived(
 pub fn delete_account(conn: &Connection, id: AccountId) -> Result<(), FinanceError> {
     if get_account(conn, id)?.in_use {
         return Err(FinanceError::AccountInUse);
+    }
+    // Finished payments still reference the account.
+    let all: i64 = conn.query_row(
+        "SELECT count(*) FROM finance_scheduled WHERE account_id = ?1",
+        [id.0],
+        |r| r.get(0),
+    )?;
+    if all > 0 {
+        return Err(FinanceError::AccountHasSchedules(all));
     }
     conn.execute("DELETE FROM finance_account WHERE id = ?1", [id.0])?;
     Ok(())
@@ -231,4 +246,13 @@ pub(super) fn check_account(
         return Err(FinanceError::AccountArchived);
     }
     Ok(())
+}
+
+/// How many scheduled payments of the account are not finished.
+fn pending_schedules(conn: &Connection, id: AccountId) -> Result<i64, FinanceError> {
+    Ok(conn.query_row(
+        "SELECT count(*) FROM finance_scheduled WHERE account_id = ?1 AND done = 0",
+        [id.0],
+        |r| r.get(0),
+    )?)
 }

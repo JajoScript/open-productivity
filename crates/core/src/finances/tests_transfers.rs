@@ -42,7 +42,7 @@ fn transfer_moves_balances_both_ways() {
     );
     update_transfer(&conn, t, b, a, "100", "", d("2026-03-06"), "").unwrap();
     assert_eq!((balance(&conn, a), balance(&conn, b)), (1100, -50));
-    delete_transaction(&conn, t).unwrap();
+    delete_transaction(&conn, t, false).unwrap();
     assert_eq!((balance(&conn, a), balance(&conn, b)), (1000, 50));
 }
 

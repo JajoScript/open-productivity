@@ -155,10 +155,10 @@ fn delete_returns_the_balance_and_missing_fails() {
     let (conn, a) = setup("CLP");
     let id =
         create_transaction(&conn, TxKind::Expense, a, "100", d("2026-03-05"), "", None).unwrap();
-    delete_transaction(&conn, id).unwrap();
+    delete_transaction(&conn, id, false).unwrap();
     assert_eq!(balance(&conn, a), 1000);
     assert!(matches!(
-        delete_transaction(&conn, id),
+        delete_transaction(&conn, id, false),
         Err(FinanceError::TransactionNotFound)
     ));
     assert!(matches!(
