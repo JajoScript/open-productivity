@@ -14,6 +14,13 @@ fn d(s: &str) -> NaiveDate {
     s.parse().unwrap()
 }
 
+/// Test-only third currency: the module supports just CLP and USD.
+static EUR: Currency = Currency {
+    code: "EUR",
+    decimals: 2,
+    symbol: "€",
+};
+
 fn cur(code: &str) -> &'static Currency {
     currency(code).unwrap()
 }
@@ -45,7 +52,7 @@ fn usd_account(conn: &Connection, name: &str, balance: &str) -> AccountId {
 #[test]
 fn converts_through_the_main_currency() {
     let r = rates();
-    let (clp, usd, eur) = (cur("CLP"), cur("USD"), cur("EUR"));
+    let (clp, usd, eur) = (cur("CLP"), cur("USD"), &EUR);
     assert_eq!(r.convert(100, usd, clp).unwrap(), 987);
     assert_eq!(r.convert(987_240, clp, usd).unwrap(), 100_000);
     assert_eq!(r.convert(1234, usd, usd).unwrap(), 1234);
@@ -93,11 +100,11 @@ fn missing_rate_is_an_error_never_one() {
         Err(FinanceError::MissingRate(c)) if c == "USD"
     ));
     assert!(matches!(
-        r.from_main(100, cur("EUR")),
+        r.from_main(100, &EUR),
         Err(FinanceError::MissingRate(c)) if c == "EUR"
     ));
     assert!(matches!(
-        r.convert(1, cur("USD"), cur("EUR")),
+        r.convert(1, cur("USD"), &EUR),
         Err(FinanceError::MissingRate(_))
     ));
     assert_eq!(r.to_main(100, cur("CLP")).unwrap(), 100);
@@ -216,11 +223,11 @@ fn rate_and_account_are_saved_together() {
     assert_eq!(rows(&conn), 0);
     // The same on update.
     let id = account(&conn, "A", AccountKind::Cash, "", "1").unwrap();
-    let r = update_account(&conn, id, "A", AccountKind::Cash, "", "EUR", "1", Some("x"));
+    let r = update_account(&conn, id, "A", AccountKind::Cash, "", "USD", "1", Some("x"));
     assert!(matches!(r, Err(FinanceError::InvalidRate)));
     assert_eq!(get_account(&conn, id).unwrap().currency.code, "CLP");
     assert_eq!(rows(&conn), 0);
-    let r = update_account(&conn, id, "A", AccountKind::Cash, "", "EUR", "1", None);
+    let r = update_account(&conn, id, "A", AccountKind::Cash, "", "USD", "1", None);
     assert!(matches!(r, Err(FinanceError::MissingRate(_))));
     let r = update_account(
         &conn,
@@ -228,15 +235,15 @@ fn rate_and_account_are_saved_together() {
         "A",
         AccountKind::Cash,
         "",
-        "EUR",
+        "USD",
         "1",
-        Some("1100"),
+        Some("987,24"),
     );
     r.unwrap();
-    assert_eq!(get_account(&conn, id).unwrap().currency.code, "EUR");
+    assert_eq!(get_account(&conn, id).unwrap().currency.code, "USD");
     assert_eq!(
-        load_rates(&conn).unwrap().stored(cur("EUR")),
-        Some(1_100_000_000)
+        load_rates(&conn).unwrap().stored(cur("USD")),
+        Some(987_240_000)
     );
 }
 
@@ -266,16 +273,7 @@ fn destination_account_currency_is_locked_too() {
     let usd = usd_account(&conn, "U", "10");
     let clp = account(&conn, "C", AccountKind::Cash, "", "1000").unwrap();
     create_transfer(&conn, clp, usd, "987", "1", d("2026-03-01"), "").unwrap();
-    let r = update_account(
-        &conn,
-        usd,
-        "U",
-        AccountKind::Cash,
-        "",
-        "EUR",
-        "10",
-        Some("1100"),
-    );
+    let r = update_account(&conn, usd, "U", AccountKind::Cash, "", "CLP", "10", None);
     assert!(matches!(r, Err(FinanceError::CurrencyLocked)));
 }
 
@@ -297,10 +295,13 @@ fn set_rates_validates_and_is_atomic() {
         set_rate(&conn, "USD", "0"),
         Err(FinanceError::InvalidRate)
     ));
-    let r = set_rates(&conn, &[("USD", "900"), ("EUR", "oops")]);
+    let r = set_rates(&conn, &[("USD", "900"), ("USD", "oops")]);
     assert!(matches!(r, Err(FinanceError::InvalidRate)));
     assert_eq!(list_rates(&conn).unwrap()[0].rate, Some(1_000_500_000));
-    set_rates(&conn, &[("USD", "900"), ("EUR", "1100")]).unwrap();
+    let r = set_rates(&conn, &[("USD", "900"), ("EUR", "1100")]);
+    assert!(matches!(r, Err(FinanceError::UnknownCurrency(_))));
+    assert_eq!(list_rates(&conn).unwrap()[0].rate, Some(1_000_500_000));
+    set_rates(&conn, &[("USD", "900")]).unwrap();
     assert_eq!(list_rates(&conn).unwrap()[0].rate, Some(900_000_000));
     // Only the currencies some account uses are listed.
     assert_eq!(list_rates(&conn).unwrap().len(), 1);

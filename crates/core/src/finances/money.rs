@@ -23,19 +23,7 @@ const fn cur(code: &'static str, decimals: u32, symbol: &'static str) -> Currenc
     }
 }
 
-pub const CURRENCIES: &[Currency] = &[
-    cur("CLP", 0, "$"),
-    cur("USD", 2, "$"),
-    cur("EUR", 2, "€"),
-    cur("ARS", 2, "$"),
-    cur("BRL", 2, "R$"),
-    cur("COP", 2, "$"),
-    cur("MXN", 2, "$"),
-    cur("PEN", 2, "S/"),
-    cur("UYU", 2, "$"),
-    cur("GBP", 2, "£"),
-    cur("JPY", 0, "¥"),
-];
+pub const CURRENCIES: &[Currency] = &[cur("CLP", 0, "$"), cur("USD", 2, "$")];
 
 pub fn currency(code: &str) -> Option<&'static Currency> {
     CURRENCIES.iter().find(|c| c.code == code)
@@ -375,12 +363,12 @@ mod tests {
     #[test]
     fn formats() {
         use AmountStyle::*;
-        let eur = currency("EUR").unwrap();
+        let eur = currency("USD").unwrap();
         assert_eq!(format_amount(17062, clp(), Spanish), "$ 17.062");
         assert_eq!(format_amount(17062, clp(), English), "$17,062");
-        assert_eq!(format_amount(123450, eur, Spanish), "€ 1.234,50");
-        assert_eq!(format_amount(123450, eur, English), "€1,234.50");
-        assert_eq!(format_amount(-5, eur, English), "\u{2212}€0.05");
+        assert_eq!(format_amount(123450, eur, Spanish), "$ 1.234,50");
+        assert_eq!(format_amount(123450, eur, English), "$1,234.50");
+        assert_eq!(format_amount(-5, eur, English), "\u{2212}$0.05");
         assert_eq!(format_amount(0, clp(), Spanish), "$ 0");
     }
 
@@ -399,7 +387,7 @@ mod tests {
 
     #[test]
     fn lookup() {
-        assert_eq!(CURRENCIES.len(), 11);
+        assert_eq!(CURRENCIES.len(), 2);
         assert!(currency("XXX").is_none());
     }
 }
