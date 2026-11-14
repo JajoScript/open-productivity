@@ -11,6 +11,7 @@ mod budget;
 mod categories;
 mod money;
 mod rates;
+mod reserves;
 mod scheduled;
 mod summary;
 #[cfg(test)]
@@ -30,6 +31,8 @@ mod tests_currencies;
 #[cfg(test)]
 mod tests_main_currency;
 #[cfg(test)]
+mod tests_reserves;
+#[cfg(test)]
 mod tests_scheduled;
 #[cfg(test)]
 mod tests_summary;
@@ -46,6 +49,7 @@ pub use budget::*;
 pub use categories::*;
 pub use money::*;
 pub use rates::*;
+pub use reserves::*;
 pub use scheduled::*;
 pub use summary::*;
 pub use transactions::*;
@@ -109,6 +113,13 @@ pub enum FinanceError {
     ScheduledDone,
     /// The account has this many pending scheduled payments.
     AccountHasSchedules(i64),
+    ReserveNotFound,
+    /// The reserve (or the account's reserves) still holds money, so it cannot be archived.
+    ReserveNotEmpty,
+    /// The reserve has moves, so it cannot be deleted.
+    ReserveInUse,
+    /// More than the account's available (reserve) or than the reserve's balance (withdraw).
+    Insufficient,
     Sqlite(rusqlite::Error),
 }
 
@@ -149,6 +160,10 @@ impl fmt::Display for FinanceError {
             FinanceError::AccountHasSchedules(n) => {
                 write!(f, "the account has {n} scheduled payments")
             }
+            FinanceError::ReserveNotFound => write!(f, "reserve not found"),
+            FinanceError::ReserveNotEmpty => write!(f, "the reserve holds money"),
+            FinanceError::ReserveInUse => write!(f, "the reserve has moves"),
+            FinanceError::Insufficient => write!(f, "not enough money"),
             FinanceError::Sqlite(e) => write!(f, "database error: {e}"),
         }
     }

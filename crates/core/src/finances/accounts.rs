@@ -90,9 +90,16 @@ pub struct Account {
     pub credit_limit: Option<i64>,
     /// Some movement uses it, as source or destination.
     pub in_use: bool,
+    /// Sum of its reserves' balances; only a plain account has reserves.
+    pub reserved: i64,
 }
 
 impl Account {
+    /// What is left after the reserves: `balance - reserved`; negative when spent below them.
+    pub fn available(&self) -> i64 {
+        self.balance.saturating_sub(self.reserved)
+    }
+
     /// The figures of a card or line from its balance; `None` for a plain account.
     pub fn credit_usage(&self) -> Option<CardUsage> {
         let limit = self.credit_limit?;
@@ -213,7 +220,9 @@ fn check_currency_change(
     new: &Currency,
 ) -> Result<(), FinanceError> {
     if new.code != current.currency.code
-        && (current.in_use || pending_schedules(conn, current.id)? > 0)
+        && (current.in_use
+            || pending_schedules(conn, current.id)? > 0
+            || count_reserves(conn, current.id)? > 0)
     {
         return Err(FinanceError::CurrencyLocked);
     }
@@ -397,7 +406,10 @@ const SELECT: &str = "SELECT a.id, a.name, a.kind, a.bank, a.currency, a.initial
         FROM finance_transaction t WHERE t.account_id = a.id OR t.to_account_id = a.id), 0)
         AS balance, a.archived,
     a.credit_limit, a.closing_day, a.due_day,
-    EXISTS (SELECT 1 FROM finance_transaction t WHERE t.account_id = a.id OR t.to_account_id = a.id)
+    EXISTS (SELECT 1 FROM finance_transaction t WHERE t.account_id = a.id OR t.to_account_id = a.id),
+    coalesce((SELECT sum(CASE m.kind WHEN 'deposit' THEN m.amount ELSE -m.amount END)
+        FROM finance_reserve_move m JOIN finance_reserve r ON r.id = m.reserve_id
+        WHERE r.account_id = a.id), 0)
     FROM finance_account a";
 
 fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Account, FinanceError>> {
@@ -405,7 +417,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Account, FinanceError>> {
     let code: String = r.get(4)?;
     let (id, name, bank, initial_balance, balance) =
         (r.get(0)?, r.get(1)?, r.get(3)?, r.get(5)?, r.get(6)?);
-    let (archived, in_use): (bool, bool) = (r.get(7)?, r.get(11)?);
+    let (archived, in_use, reserved): (bool, bool, i64) = (r.get(7)?, r.get(11)?, r.get(12)?);
     let credit_limit: Option<i64> = r.get(8)?;
     let card = match (credit_limit, r.get(9)?, r.get(10)?) {
         (Some(limit), Some(closing_day), Some(due_day)) => Some(CardTerms {
@@ -428,6 +440,7 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Account, FinanceError>> {
             card,
             credit_limit,
             in_use,
+            reserved,
         })
     }))
 }
@@ -457,6 +470,9 @@ pub fn set_account_archived(
             0 => {}
             n => return Err(FinanceError::AccountHasSchedules(n)),
         }
+        if get_account(conn, id)?.reserved != 0 {
+            return Err(FinanceError::ReserveNotEmpty);
+        }
     }
     match conn.execute(
         "UPDATE finance_account SET archived = ?1 WHERE id = ?2",
@@ -469,7 +485,7 @@ pub fn set_account_archived(
 
 /// Only an account without movements (as source or destination) can be deleted.
 pub fn delete_account(conn: &Connection, id: AccountId) -> Result<(), FinanceError> {
-    if get_account(conn, id)?.in_use {
+    if get_account(conn, id)?.in_use || count_reserves(conn, id)? > 0 {
         return Err(FinanceError::AccountInUse);
     }
     // Finished payments still reference the account.
@@ -501,6 +517,15 @@ pub(super) fn check_account(
 fn pending_schedules(conn: &Connection, id: AccountId) -> Result<i64, FinanceError> {
     Ok(conn.query_row(
         "SELECT count(*) FROM finance_scheduled WHERE account_id = ?1 AND done = 0",
+        [id.0],
+        |r| r.get(0),
+    )?)
+}
+
+/// How many reserves, archived or not, the account has.
+fn count_reserves(conn: &Connection, id: AccountId) -> Result<i64, FinanceError> {
+    Ok(conn.query_row(
+        "SELECT count(*) FROM finance_reserve WHERE account_id = ?1",
         [id.0],
         |r| r.get(0),
     )?)
