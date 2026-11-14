@@ -8,10 +8,13 @@ use std::fmt;
 mod accounts;
 mod categories;
 mod money;
+mod summary;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
 mod tests_categories;
+#[cfg(test)]
+mod tests_summary;
 #[cfg(test)]
 mod tests_transactions;
 #[cfg(test)]
@@ -22,6 +25,7 @@ mod transfers;
 pub use accounts::*;
 pub use categories::*;
 pub use money::*;
+pub use summary::*;
 pub use transactions::*;
 pub use transfers::*;
 
