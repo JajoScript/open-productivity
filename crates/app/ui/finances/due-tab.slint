@@ -10,8 +10,18 @@ import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { FinanceStore } from "finance-store.slint";
 import { BillRow } from "bill-row.slint";
-import { MonthNav } from "month-nav.slint";
-import { ScheduledRow } from "scheduled-row.slint";
+import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { FinanceColumns, HeaderLabel } from "finance-table.slint";
+import { DueCell, DueMark, ScheduledRow } from "scheduled-row.slint";
+import { TxKind } from "transaction-row.slint";
+
+// Column sizes shared by the headers and the rows of both tables.
+global DueColumns {
+    out property <length> date: 64px;
+    out property <length> amount: 112px;
+    out property <length> actions: 60px;
+    out property <length> pay: 92px;
+}
 
 component DueLine inherits Rectangle {
     in property <ScheduledRow> due;
@@ -23,7 +33,7 @@ component DueLine inherits Rectangle {
     property <string> kind: Strings.schedule-form(root.due.form, root.due.number, root.due.total);
     property <string> skip-error;
 
-    height: 56px;
+    height: 52px;
     border-radius: 6px;
     background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
     animate background {
@@ -46,11 +56,24 @@ component DueLine inherits Rectangle {
 
     HorizontalLayout {
         padding-left: 8px;
-        padding-right: 16px; // clears the ListView scroll bar
-        spacing: 8px;
+        padding-right: 8px;
+        spacing: FinanceColumns.gap;
+        Rectangle {
+            width: FinanceColumns.icon;
+            Image {
+                source: root.due.kind == TxKind.income ? @image-url("../icons/arrow-up-right.svg") : @image-url("../icons/arrow-down-right.svg");
+                colorize: Theme.ink;
+                width: 16px;
+                height: 16px;
+                accessible-role: none;
+            }
+        }
+
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 1;
+            min-width: 0px;
+            preferred-width: 0px;
             Text {
                 text: root.title;
                 overflow: elide;
@@ -60,41 +83,51 @@ component DueLine inherits Rectangle {
             Text {
                 text: Strings.transaction-detail(root.due.account, root.kind);
                 color: Theme.muted;
+                font-size: 12px;
                 overflow: elide;
                 accessible-role: none;
             }
         }
 
         Text {
-            text: root.day;
+            text: Strings.short-date(root.due.date.day, root.due.date.month);
             // Only an overdue payment is red.
             color: root.due.overdue ? Theme.critical : Theme.muted;
             vertical-alignment: center;
+            width: DueColumns.date;
             accessible-role: none;
         }
 
         Text {
             text: root.due.amount;
             font-weight: 600;
+            overflow: elide;
             vertical-alignment: center;
             horizontal-alignment: right;
-            min-width: 80px;
+            width: DueColumns.amount;
             accessible-role: none;
         }
 
-        if root.due.is-next: SubtleButton {
-            text: @tr("Confirm");
-            color: Palette.foreground;
-            clicked => {
-                root.confirm();
+        HorizontalLayout {
+            width: DueColumns.actions;
+            alignment: end;
+            spacing: 4px;
+            if root.due.is-next: SubtleButton {
+                icon: @image-url("../icons/check.svg");
+                label: @tr("Confirm");
+                color: Palette.foreground;
+                clicked => {
+                    root.confirm();
+                }
             }
-        }
 
-        if root.due.is-next: SubtleButton {
-            text: @tr("Skip");
-            clicked => {
-                root.skip-error = "";
-                skip-popup.show();
+            if root.due.is-next: SubtleButton {
+                icon: @image-url("../icons/x.svg");
+                label: @tr("Skip");
+                clicked => {
+                    root.skip-error = "";
+                    skip-popup.show();
+                }
             }
         }
     }
@@ -170,7 +203,8 @@ component DueLine inherits Rectangle {
     }
 }
 
-// A card bill: closing, due date (red when overdue) and what is pending, with a Pay bill action.
+// A card bill: card with its closing date, due date (red when overdue), what is pending and a
+// Pay bill action.
 component BillLine inherits Rectangle {
     in property <BillRow> bill;
     callback pay;
@@ -178,17 +212,19 @@ component BillLine inherits Rectangle {
     property <string> closed: Strings.bill-closed(Strings.date(root.bill.closing.day, root.bill.closing.month, root.bill.closing.year));
     property <string> day: Strings.date(root.bill.due.day, root.bill.due.month, root.bill.due.year);
 
-    height: 56px;
+    height: 52px;
     accessible-role: list-item;
     accessible-label: Strings.bill-line-label(root.bill.card, root.closed, root.day, root.bill.pending);
 
     HorizontalLayout {
         padding-left: 8px;
-        padding-right: 16px; // clears the ListView scroll bar
-        spacing: 8px;
+        padding-right: 8px;
+        spacing: FinanceColumns.gap;
         VerticalLayout {
             alignment: center;
             horizontal-stretch: 1;
+            min-width: 0px;
+            preferred-width: 0px;
             Text {
                 text: root.bill.card;
                 overflow: elide;
@@ -198,33 +234,39 @@ component BillLine inherits Rectangle {
             Text {
                 text: root.closed;
                 color: Theme.muted;
+                font-size: 12px;
                 overflow: elide;
                 accessible-role: none;
             }
         }
 
         Text {
-            text: root.day;
+            text: Strings.short-date(root.bill.due.day, root.bill.due.month);
             // Only an overdue bill is red.
             color: root.bill.overdue ? Theme.critical : Theme.muted;
             vertical-alignment: center;
+            width: DueColumns.date;
             accessible-role: none;
         }
 
         Text {
             text: root.bill.pending;
             font-weight: 600;
+            overflow: elide;
             vertical-alignment: center;
             horizontal-alignment: right;
-            min-width: 80px;
+            width: DueColumns.amount;
             accessible-role: none;
         }
 
-        if root.bill.source-id != 0: SubtleButton {
-            text: @tr("Pay bill");
-            color: Palette.foreground;
-            clicked => {
-                root.pay();
+        Rectangle {
+            width: DueColumns.pay;
+            if root.bill.source-id != 0: SubtleButton {
+                text: @tr("Pay bill");
+                color: Palette.foreground;
+                clicked => {
+                    root.pay();
+                }
             }
         }
     }
@@ -236,46 +278,320 @@ component BillLine inherits Rectangle {
     }
 }
 
-// What is due in the month shown, with the same navigation between months as the movements.
-export component DueTab inherits VerticalLayout {
+// One day of the calendar: its number, an ink disc for today and a dot under a day with a
+// payment due (red when it is overdue).
+component DayCell inherits Rectangle {
+    in property <DueCell> cell;
+
+    height: 38px;
+    horizontal-stretch: 1;
+    min-width: 0px;
+    preferred-width: 0px;
+    accessible-role: text;
+    accessible-label: root.cell.day == 0 ? "" : root.cell.mark == DueMark.none ? "\{root.cell.day}" : "\{root.cell.day}, " + @tr("payment due");
+
+    if root.cell.day != 0: Rectangle {
+        width: 28px;
+        height: 28px;
+        y: 2px;
+        border-radius: 14px;
+        background: root.cell.today ? Theme.ink : transparent;
+        Text {
+            text: root.cell.day;
+            color: root.cell.today ? Palette.background : Palette.foreground;
+            font-weight: root.cell.today ? 600 : 400;
+            horizontal-alignment: center;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+
+    if root.cell.mark != DueMark.none: Rectangle {
+        width: 4px;
+        height: 4px;
+        x: (parent.width - self.width) / 2;
+        y: 32px;
+        border-radius: 2px;
+        background: root.cell.mark == DueMark.overdue ? Theme.critical : Theme.ink;
+    }
+}
+
+component CalendarCard inherits FinanceCard {
+    FinanceCardHeader {
+        title: @tr("Calendar");
+    }
+
+    HorizontalLayout {
+        for name in Strings.weekdays: HeaderLabel {
+            text: name.to-uppercase();
+            horizontal-alignment: center;
+            horizontal-stretch: 1;
+            min-width: 0px;
+            preferred-width: 0px;
+            height: 24px;
+        }
+    }
+
+    for week in 6: HorizontalLayout {
+        for col in 7: DayCell {
+            cell: FinanceStore.due-cells[week * 7 + col];
+        }
+    }
+}
+
+// The month's largest pending payments as bars: the tallest in ink, the rest in a faint wash.
+component BiggestCard inherits FinanceCard {
+    FinanceCardHeader {
+        title: @tr("Biggest to pay");
+    }
+
+    if FinanceStore.due-biggest.length == 0: Text {
+        text: @tr("Nothing pending.");
+        color: Theme.muted;
+    }
+
+    if FinanceStore.due-biggest.length > 0: HorizontalLayout {
+        spacing: 16px;
+        height: 150px;
+        for b in FinanceStore.due-biggest: VerticalLayout {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            preferred-width: 0px;
+            spacing: 4px;
+            accessible-role: text;
+            accessible-label: b.description + ", " + b.amount;
+            Text {
+                text: b.amount;
+                font-size: 12px;
+                font-weight: b.share >= 1.0 ? 600 : 400;
+                horizontal-alignment: center;
+                overflow: elide;
+                height: 18px;
+                accessible-role: none;
+            }
+
+            Rectangle {
+                vertical-stretch: 1;
+                Rectangle {
+                    height: Math.max(parent.height * b.share, 6px);
+                    y: parent.height - self.height;
+                    border-radius: 4px;
+                    background: b.share >= 1.0 ? Theme.ink : Palette.foreground.with-alpha(0.14);
+                    animate height {
+                        duration: Theme.enter;
+                        easing: Theme.ease-out;
+                    }
+                }
+            }
+
+            Text {
+                text: b.description;
+                color: Theme.muted;
+                horizontal-alignment: center;
+                overflow: elide;
+                accessible-role: none;
+            }
+        }
+    }
+}
+
+// The month's scheduled payments, card bills, calendar and biggest payments, with arrows to
+// move between months.
+export component DueTab inherits ScrollView {
     callback new-account();
+    callback new-scheduled();
     callback edit-scheduled(ScheduledRow);
     callback confirm-scheduled(ScheduledRow);
     callback pay-bill(BillRow);
 
-    spacing: 12px;
+    VerticalLayout {
+        alignment: start;
+        spacing: 12px;
+        padding-right: 16px; // clears the scroll bar
+        padding-bottom: 24px;
+        HorizontalLayout {
+            spacing: 4px;
+            Text {
+                text: Strings.month-year(FinanceStore.month.month, FinanceStore.month.year);
+                font-size: 16px;
+                font-weight: 600;
+                vertical-alignment: center;
+                overflow: elide;
+            }
 
-    MonthNav { }
-
-    if FinanceStore.due.length == 0 && FinanceStore.bills.length == 0: EmptyState {
-        title: FinanceStore.accounts.length == 0 ? @tr("Create an account first") : @tr("Nothing to pay this month.");
-        description: FinanceStore.accounts.length == 0 ? @tr("Scheduled payments are recorded against an account. Add one, such as a bank account or cash, to start.") : @tr("Schedule the bills, installments and income you expect, and confirm them when they happen.");
-        action: FinanceStore.accounts.length == 0 ? @tr("New account") : "";
-        clicked => {
-            root.new-account();
-        }
-    }
-
-    if FinanceStore.due.length > 0 || FinanceStore.bills.length > 0: ScrollView {
-        vertical-stretch: 1;
-        VerticalLayout {
-            alignment: start;
-            // Card bills first, then the scheduled payments by date.
-            for bill in FinanceStore.bills: BillLine {
-                bill: bill;
-                pay => {
-                    root.pay-bill(bill);
+            SubtleButton {
+                icon: @image-url("../icons/chevron-left.svg");
+                label: @tr("Previous month");
+                color: Palette.foreground;
+                clicked => {
+                    FinanceStore.shift(-1);
                 }
             }
 
-            for due in FinanceStore.due: DueLine {
-                due: due;
-                opened => {
-                    root.edit-scheduled(due);
+            SubtleButton {
+                icon: @image-url("../icons/chevron-right.svg");
+                label: @tr("Next month");
+                color: Palette.foreground;
+                clicked => {
+                    FinanceStore.shift(1);
                 }
-                confirm => {
-                    root.confirm-scheduled(due);
+            }
+
+            SubtleButton {
+                text: @tr("Today");
+                color: Palette.foreground;
+                outlined: true;
+                clicked => {
+                    FinanceStore.shift(0);
                 }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            // With no accounts, the empty state carries the button.
+            if FinanceStore.accounts.length > 0: InkButton {
+                icon: @image-url("../icons/plus.svg");
+                text: @tr("Schedule payment");
+                clicked => {
+                    root.new-scheduled();
+                }
+            }
+        }
+
+        if FinanceStore.accounts.length == 0: EmptyState {
+            title: @tr("Create an account first");
+            description: @tr("Scheduled payments are recorded against an account. Add one, such as a bank account or cash, to start.");
+            action: @tr("New account");
+            clicked => {
+                root.new-account();
+            }
+        }
+
+        if FinanceStore.accounts.length > 0: HorizontalLayout {
+            spacing: 12px;
+            VerticalLayout {
+                horizontal-stretch: 3;
+                min-width: 0px;
+                preferred-width: 0px;
+                alignment: start;
+                spacing: 12px;
+                FinanceCard {
+                    FinanceCardHeader {
+                        title: @tr("To pay");
+                    }
+
+                    if FinanceStore.due.length == 0: Text {
+                        text: @tr("Nothing to pay this month.");
+                        color: Theme.muted;
+                    }
+
+                    if FinanceStore.due.length > 0: HorizontalLayout {
+                        height: 28px;
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: FinanceColumns.gap;
+                        accessible-role: none;
+                        Rectangle {
+                            width: FinanceColumns.icon;
+                        }
+
+                        HeaderLabel {
+                            text: @tr("Description").to-uppercase();
+                            horizontal-stretch: 1;
+                            min-width: 0px;
+                            preferred-width: 0px;
+                        }
+
+                        HeaderLabel {
+                            text: @tr("Date").to-uppercase();
+                            width: DueColumns.date;
+                        }
+
+                        HeaderLabel {
+                            text: @tr("Amount").to-uppercase();
+                            width: DueColumns.amount;
+                            horizontal-alignment: right;
+                        }
+
+                        Rectangle {
+                            width: DueColumns.actions;
+                        }
+                    }
+
+                    VerticalLayout {
+                        for due in FinanceStore.due: DueLine {
+                            due: due;
+                            opened => {
+                                root.edit-scheduled(due);
+                            }
+                            confirm => {
+                                root.confirm-scheduled(due);
+                            }
+                        }
+                    }
+                }
+
+                FinanceCard {
+                    FinanceCardHeader {
+                        title: @tr("Card bills");
+                    }
+
+                    if FinanceStore.bills.length == 0: Text {
+                        text: @tr("No bills this month.");
+                        color: Theme.muted;
+                    }
+
+                    if FinanceStore.bills.length > 0: HorizontalLayout {
+                        height: 28px;
+                        padding-left: 8px;
+                        padding-right: 8px;
+                        spacing: FinanceColumns.gap;
+                        accessible-role: none;
+                        HeaderLabel {
+                            text: @tr("Card").to-uppercase();
+                            horizontal-stretch: 1;
+                            min-width: 0px;
+                            preferred-width: 0px;
+                        }
+
+                        HeaderLabel {
+                            text: @tr("Due date").to-uppercase();
+                            width: DueColumns.date;
+                        }
+
+                        HeaderLabel {
+                            text: @tr("Amount").to-uppercase();
+                            width: DueColumns.amount;
+                            horizontal-alignment: right;
+                        }
+
+                        Rectangle {
+                            width: DueColumns.pay;
+                        }
+                    }
+
+                    VerticalLayout {
+                        for bill in FinanceStore.bills: BillLine {
+                            bill: bill;
+                            pay => {
+                                root.pay-bill(bill);
+                            }
+                        }
+                    }
+                }
+            }
+
+            VerticalLayout {
+                horizontal-stretch: 2;
+                min-width: 300px;
+                preferred-width: 0px;
+                alignment: start;
+                spacing: 12px;
+                CalendarCard { }
+
+                BiggestCard { }
             }
         }
     }

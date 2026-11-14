@@ -7,7 +7,7 @@ import { AccountKind, AccountRow, CurrencyRow, RateRow } from "account-row.slint
 import { BillRow } from "bill-row.slint";
 import { BucketRow } from "bucket-row.slint";
 import { CategoryRow } from "category-row.slint";
-import { ScheduleForm, ScheduledRow } from "scheduled-row.slint";
+import { BiggestRow, DueCell, ScheduleForm, ScheduledRow } from "scheduled-row.slint";
 import { ReserveDetail, ReserveRow } from "reserve-row.slint";
 import { AccountFilter, AxisLabelRow, BalanceLayer, DonutSliceRow, SummaryBar, SummaryCardKind, SummaryCardRow, UpcomingBarRow, UpcomingFilter, UpcomingRow } from "summary-row.slint";
 
@@ -42,6 +42,9 @@ export global FinanceStore {
     in property <[ScheduledRow]> due;
     // The card bills due in that month, and the overdue ones in the current month.
     in property <[BillRow]> bills;
+    // The calendar of that month, six weeks of seven cells, Monday first, and its biggest payments.
+    in property <[DueCell]> due-cells;
+    in property <[BiggestRow]> due-biggest;
     // The Accounts tab's net worth: the total, the assets and debts, and the biggest positive accounts as bars.
     in property <string> worth-total;
     in property <string> worth-assets;

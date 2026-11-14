@@ -5,20 +5,21 @@
 
 use std::rc::Rc;
 
-use open_productivity_core::chrono::Local;
+use open_productivity_core::calendar;
+use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::finances::{
-    self, AccountId, CategoryId, Currency, DueKind, DueRow, FinanceError, ScheduleForm as Form,
-    ScheduledId, TxKind as CoreKind,
+    self, AccountId, CategoryId, Currency, DayMark, DueKind, DueRow, FinanceError,
+    ScheduleForm as Form, ScheduledId, TxKind as CoreKind,
 };
 use open_productivity_core::recurrence::Frequency;
-use slint::{ComponentHandle, SharedString};
+use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use super::state::State;
 use super::style;
 use super::transactions::{core_kind, ui_kind};
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
-use crate::{AppWindow, FinanceStore, ScheduleForm, ScheduledRow};
+use crate::{AppWindow, BiggestRow, DueCell, DueMark, FinanceStore, ScheduleForm, ScheduledRow};
 
 fn due_row(d: DueRow, main: &Currency) -> Result<ScheduledRow, String> {
     let (s, style) = (d.scheduled, style());
@@ -78,7 +79,54 @@ impl State {
             .collect::<Result<Vec<_>, _>>()?;
         self.due_rows.set_vec(rows);
         self.load_bills()?;
+        self.load_due_extras(w, month, main)?;
         w.global::<FinanceStore>().set_month(ui_date(month));
+        Ok(())
+    }
+}
+
+/// How many payments the "Biggest to pay" bars show.
+const BIGGEST: usize = 4;
+
+impl State {
+    /// The calendar marks and the biggest payments of the shown month.
+    fn load_due_extras(
+        &self,
+        w: &AppWindow,
+        month: NaiveDate,
+        main: &Currency,
+    ) -> Result<(), String> {
+        let (today, style) = (Local::now().date_naive(), style());
+        let err = |e: FinanceError| e.to_string();
+        let marks = finances::due_days(&self.conn, month, today).map_err(err)?;
+        let grid = calendar::month_grid(month.year(), month.month(), 0, today)
+            .ok_or_else(|| "invalid month".to_string())?;
+        let cells = grid.cells.iter().map(|c| {
+            let day = c.unwrap_or(0);
+            let mark = marks
+                .iter()
+                .find(|(d, _)| c.is_some() && d.day() == day)
+                .map_or(DueMark::None, |(_, m)| match m {
+                    DayMark::Due => DueMark::Due,
+                    DayMark::Overdue => DueMark::Overdue,
+                });
+            DueCell {
+                day: day as i32,
+                mark,
+                today: c.is_some() && grid.today == Some(day),
+            }
+        });
+        let biggest = finances::biggest_due(&self.conn, month, today, BIGGEST)
+            .map_err(err)?
+            .into_iter()
+            .map(|b| BiggestRow {
+                description: b.description.into(),
+                amount: finances::format_amount(b.amount, main, style).into(),
+                share: b.share,
+            });
+        let store = w.global::<FinanceStore>();
+        store.set_due_cells(ModelRc::new(VecModel::from(cells.collect::<Vec<_>>())));
+        store.set_due_biggest(ModelRc::new(VecModel::from(biggest.collect::<Vec<_>>())));
         Ok(())
     }
 }

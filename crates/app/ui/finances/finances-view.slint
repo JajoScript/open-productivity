@@ -266,14 +266,6 @@ export component FinancesView inherits VerticalLayout {
             horizontal-stretch: 1;
         }
 
-        // With no accounts, the empty states carry the button.
-        if FinanceStore.tab == FinanceTab.due && FinanceStore.accounts.length > 0: InkButton {
-            text: @tr("New scheduled payment");
-            clicked => {
-                root.new-scheduled();
-            }
-        }
-
         if FinanceStore.tab == FinanceTab.budget: InkButton {
             text: @tr("New bucket");
             clicked => {
@@ -343,6 +335,9 @@ export component FinancesView inherits VerticalLayout {
         vertical-stretch: 1;
         new-account => {
             root.new-account();
+        }
+        new-scheduled => {
+            root.new-scheduled();
         }
         edit-scheduled(d) => {
             root.edit-scheduled(d);

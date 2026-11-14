@@ -54,3 +54,20 @@ export global NewScheduled {
         };
     }
 }
+
+// What a day of the Scheduled calendar has on it.
+export enum DueMark { none, due, overdue }
+
+// A cell of the Scheduled calendar: `day` is 0 for the cells outside the month.
+export struct DueCell {
+    day: int,
+    mark: DueMark,
+    today: bool,
+}
+
+// One of the biggest payments of the month; `share` is relative to the biggest, 0..1.
+export struct BiggestRow {
+    description: string,
+    amount: string,
+    share: float,
+}

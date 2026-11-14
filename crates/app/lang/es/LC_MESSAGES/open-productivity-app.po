@@ -1635,3 +1635,24 @@ msgstr "Tipo"
 msgctxt "account balance"
 msgid "Balance"
 msgstr "Saldo"
+
+msgid "Schedule payment"
+msgstr "Programar pago"
+
+msgid "Card bills"
+msgstr "Facturas de tarjeta"
+
+msgid "Biggest to pay"
+msgstr "Mayores a pagar"
+
+msgid "Card"
+msgstr "Tarjeta"
+
+msgid "Due date"
+msgstr "Vencimiento"
+
+msgid "No bills this month."
+msgstr "No hay facturas este mes."
+
+msgid "payment due"
+msgstr "pago por vencer"
