@@ -17,6 +17,8 @@ mod tests_categories;
 #[cfg(test)]
 mod tests_currencies;
 #[cfg(test)]
+mod tests_main_currency;
+#[cfg(test)]
 mod tests_summary;
 #[cfg(test)]
 mod tests_transactions;

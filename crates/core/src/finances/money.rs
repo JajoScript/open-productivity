@@ -160,7 +160,7 @@ pub fn parse_amount(text: &str, c: &Currency) -> Option<i64> {
 /// An exchange rate is stored with this many decimals.
 const RATE_DECIMALS: u32 = 6;
 /// A rate of exactly 1: the main currency's.
-const RATE_ONE: i64 = 1_000_000;
+pub(super) const RATE_ONE: i64 = 1_000_000;
 /// 10^13 with 6 decimals, like `MAX_AMOUNT`: ten million main units per unit.
 pub const MAX_RATE: i64 = 10_000_000_000_000;
 
