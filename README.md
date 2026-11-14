@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="crates/app/ui/app-icons/black_icon_128x128.png" alt="Open Productivity" width="128">
+</p>
+
 # Open Productivity
 
 Aplicación de escritorio de productividad, de código abierto, para organizar tareas, calendario, objetivos, metas, etc.
