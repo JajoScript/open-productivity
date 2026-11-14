@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
+import { Date } from "std-widgets.slint";
+import { FinanceTab, TransactionRow, TxKind } from "transaction-row.slint";
 import { AccountKind, AccountRow, CurrencyRow } from "account-row.slint";
 
 // What the Finances views show and ask for. Rust fills the data and answers the callbacks;
@@ -11,11 +13,21 @@ export global FinanceStore {
     in property <[CurrencyRow]> currencies;
     in property <[AccountRow]> accounts;
     in property <string> error;
+    // The tab shown; Rust loads only what it needs.
+    in-out property <FinanceTab> tab: FinanceTab.movements;
+    // The movements of the month shown; only its month and year matter.
+    in property <Date> month;
+    in property <[TransactionRow]> transactions;
 
     // The ones that return a string give the error to show; empty means it worked.
     callback choose-currency(string) -> string;
     callback create-account(string, AccountKind, string, string) -> string;
     callback update-account(int, string, AccountKind, string, string) -> string;
+    callback create-transaction(TxKind, int, string, Date, string) -> string;
+    callback update-transaction(int, TxKind, int, string, Date, string) -> string;
+    callback delete-transaction(int) -> string;
+    // -1 / +1 moves a month; 0 goes back to the current one.
+    callback shift(int);
     // Reload on entering the module or when the language changes the amount style.
     callback refresh();
 }

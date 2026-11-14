@@ -1,0 +1,20 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date } from "std-widgets.slint";
+
+export enum TxKind { expense, income }
+
+export enum FinanceTab { movements, accounts }
+
+// `amount` arrives signed and formatted for display; `input` formatted for the edit field.
+export struct TransactionRow {
+    id: int,
+    kind: TxKind,
+    account-id: int,
+    account: string,
+    date: Date,
+    description: string,
+    amount: string,
+    input: string,
+}

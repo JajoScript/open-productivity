@@ -1,0 +1,123 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ListView } from "std-widgets.slint";
+import { EmptyState } from "../empty-state.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+import { AccountPreview } from "account-preview.slint";
+import { AccountRow } from "account-row.slint";
+import { FinanceStore } from "finance-store.slint";
+
+component AccountLine inherits Rectangle {
+    in property <AccountRow> account;
+    callback opened;
+
+    height: 56px;
+    border-radius: 6px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background {
+        duration: Theme.fast;
+        easing: Theme.ease-out;
+    }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: Strings.account-line-label(root.account.name, Strings.account-kind(root.account.kind), root.account.balance);
+    accessible-action-default => {
+        root.opened();
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 16px; // clears the ListView scroll bar
+        spacing: 8px;
+        Image {
+            source: @image-url("../icons/wallet.svg");
+            colorize: Theme.muted;
+            width: 16px;
+            image-fit: contain;
+            accessible-role: none;
+        }
+
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.account.name;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            Text {
+                text: root.account.bank != "" ? Strings.account-kind-bank(root.account.kind, root.account.bank) : Strings.account-kind(root.account.kind);
+                color: Theme.muted;
+                overflow: elide;
+                accessible-role: none;
+            }
+        }
+
+        Text {
+            text: root.account.balance;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            accessible-role: none;
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.opened();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.opened();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// The accounts and their balances.
+export component AccountsTab inherits VerticalLayout {
+    callback new-account();
+    callback edit-account(AccountRow);
+
+    if FinanceStore.accounts.length == 0: EmptyState {
+        title: @tr("Add your first account");
+        description: @tr("Register where your money is, such as a bank account or cash, with what it holds today. Every account shows its balance.");
+        action: @tr("New account");
+        clicked => {
+            root.new-account();
+        }
+
+        AccountPreview { }
+    }
+
+    if FinanceStore.accounts.length > 0: ListView {
+        vertical-stretch: 1;
+        for account in FinanceStore.accounts: AccountLine {
+            account: account;
+            opened => {
+                root.edit-account(account);
+            }
+        }
+    }
+}

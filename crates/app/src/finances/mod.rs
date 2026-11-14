@@ -4,10 +4,14 @@
 //! Glue between the Finances view and `core::finances`.
 
 mod state;
+mod transactions;
 
+use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 
+use open_productivity_core::calendar;
+use open_productivity_core::chrono::Local;
 use open_productivity_core::db::Connection;
 use open_productivity_core::finances::{self, AccountId, AmountStyle};
 use slint::{ComponentHandle, ModelRc, VecModel};
@@ -35,10 +39,13 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     let state = Rc::new(State {
         conn,
         rows: Rc::default(),
+        tx_rows: Rc::default(),
+        shown: Cell::new(calendar::month_start(Local::now().date_naive())),
         window: window.as_weak(),
     });
     let store = window.global::<FinanceStore>();
     store.set_accounts(ModelRc::from(state.rows.clone()));
+    store.set_transactions(ModelRc::from(state.tx_rows.clone()));
     store.set_currencies(ModelRc::new(VecModel::from(state::currency_rows())));
     state.show_load();
 
@@ -46,6 +53,8 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         let state = state.clone();
         move || state.show_load()
     });
+
+    transactions::connect(&state, &store);
 
     store.on_choose_currency({
         let state = state.clone();

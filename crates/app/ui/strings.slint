@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JajoScript
 
 import { AccountKind } from "finances/account-row.slint";
+import { TxKind } from "finances/transaction-row.slint";
 
 // Messages shown by native dialogs and the log; msgids are English, see lang/README.md.
 export global Strings {
@@ -239,12 +240,13 @@ export global Strings {
     out property <[string]> weekdays: [@tr("Mo"), @tr("Tu"), @tr("We"), @tr("Th"), @tr("Fr"), @tr("Sa"), @tr("Su")];
 
     out property <string> finance-empty-name: @tr("Give the account a name.");
-    out property <string> finance-invalid-amount: @tr("Enter the balance as a positive number, with only the decimals the currency uses.");
+    out property <string> finance-invalid-amount: @tr("Enter the amount as a positive number, with only the decimals the currency uses.");
     out property <string> finance-no-currency: @tr("Choose the main currency first.");
     out property <string> finance-no-account: @tr("That account no longer exists.");
+    out property <string> finance-no-transaction: @tr("That movement no longer exists.");
 
     public pure function finance-failed(error: string) -> string {
-        return @tr("Could not save the account: {}", error);
+        return @tr("Could not save: {}", error);
     }
 
     public pure function finance-load-failed(error: string) -> string {
@@ -266,6 +268,23 @@ export global Strings {
 
     public pure function account-kind-bank(kind: AccountKind, bank: string) -> string {
         return @tr("{} · {}", Strings.account-kind(kind), bank);
+    }
+
+    public pure function tx-kind(kind: TxKind) -> string {
+        return kind == TxKind.expense ? @tr("Expense") : @tr("Income");
+    }
+
+    // Second line of a movement: its account and date.
+    public pure function transaction-detail(account: string, date: string) -> string {
+        return @tr("{} · {}", account, date);
+    }
+
+    public pure function transaction-line-label(title: string, account: string, date: string, amount: string) -> string {
+        return @tr("{}, {}, {}, {}", title, account, date, amount);
+    }
+
+    public pure function delete-transaction-question(amount: string, date: string) -> string {
+        return @tr("Delete the movement of {} on {}? This can't be undone.", amount, date);
     }
 
     public pure function account-line-label(name: string, kind: string, balance: string) -> string {

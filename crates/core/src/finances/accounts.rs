@@ -121,8 +121,11 @@ pub fn update_account(
     Ok(())
 }
 
-const SELECT: &str = "SELECT id, name, kind, bank, currency, initial_balance,
-    initial_balance AS balance FROM finance_account";
+/// The balance is summed in SQL; an integer overflow there is an error, not a panic.
+const SELECT: &str = "SELECT a.id, a.name, a.kind, a.bank, a.currency, a.initial_balance,
+    a.initial_balance + coalesce((SELECT sum(CASE t.kind WHEN 'income' THEN t.amount ELSE -t.amount END)
+        FROM finance_transaction t WHERE t.account_id = a.id), 0) AS balance
+    FROM finance_account a";
 
 fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Account, FinanceError>> {
     let kind: String = r.get(2)?;
@@ -144,13 +147,13 @@ fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Account, FinanceError>> {
 
 /// In creation order.
 pub fn list_accounts(conn: &Connection) -> Result<Vec<Account>, FinanceError> {
-    let mut stmt = conn.prepare(&format!("{SELECT} ORDER BY created_at, id"))?;
+    let mut stmt = conn.prepare(&format!("{SELECT} ORDER BY a.created_at, a.id"))?;
     let rows = stmt.query_map([], row)?;
     rows.map(|r| r?).collect()
 }
 
 pub fn get_account(conn: &Connection, id: AccountId) -> Result<Account, FinanceError> {
-    match conn.query_row(&format!("{SELECT} WHERE id = ?1"), [id.0], row) {
+    match conn.query_row(&format!("{SELECT} WHERE a.id = ?1"), [id.0], row) {
         Ok(account) => account,
         Err(rusqlite::Error::QueryReturnedNoRows) => Err(FinanceError::AccountNotFound),
         Err(e) => Err(e.into()),

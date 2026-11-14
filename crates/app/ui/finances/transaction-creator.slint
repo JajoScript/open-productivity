@@ -1,0 +1,264 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette, ScrollView } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkDatePopup } from "../ink-date-popup.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { ChoiceRow } from "../study/session-logger.slint";
+import { Theme } from "../theme.slint";
+import { FinanceStore } from "finance-store.slint";
+import { TxKind } from "transaction-row.slint";
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component CreatorBody inherits FocusScope {
+    in property <bool> editing;
+    // What the delete confirmation asks about: the movement's amount as the list shows it.
+    in property <string> amount-label;
+    // The modal gives the initial values and the user edits them here.
+    in-out property <TxKind> kind;
+    in-out property <int> account-id;
+    in-out property <string> amount;
+    in-out property <Date> date;
+    in-out property <string> description;
+    callback save(TxKind, int, string, Date, string) -> string;
+    callback delete() -> string;
+    callback cancel;
+
+    property <string> error;
+    property <[TxKind]> kinds: [TxKind.expense, TxKind.income];
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.kind, root.account-id, root.amount, root.date, root.description);
+    }
+
+    // Arrow keys move the choice, like the tabs they are drawn as.
+    function step(delta: int) {
+        root.kind = delta > 0 ? TxKind.income : TxKind.expense;
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: root.editing ? @tr("Edit movement") : @tr("New movement");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        HorizontalLayout {
+            spacing: 0px;
+            alignment: start;
+            accessible-role: tab-list;
+            for k in root.kinds: SettingsTab {
+                text: Strings.tx-kind(k);
+                selected: root.kind == k;
+                chosen => {
+                    root.kind = k;
+                }
+                step(d) => {
+                    root.step(d);
+                }
+            }
+        }
+
+        Text {
+            text: @tr("Account");
+            color: Theme.muted;
+        }
+
+        ScrollView {
+            height: min(FinanceStore.accounts.length * 32px, 128px);
+            VerticalLayout {
+                for account in FinanceStore.accounts: ChoiceRow {
+                    label: account.name;
+                    icon: @image-url("../icons/wallet.svg");
+                    chosen: account.id == root.account-id;
+                    picked => {
+                        root.account-id = account.id;
+                    }
+                }
+            }
+        }
+
+        InkField {
+            text <=> root.amount;
+            placeholder-text: @tr("Amount");
+            init => {
+                self.focus();
+            }
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        Text {
+            text: @tr("Date");
+            color: Theme.muted;
+        }
+
+        HorizontalLayout {
+            height: 36px;
+            alignment: start;
+            picker := InkDatePopup {
+                y: 36px;
+                day: root.date.day;
+                month: root.date.month;
+                year: root.date.year;
+                picked(date) => {
+                    root.date = date;
+                }
+            }
+
+            SubtleButton {
+                text: Strings.date(root.date.day, root.date.month, root.date.year);
+                icon: @image-url("../icons/calendar.svg");
+                color: Palette.foreground;
+                clicked => {
+                    picker.show();
+                }
+            }
+        }
+
+        InkField {
+            text <=> root.description;
+            placeholder-text: @tr("Description (optional)");
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            if root.editing: SubtleButton {
+                text: @tr("Delete");
+                color: Palette.foreground;
+                clicked => {
+                    confirm.show();
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: root.editing ? @tr("Save") : @tr("Create");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+
+    confirm := PopupWindow {
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        width: 320px;
+        PopupSurface {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: Strings.delete-transaction-question(root.amount-label, Strings.date(root.date.day, root.date.month, root.date.year));
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Cancel");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            confirm.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Delete");
+                        clicked => {
+                            confirm.close();
+                            root.error = root.delete();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Records an expense or income, or edits one, depending on how it is opened. Closing by clicking
+// outside discards it.
+export component TransactionCreator inherits PopupWindow {
+    // Set by the opener before show().
+    in property <bool> editing;
+    in property <int> tx-id;
+    in property <TxKind> tx-kind;
+    in property <int> tx-account-id;
+    in property <string> tx-amount;
+    in property <string> tx-amount-label;
+    in property <Date> tx-date;
+    in property <string> tx-description;
+
+    close-policy: close-on-click-outside;
+    width: 400px;
+
+    PopupSurface {
+        CreatorBody {
+            editing: root.editing;
+            amount-label: root.tx-amount-label;
+            kind: root.tx-kind;
+            account-id: root.tx-account-id;
+            amount: root.tx-amount;
+            date: root.tx-date;
+            description: root.tx-description;
+            save(kind, account, amount, date, description) => {
+                let error = root.editing ? FinanceStore.update-transaction(root.tx-id, kind, account, amount, date, description) : FinanceStore.create-transaction(kind, account, amount, date, description);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            delete => {
+                let error = FinanceStore.delete-transaction(root.tx-id);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

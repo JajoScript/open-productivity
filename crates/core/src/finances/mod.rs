@@ -9,9 +9,13 @@ mod accounts;
 mod money;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_transactions;
+mod transactions;
 
 pub use accounts::*;
 pub use money::*;
+pub use transactions::*;
 
 #[derive(Debug)]
 pub enum FinanceError {
@@ -23,6 +27,11 @@ pub enum FinanceError {
     /// A stored account kind that cannot be read.
     BadKind(String),
     AccountNotFound,
+    /// A stored movement kind that cannot be read.
+    BadTxKind(String),
+    /// A stored movement date that cannot be read.
+    BadDate(String),
+    TransactionNotFound,
     Sqlite(rusqlite::Error),
 }
 
@@ -35,6 +44,9 @@ impl fmt::Display for FinanceError {
             FinanceError::UnknownCurrency(c) => write!(f, "unknown currency: {c}"),
             FinanceError::BadKind(k) => write!(f, "invalid stored account kind: {k}"),
             FinanceError::AccountNotFound => write!(f, "account not found"),
+            FinanceError::BadTxKind(k) => write!(f, "invalid stored movement kind: {k}"),
+            FinanceError::BadDate(d) => write!(f, "invalid stored movement date: {d}"),
+            FinanceError::TransactionNotFound => write!(f, "movement not found"),
             FinanceError::Sqlite(e) => write!(f, "database error: {e}"),
         }
     }

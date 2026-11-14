@@ -3,8 +3,10 @@
 
 //! What the Finances view shows: the models, their refresh and the error messages.
 
+use std::cell::Cell;
 use std::rc::Rc;
 
+use open_productivity_core::chrono::NaiveDate;
 use open_productivity_core::db::Connection;
 use open_productivity_core::finances::{
     self, Account, AccountKind as CoreKind, CURRENCIES, FinanceError,
@@ -13,11 +15,17 @@ use slint::{ComponentHandle, SharedString, VecModel};
 
 use super::style;
 use crate::tasks::ui_id;
-use crate::{AccountKind, AccountRow, AppWindow, CurrencyRow, FinanceStore, Strings};
+use crate::{
+    AccountKind, AccountRow, AppWindow, CurrencyRow, FinanceStore, FinanceTab, Strings,
+    TransactionRow,
+};
 
 pub struct State {
     pub conn: Rc<Connection>,
     pub rows: Rc<VecModel<AccountRow>>,
+    pub tx_rows: Rc<VecModel<TransactionRow>>,
+    /// First day of the month the Movements tab shows.
+    pub shown: Cell<NaiveDate>,
     pub window: slint::Weak<AppWindow>,
 }
 
@@ -76,7 +84,12 @@ impl State {
             Vec::new()
         };
         self.rows.set_vec(rows);
-        w.global::<FinanceStore>().set_has_currency(has_currency);
+        let store = w.global::<FinanceStore>();
+        store.set_has_currency(has_currency);
+        // The movements are only read while their tab is the one shown.
+        if has_currency && store.get_tab() == FinanceTab::Movements {
+            self.load_month(w)?;
+        }
         Ok(())
     }
 
@@ -92,6 +105,14 @@ impl State {
         w.global::<FinanceStore>().set_error(msg);
     }
 
+    /// Shows a failure in the view, like a load failure.
+    pub fn show_error(&self, e: String) {
+        if let Some(w) = self.window.upgrade() {
+            let msg = w.global::<Strings>().invoke_finance_load_failed(e.into());
+            w.global::<FinanceStore>().set_error(msg);
+        }
+    }
+
     /// The user-facing text of an error; only database errors and corrupt stored data show raw.
     fn message(w: &AppWindow, e: FinanceError) -> SharedString {
         let s = w.global::<Strings>();
@@ -100,9 +121,12 @@ impl State {
             FinanceError::InvalidAmount => s.get_finance_invalid_amount(),
             FinanceError::NoMainCurrency => s.get_finance_no_currency(),
             FinanceError::AccountNotFound => s.get_finance_no_account(),
+            FinanceError::TransactionNotFound => s.get_finance_no_transaction(),
             e @ (FinanceError::Sqlite(_)
             | FinanceError::UnknownCurrency(_)
-            | FinanceError::BadKind(_)) => s.invoke_finance_failed(e.to_string().into()),
+            | FinanceError::BadKind(_)
+            | FinanceError::BadTxKind(_)
+            | FinanceError::BadDate(_)) => s.invoke_finance_failed(e.to_string().into()),
         }
     }
 

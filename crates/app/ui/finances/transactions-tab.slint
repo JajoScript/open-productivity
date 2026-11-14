@@ -1,0 +1,154 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ListView } from "std-widgets.slint";
+import { EmptyState } from "../empty-state.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { FinanceStore } from "finance-store.slint";
+import { TransactionRow } from "transaction-row.slint";
+
+component TransactionLine inherits Rectangle {
+    in property <TransactionRow> tx;
+    callback opened;
+
+    property <string> title: root.tx.description != "" ? root.tx.description : Strings.tx-kind(root.tx.kind);
+    property <string> day: Strings.date(root.tx.date.day, root.tx.date.month, root.tx.date.year);
+
+    height: 56px;
+    border-radius: 6px;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background {
+        duration: Theme.fast;
+        easing: Theme.ease-out;
+    }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: Strings.transaction-line-label(root.title, root.tx.account, root.day, root.tx.amount);
+    accessible-action-default => {
+        root.opened();
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 16px; // clears the ListView scroll bar
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.title;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            Text {
+                text: Strings.transaction-detail(root.tx.account, root.day);
+                color: Theme.muted;
+                overflow: elide;
+                accessible-role: none;
+            }
+        }
+
+        Text {
+            text: root.tx.amount;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            accessible-role: none;
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.opened();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.opened();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// The expenses and income of one month, with the navigation between months.
+export component TransactionsTab inherits VerticalLayout {
+    callback new-account();
+    callback edit-transaction(TransactionRow);
+
+    spacing: 12px;
+
+    HorizontalLayout {
+        spacing: 4px;
+        SubtleButton {
+            text: @tr("Today");
+            color: Palette.foreground;
+            outlined: true;
+            clicked => {
+                FinanceStore.shift(0);
+            }
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/chevron-left.svg");
+            label: @tr("Previous month");
+            clicked => {
+                FinanceStore.shift(-1);
+            }
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/chevron-right.svg");
+            label: @tr("Next month");
+            clicked => {
+                FinanceStore.shift(1);
+            }
+        }
+
+        Text {
+            text: Strings.month-year(FinanceStore.month.month, FinanceStore.month.year);
+            font-weight: 600;
+            vertical-alignment: center;
+            overflow: elide;
+            horizontal-stretch: 1;
+        }
+    }
+
+    if FinanceStore.transactions.length == 0: EmptyState {
+        title: FinanceStore.accounts.length == 0 ? @tr("Create an account first") : @tr("No movements this month.");
+        description: FinanceStore.accounts.length == 0 ? @tr("Expenses and income are recorded against an account. Add one, such as a bank account or cash, to start.") : @tr("Record what you spend and what you earn. Each movement updates the balance of its account.");
+        action: FinanceStore.accounts.length == 0 ? @tr("New account") : "";
+        clicked => {
+            root.new-account();
+        }
+    }
+
+    if FinanceStore.transactions.length > 0: ListView {
+        vertical-stretch: 1;
+        for tx in FinanceStore.transactions: TransactionLine {
+            tx: tx;
+            opened => {
+                root.edit-transaction(tx);
+            }
+        }
+    }
+}
