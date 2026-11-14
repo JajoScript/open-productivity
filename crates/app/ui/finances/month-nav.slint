@@ -1,0 +1,44 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { FinanceStore } from "finance-store.slint";
+
+// Moves the month the Movements and Categories tabs share.
+export component MonthNav inherits HorizontalLayout {
+    spacing: 4px;
+    SubtleButton {
+        text: @tr("Today");
+        color: Palette.foreground;
+        outlined: true;
+        clicked => {
+            FinanceStore.shift(0);
+        }
+    }
+
+    SubtleButton {
+        icon: @image-url("../icons/chevron-left.svg");
+        label: @tr("Previous month");
+        clicked => {
+            FinanceStore.shift(-1);
+        }
+    }
+
+    SubtleButton {
+        icon: @image-url("../icons/chevron-right.svg");
+        label: @tr("Next month");
+        clicked => {
+            FinanceStore.shift(1);
+        }
+    }
+
+    Text {
+        text: Strings.month-year(FinanceStore.month.month, FinanceStore.month.year);
+        font-weight: 600;
+        vertical-alignment: center;
+        overflow: elide;
+        horizontal-stretch: 1;
+    }
+}

@@ -21,16 +21,25 @@ component CreatorBody inherits FocusScope {
     in property <string> amount-label;
     // The modal gives the initial values and the user edits them here.
     in-out property <TxKind> kind;
+    // A transfer has no kind nor category: it moves money from `account-id` to `to-account-id`.
+    in-out property <bool> transfer;
+    in-out property <int> to-account-id;
+    // The accounts the movement already had, which stay pickable even if archived.
+    in property <int> orig-account-id;
+    in property <int> orig-to-id;
     in-out property <int> account-id;
+    in-out property <bool> has-category;
+    in-out property <int> category-id;
+    // The kind of the chosen category, to drop it when the movement changes kind.
+    in-out property <TxKind> category-kind;
     in-out property <string> amount;
     in-out property <Date> date;
     in-out property <string> description;
-    callback save(TxKind, int, string, Date, string) -> string;
+    callback save(bool, TxKind, int, int, bool, int, string, Date, string) -> string;
     callback delete() -> string;
     callback cancel;
 
     property <string> error;
-    property <[TxKind]> kinds: [TxKind.expense, TxKind.income];
 
     capture-key-pressed(event) => {
         if event.text == Key.Escape {
@@ -41,12 +50,33 @@ component CreatorBody inherits FocusScope {
     }
 
     function submit() {
-        root.error = root.save(root.kind, root.account-id, root.amount, root.date, root.description);
+        root.error = root.save(root.transfer, root.kind, root.account-id, root.to-account-id, root.has-category, root.category-id, root.amount, root.date, root.description);
+    }
+
+    function set-kind(kind: TxKind) {
+        if root.has-category && root.category-kind != kind {
+            root.has-category = false;
+        }
+        root.transfer = false;
+        root.kind = kind;
     }
 
     // Arrow keys move the choice, like the tabs they are drawn as.
     function step(delta: int) {
-        root.kind = delta > 0 ? TxKind.income : TxKind.expense;
+        if delta > 0 {
+            if root.transfer {
+                return;
+            }
+            if root.kind == TxKind.income {
+                root.transfer = true;
+            } else {
+                root.set-kind(TxKind.income);
+            }
+        } else if root.transfer {
+            root.set-kind(TxKind.income);
+        } else {
+            root.set-kind(TxKind.expense);
+        }
     }
 
     VerticalLayout {
@@ -62,11 +92,33 @@ component CreatorBody inherits FocusScope {
             spacing: 0px;
             alignment: start;
             accessible-role: tab-list;
-            for k in root.kinds: SettingsTab {
-                text: Strings.tx-kind(k);
-                selected: root.kind == k;
+            SettingsTab {
+                text: Strings.tx-kind(TxKind.expense);
+                selected: !root.transfer && root.kind == TxKind.expense;
                 chosen => {
-                    root.kind = k;
+                    root.set-kind(TxKind.expense);
+                }
+                step(d) => {
+                    root.step(d);
+                }
+            }
+
+            SettingsTab {
+                text: Strings.tx-kind(TxKind.income);
+                selected: !root.transfer && root.kind == TxKind.income;
+                chosen => {
+                    root.set-kind(TxKind.income);
+                }
+                step(d) => {
+                    root.step(d);
+                }
+            }
+
+            SettingsTab {
+                text: Strings.transfer;
+                selected: root.transfer;
+                chosen => {
+                    root.transfer = true;
                 }
                 step(d) => {
                     root.step(d);
@@ -75,19 +127,95 @@ component CreatorBody inherits FocusScope {
         }
 
         Text {
-            text: @tr("Account");
+            text: root.transfer ? @tr("From account") : @tr("Account");
             color: Theme.muted;
         }
 
         ScrollView {
-            height: min(FinanceStore.accounts.length * 32px, 128px);
-            VerticalLayout {
+            height: min(from-list.preferred-height, 128px);
+            from-list := VerticalLayout {
                 for account in FinanceStore.accounts: ChoiceRow {
                     label: account.name;
                     icon: @image-url("../icons/wallet.svg");
                     chosen: account.id == root.account-id;
                     picked => {
                         root.account-id = account.id;
+                    }
+                }
+
+                // The archived account the movement already has stays pickable.
+                for account in FinanceStore.archived-accounts: VerticalLayout {
+                    if account.id == root.orig-account-id: ChoiceRow {
+                        label: Strings.archived-account(account.name);
+                        icon: @image-url("../icons/wallet.svg");
+                        chosen: account.id == root.account-id;
+                        picked => {
+                            root.account-id = account.id;
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.transfer: Text {
+            text: @tr("To account");
+            color: Theme.muted;
+        }
+
+        if root.transfer: ScrollView {
+            height: min(to-list.preferred-height, 128px);
+            to-list := VerticalLayout {
+                for account in FinanceStore.accounts: ChoiceRow {
+                    label: account.name;
+                    icon: @image-url("../icons/wallet.svg");
+                    chosen: account.id == root.to-account-id;
+                    picked => {
+                        root.to-account-id = account.id;
+                    }
+                }
+
+                // The archived account the movement already has stays pickable.
+                for account in FinanceStore.archived-accounts: VerticalLayout {
+                    if account.id == root.orig-to-id: ChoiceRow {
+                        label: Strings.archived-account(account.name);
+                        icon: @image-url("../icons/wallet.svg");
+                        chosen: account.id == root.to-account-id;
+                        picked => {
+                            root.to-account-id = account.id;
+                        }
+                    }
+                }
+            }
+        }
+
+        if !root.transfer: Text {
+            text: @tr("Category");
+            color: Theme.muted;
+        }
+
+        if !root.transfer: ScrollView {
+            height: 128px;
+            VerticalLayout {
+                ChoiceRow {
+                    label: @tr("No category");
+                    icon: @image-url("../icons/x.svg");
+                    chosen: !root.has-category;
+                    picked => {
+                        root.has-category = false;
+                    }
+                }
+
+                // Those of the kind, and the archived one the movement already has.
+                for c in FinanceStore.category-choices: VerticalLayout {
+                    if c.kind == root.kind && (!c.archived || (root.has-category && c.id == root.category-id)): ChoiceRow {
+                        label: c.archived ? Strings.archived-category(c.name) : c.name;
+                        icon: @image-url("../icons/tag.svg");
+                        chosen: root.has-category && c.id == root.category-id;
+                        picked => {
+                            root.has-category = true;
+                            root.category-id = c.id;
+                            root.category-kind = c.kind;
+                        }
                     }
                 }
             }
@@ -217,14 +345,18 @@ component CreatorBody inherits FocusScope {
     }
 }
 
-// Records an expense or income, or edits one, depending on how it is opened. Closing by clicking
+// Records an expense, income or transfer, or edits one, depending on how it is opened. Closing by clicking
 // outside discards it.
 export component TransactionCreator inherits PopupWindow {
     // Set by the opener before show().
     in property <bool> editing;
     in property <int> tx-id;
     in property <TxKind> tx-kind;
+    in property <bool> tx-transfer;
+    in property <int> tx-to-account-id;
     in property <int> tx-account-id;
+    in property <bool> tx-has-category;
+    in property <int> tx-category-id;
     in property <string> tx-amount;
     in property <string> tx-amount-label;
     in property <Date> tx-date;
@@ -238,12 +370,19 @@ export component TransactionCreator inherits PopupWindow {
             editing: root.editing;
             amount-label: root.tx-amount-label;
             kind: root.tx-kind;
+            transfer: root.tx-transfer;
             account-id: root.tx-account-id;
+            to-account-id: root.tx-to-account-id;
+            orig-account-id: root.tx-account-id;
+            orig-to-id: root.tx-to-account-id;
+            has-category: root.tx-has-category;
+            category-id: root.tx-category-id;
+            category-kind: root.tx-kind;
             amount: root.tx-amount;
             date: root.tx-date;
             description: root.tx-description;
-            save(kind, account, amount, date, description) => {
-                let error = root.editing ? FinanceStore.update-transaction(root.tx-id, kind, account, amount, date, description) : FinanceStore.create-transaction(kind, account, amount, date, description);
+            save(transfer, kind, account, to-account, has-category, category, amount, date, description) => {
+                let error = transfer ? (root.editing ? FinanceStore.update-transfer(root.tx-id, account, to-account, amount, date, description) : FinanceStore.create-transfer(account, to-account, amount, date, description)) : (root.editing ? FinanceStore.update-transaction(root.tx-id, kind, account, has-category, category, amount, date, description) : FinanceStore.create-transaction(kind, account, has-category, category, amount, date, description));
                 if error == "" {
                     root.close();
                 }

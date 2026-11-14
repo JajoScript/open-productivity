@@ -1,0 +1,202 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { FinanceStore } from "finance-store.slint";
+import { TxKind } from "transaction-row.slint";
+
+// Rebuilt on every show(), so the field and the error always start fresh.
+component CreatorBody inherits FocusScope {
+    in property <bool> editing;
+    in property <TxKind> kind;
+    in property <bool> archived;
+    in property <bool> in-use;
+    // What the delete confirmation names: the saved name, not the one being typed.
+    in property <string> saved-name;
+    // The modal gives the initial name and the user edits it here.
+    in-out property <string> name;
+    callback save(string) -> string;
+    callback toggle-archived() -> string;
+    callback delete() -> string;
+    callback cancel;
+
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.name);
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: root.editing ? @tr("Edit category") : @tr("New category");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        Text {
+            text: Strings.tx-kind(root.kind);
+            color: Theme.muted;
+        }
+
+        InkField {
+            text <=> root.name;
+            placeholder-text: @tr("Category name");
+            init => {
+                self.focus();
+            }
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            if root.editing: SubtleButton {
+                text: root.archived ? @tr("Restore") : @tr("Archive");
+                color: Palette.foreground;
+                clicked => {
+                    root.error = root.toggle-archived();
+                }
+            }
+
+            // A category with movements can only be archived.
+            if root.editing && !root.in-use: SubtleButton {
+                text: @tr("Delete");
+                color: Palette.foreground;
+                clicked => {
+                    confirm.show();
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: root.editing ? @tr("Save") : @tr("Create");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+
+    confirm := PopupWindow {
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        width: 320px;
+        PopupSurface {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: Strings.delete-category-question(root.saved-name);
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Cancel");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            confirm.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Delete");
+                        clicked => {
+                            confirm.close();
+                            root.error = root.delete();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Creates a category of the kind the tab shows, or renames, archives or deletes one, depending on
+// how it is opened. Closing by clicking outside discards it.
+export component CategoryCreator inherits PopupWindow {
+    // Set by the opener before show().
+    in property <bool> editing;
+    in property <int> category-id;
+    in property <TxKind> category-kind;
+    in property <string> category-name;
+    in property <bool> category-archived;
+    in property <bool> category-in-use;
+
+    close-policy: close-on-click-outside;
+    width: 400px;
+
+    PopupSurface {
+        CreatorBody {
+            editing: root.editing;
+            kind: root.category-kind;
+            archived: root.category-archived;
+            in-use: root.category-in-use;
+            saved-name: root.category-name;
+            name: root.category-name;
+            save(name) => {
+                let error = root.editing ? FinanceStore.rename-category(root.category-id, name) : FinanceStore.create-category(root.category-kind, name);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            toggle-archived => {
+                let error = FinanceStore.archive-category(root.category-id, !root.category-archived);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            delete => {
+                let error = FinanceStore.delete-category(root.category-id);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

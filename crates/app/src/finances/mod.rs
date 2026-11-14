@@ -3,6 +3,7 @@
 
 //! Glue between the Finances view and `core::finances`.
 
+mod categories;
 mod state;
 mod transactions;
 
@@ -39,13 +40,21 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     let state = Rc::new(State {
         conn,
         rows: Rc::default(),
+        archived_account_rows: Rc::default(),
         tx_rows: Rc::default(),
+        cat_rows: Rc::default(),
+        archived_rows: Rc::default(),
+        choices: Rc::default(),
         shown: Cell::new(calendar::month_start(Local::now().date_naive())),
         window: window.as_weak(),
     });
     let store = window.global::<FinanceStore>();
     store.set_accounts(ModelRc::from(state.rows.clone()));
+    store.set_archived_accounts(ModelRc::from(state.archived_account_rows.clone()));
     store.set_transactions(ModelRc::from(state.tx_rows.clone()));
+    store.set_categories(ModelRc::from(state.cat_rows.clone()));
+    store.set_archived_categories(ModelRc::from(state.archived_rows.clone()));
+    store.set_category_choices(ModelRc::from(state.choices.clone()));
     store.set_currencies(ModelRc::new(VecModel::from(state::currency_rows())));
     state.show_load();
 
@@ -55,6 +64,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     });
 
     transactions::connect(&state, &store);
+    categories::connect(&state, &store);
 
     store.on_choose_currency({
         let state = state.clone();
@@ -69,6 +79,22 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
                     .map(|_| ()),
             )
         }
+    });
+
+    store.on_archive_account({
+        let state = state.clone();
+        move |id, archived| {
+            state.finish(finances::set_account_archived(
+                &state.conn,
+                AccountId(id.into()),
+                archived,
+            ))
+        }
+    });
+
+    store.on_delete_account({
+        let state = state.clone();
+        move |id| state.finish(finances::delete_account(&state.conn, AccountId(id.into())))
     });
 
     store.on_update_account({

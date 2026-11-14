@@ -1035,3 +1035,123 @@ msgstr "Cuenta"
 
 msgid "Amount"
 msgstr "Monto"
+
+msgid "Categories"
+msgstr "Categorías"
+
+msgid "Category"
+msgstr "Categoría"
+
+msgid "No category"
+msgstr "Sin categoría"
+
+msgid "New category"
+msgstr "Nueva categoría"
+
+msgid "Edit category"
+msgstr "Editar categoría"
+
+msgid "Category name"
+msgstr "Nombre de la categoría"
+
+msgid "Organize your movements"
+msgstr "Ordena tus movimientos"
+
+msgid "Categories show where your money goes and where it comes from. Start with a few common ones, or create your own."
+msgstr "Las categorías muestran en qué se va tu dinero y de dónde viene. Empieza con algunas comunes o crea las tuyas."
+
+msgid "Create suggested categories"
+msgstr "Crear categorías sugeridas"
+
+msgid "No expense categories"
+msgstr "Sin categorías de gasto"
+
+msgid "No income categories"
+msgstr "Sin categorías de ingreso"
+
+msgid "Create one to classify the movements of this type."
+msgstr "Crea una para clasificar los movimientos de este tipo."
+
+msgid "That category no longer exists."
+msgstr "Esa categoría ya no existe."
+
+msgid "A category of this type already has that name."
+msgstr "Ya hay una categoría de este tipo con ese nombre."
+
+msgid "Movements use this category, so it can't be deleted. Archive it instead."
+msgstr "Hay movimientos con esta categoría, así que no se puede borrar. Archívala."
+
+msgid "There are already categories."
+msgstr "Ya hay categorías."
+
+msgid "That category belongs to the other type of movement."
+msgstr "Esa categoría es del otro tipo de movimiento."
+
+msgid "That category is archived. Restore it to use it."
+msgstr "Esa categoría está archivada. Restáurala para usarla."
+
+msgid "Food"
+msgstr "Comida"
+
+msgid "Transport"
+msgstr "Transporte"
+
+msgid "Housing"
+msgstr "Vivienda"
+
+msgid "Bills"
+msgstr "Cuentas y servicios"
+
+msgid "Health"
+msgstr "Salud"
+
+msgid "Leisure"
+msgstr "Ocio"
+
+msgid "Shopping"
+msgstr "Compras"
+
+msgid "Salary"
+msgstr "Sueldo"
+
+msgid "Other income"
+msgstr "Otros ingresos"
+
+msgid "{} (archived)"
+msgstr "{} (archivada)"
+
+msgid "Delete the category {}? This can't be undone."
+msgstr "¿Borrar la categoría {}? No se puede deshacer."
+
+msgid "{}, {}"
+msgstr "{}, {}"
+
+msgid "{} · {} · {}"
+msgstr "{} · {} · {}"
+
+msgid "Choose two different accounts."
+msgstr "Elige dos cuentas distintas."
+
+msgid "Movements use this account, so it can't be deleted. Archive it instead."
+msgstr "Hay movimientos en esta cuenta, así que no se puede eliminar. Archívala en su lugar."
+
+msgid "That account is archived. Restore it to use it."
+msgstr "Esa cuenta está archivada. Restáurala para usarla."
+
+msgid "Transfer"
+msgstr "Transferencia"
+
+msgid "Delete the account {}? This can't be undone."
+msgstr "¿Eliminar la cuenta {}? No se puede deshacer."
+
+msgid "{} → {} · {}"
+msgstr "{} → {} · {}"
+
+msgid "{}, from {} to {}, {}, {}"
+msgstr "{}, de {} a {}, {}, {}"
+
+msgid "From account"
+msgstr "Cuenta de origen"
+
+msgid "To account"
+msgstr "Cuenta de destino"

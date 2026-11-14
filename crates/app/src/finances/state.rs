@@ -16,14 +16,21 @@ use slint::{ComponentHandle, SharedString, VecModel};
 use super::style;
 use crate::tasks::ui_id;
 use crate::{
-    AccountKind, AccountRow, AppWindow, CurrencyRow, FinanceStore, FinanceTab, Strings,
-    TransactionRow,
+    AccountKind, AccountRow, AppWindow, CategoryRow, CurrencyRow, FinanceStore, FinanceTab,
+    Strings, TransactionRow,
 };
 
 pub struct State {
     pub conn: Rc<Connection>,
+    /// The Accounts tab: active accounts, then archived ones.
     pub rows: Rc<VecModel<AccountRow>>,
+    pub archived_account_rows: Rc<VecModel<AccountRow>>,
     pub tx_rows: Rc<VecModel<TransactionRow>>,
+    /// The Categories tab: the kind's active categories, then its archived ones.
+    pub cat_rows: Rc<VecModel<CategoryRow>>,
+    pub archived_rows: Rc<VecModel<CategoryRow>>,
+    /// Every category of both kinds, for the movement modal.
+    pub choices: Rc<VecModel<CategoryRow>>,
     /// First day of the month the Movements tab shows.
     pub shown: Cell<NaiveDate>,
     pub window: slint::Weak<AppWindow>,
@@ -66,6 +73,8 @@ fn account_row(a: Account) -> Result<AccountRow, String> {
         bank: a.bank.into(),
         balance: finances::format_amount(a.balance, a.currency, style).into(),
         initial: finances::format_input(a.initial_balance, a.currency, style).into(),
+        archived: a.archived,
+        in_use: a.in_use,
     })
 }
 
@@ -74,21 +83,32 @@ impl State {
         let has_currency = finances::main_currency(&self.conn)
             .map_err(|e| e.to_string())?
             .is_some();
-        let rows = if has_currency {
-            finances::list_accounts(&self.conn)
-                .map_err(|e| e.to_string())?
-                .into_iter()
-                .map(account_row)
-                .collect::<Result<Vec<_>, _>>()?
-        } else {
-            Vec::new()
-        };
-        self.rows.set_vec(rows);
+        let (mut active, mut archived) = (Vec::new(), Vec::new());
+        if has_currency {
+            for a in finances::list_accounts(&self.conn).map_err(|e| e.to_string())? {
+                let is_archived = a.archived;
+                let r = account_row(a)?;
+                if is_archived {
+                    archived.push(r);
+                } else {
+                    active.push(r);
+                }
+            }
+        }
+        self.rows.set_vec(active);
+        self.archived_account_rows.set_vec(archived);
         let store = w.global::<FinanceStore>();
         store.set_has_currency(has_currency);
-        // The movements are only read while their tab is the one shown.
-        if has_currency && store.get_tab() == FinanceTab::Movements {
-            self.load_month(w)?;
+        // Only the shown tab's data is read.
+        if has_currency {
+            match store.get_tab() {
+                FinanceTab::Movements => {
+                    self.load_month(w)?;
+                    self.load_choices()?;
+                }
+                FinanceTab::Categories => self.load_categories(w)?,
+                FinanceTab::Accounts => {}
+            }
         }
         Ok(())
     }
@@ -122,6 +142,15 @@ impl State {
             FinanceError::NoMainCurrency => s.get_finance_no_currency(),
             FinanceError::AccountNotFound => s.get_finance_no_account(),
             FinanceError::TransactionNotFound => s.get_finance_no_transaction(),
+            FinanceError::CategoryNotFound => s.get_finance_no_category(),
+            FinanceError::DuplicateName => s.get_finance_duplicate_name(),
+            FinanceError::InUse => s.get_finance_category_in_use(),
+            FinanceError::CategoriesExist => s.get_finance_categories_exist(),
+            FinanceError::CategoryKindMismatch => s.get_finance_category_kind(),
+            FinanceError::CategoryArchived => s.get_finance_category_archived(),
+            FinanceError::SameAccount => s.get_finance_same_account(),
+            FinanceError::AccountInUse => s.get_finance_account_in_use(),
+            FinanceError::AccountArchived => s.get_finance_account_archived(),
             e @ (FinanceError::Sqlite(_)
             | FinanceError::UnknownCurrency(_)
             | FinanceError::BadKind(_)

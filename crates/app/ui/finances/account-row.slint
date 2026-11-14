@@ -11,6 +11,9 @@ export struct AccountRow {
     bank: string,
     balance: string,
     initial: string,
+    archived: bool,
+    // Some movement uses it, so it can only be archived.
+    in-use: bool,
 }
 
 export struct CurrencyRow {

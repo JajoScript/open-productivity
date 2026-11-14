@@ -4,6 +4,7 @@
 import { Date } from "std-widgets.slint";
 import { FinanceTab, TransactionRow, TxKind } from "transaction-row.slint";
 import { AccountKind, AccountRow, CurrencyRow } from "account-row.slint";
+import { CategoryRow } from "category-row.slint";
 
 // What the Finances views show and ask for. Rust fills the data and answers the callbacks;
 // the views read and call it directly instead of forwarding it through the window.
@@ -11,21 +12,43 @@ export global FinanceStore {
     // False until the user picks the main currency.
     in property <bool> has-currency;
     in property <[CurrencyRow]> currencies;
+    // The active accounts; the archived ones are apart.
     in property <[AccountRow]> accounts;
+    in property <[AccountRow]> archived-accounts;
     in property <string> error;
     // The tab shown; Rust loads only what it needs.
     in-out property <FinanceTab> tab: FinanceTab.movements;
     // The movements of the month shown; only its month and year matter.
     in property <Date> month;
     in property <[TransactionRow]> transactions;
+    // The kind the Categories tab lists.
+    in-out property <TxKind> category-kind: TxKind.expense;
+    // False only while there are no categories at all, which offers the suggested ones.
+    in property <bool> has-categories;
+    // Of `category-kind`: active ones with their total of the month; then the archived ones.
+    in property <[CategoryRow]> categories;
+    in property <[CategoryRow]> archived-categories;
+    // The month's total of that kind without category, "" when there is none.
+    in property <string> uncategorized-total;
+    // Every category of both kinds, for the movement modal to pick from.
+    in property <[CategoryRow]> category-choices;
 
     // The ones that return a string give the error to show; empty means it worked.
     callback choose-currency(string) -> string;
     callback create-account(string, AccountKind, string, string) -> string;
     callback update-account(int, string, AccountKind, string, string) -> string;
-    callback create-transaction(TxKind, int, string, Date, string) -> string;
-    callback update-transaction(int, TxKind, int, string, Date, string) -> string;
+    callback archive-account(int, bool) -> string;
+    callback delete-account(int) -> string;
+    callback create-transaction(TxKind, int, bool, int, string, Date, string) -> string;
+    callback update-transaction(int, TxKind, int, bool, int, string, Date, string) -> string;
+    callback create-transfer(int, int, string, Date, string) -> string;
+    callback update-transfer(int, int, int, string, Date, string) -> string;
     callback delete-transaction(int) -> string;
+    callback create-category(TxKind, string) -> string;
+    callback rename-category(int, string) -> string;
+    callback archive-category(int, bool) -> string;
+    callback delete-category(int) -> string;
+    callback create-suggested() -> string;
     // -1 / +1 moves a month; 0 goes back to the current one.
     callback shift(int);
     // Reload on entering the module or when the language changes the amount style.

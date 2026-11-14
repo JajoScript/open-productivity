@@ -8,7 +8,8 @@ use std::rc::Rc;
 use open_productivity_core::calendar::{self, Period};
 use open_productivity_core::chrono::{Local, NaiveDate};
 use open_productivity_core::finances::{
-    self, AccountId, FinanceError, Transaction, TransactionId, TxKind as CoreKind,
+    self, AccountId, CategoryId, FinanceError, Movement, Transaction, TransactionId, Transfer,
+    TxKind as CoreKind,
 };
 use slint::{ComponentHandle, SharedString};
 
@@ -18,32 +19,66 @@ use crate::dates::{core_date, ui_date};
 use crate::tasks::ui_id;
 use crate::{AppWindow, Date, FinanceStore, Strings, TransactionRow, TxKind};
 
-fn core_kind(k: TxKind) -> CoreKind {
+pub(super) fn core_kind(k: TxKind) -> CoreKind {
     match k {
         TxKind::Expense => CoreKind::Expense,
         TxKind::Income => CoreKind::Income,
     }
 }
 
-fn ui_kind(k: CoreKind) -> TxKind {
+pub(super) fn ui_kind(k: CoreKind) -> TxKind {
     match k {
         CoreKind::Expense => TxKind::Expense,
         CoreKind::Income => TxKind::Income,
     }
 }
 
-fn row(t: Transaction) -> Result<TransactionRow, String> {
+fn tx_row(t: Transaction) -> Result<TransactionRow, String> {
     let style = style();
     Ok(TransactionRow {
         id: ui_id(t.id.0)?,
         kind: ui_kind(t.kind),
+        transfer: false,
+        to_account_id: 0,
+        to_account: Default::default(),
         account_id: ui_id(t.account_id.0)?,
         account: t.account_name.clone().into(),
+        has_category: t.category.is_some(),
+        category_id: t.category.map_or(Ok(0), |c| ui_id(c.0))?,
+        category: t.category_name.clone().unwrap_or_default().into(),
         date: ui_date(t.date),
         description: t.description.clone().into(),
         amount: finances::format_amount(t.signed(), t.currency, style).into(),
         input: finances::format_input(t.amount, t.currency, style).into(),
     })
+}
+
+/// The amount of a transfer has no sign: it is neither income nor expense.
+fn transfer_row(t: Transfer) -> Result<TransactionRow, String> {
+    let style = style();
+    Ok(TransactionRow {
+        id: ui_id(t.id.0)?,
+        kind: TxKind::Expense,
+        transfer: true,
+        to_account_id: ui_id(t.to.0)?,
+        to_account: t.to_name.into(),
+        account_id: ui_id(t.from.0)?,
+        account: t.from_name.into(),
+        has_category: false,
+        category_id: 0,
+        category: Default::default(),
+        date: ui_date(t.date),
+        description: t.description.into(),
+        amount: finances::format_amount(t.amount, t.currency, style).into(),
+        input: finances::format_input(t.amount, t.currency, style).into(),
+    })
+}
+
+fn row(m: Movement) -> Result<TransactionRow, String> {
+    match m {
+        Movement::Tx(t) => tx_row(t),
+        Movement::Transfer(t) => transfer_row(t),
+    }
 }
 
 impl State {
@@ -79,12 +114,48 @@ impl State {
 pub fn connect(state: &Rc<State>, store: &FinanceStore<'_>) {
     store.on_create_transaction({
         let state = state.clone();
-        move |kind, account, amount, date, description| {
+        move |kind, account, has_category, category, amount, date, description| {
             state.with_date(date, |d| {
                 finances::create_transaction(
                     &state.conn,
                     core_kind(kind),
                     AccountId(account.into()),
+                    &amount,
+                    d,
+                    &description,
+                    has_category.then_some(CategoryId(category.into())),
+                )
+                .map(|_| ())
+            })
+        }
+    });
+
+    store.on_update_transaction({
+        let state = state.clone();
+        move |id, kind, account, has_category, category, amount, date, description| {
+            state.with_date(date, |d| {
+                finances::update_transaction(
+                    &state.conn,
+                    TransactionId(id.into()),
+                    core_kind(kind),
+                    AccountId(account.into()),
+                    &amount,
+                    d,
+                    &description,
+                    has_category.then_some(CategoryId(category.into())),
+                )
+            })
+        }
+    });
+
+    store.on_create_transfer({
+        let state = state.clone();
+        move |from, to, amount, date, description| {
+            state.with_date(date, |d| {
+                finances::create_transfer(
+                    &state.conn,
+                    AccountId(from.into()),
+                    AccountId(to.into()),
                     &amount,
                     d,
                     &description,
@@ -94,15 +165,15 @@ pub fn connect(state: &Rc<State>, store: &FinanceStore<'_>) {
         }
     });
 
-    store.on_update_transaction({
+    store.on_update_transfer({
         let state = state.clone();
-        move |id, kind, account, amount, date, description| {
+        move |id, from, to, amount, date, description| {
             state.with_date(date, |d| {
-                finances::update_transaction(
+                finances::update_transfer(
                     &state.conn,
                     TransactionId(id.into()),
-                    core_kind(kind),
-                    AccountId(account.into()),
+                    AccountId(from.into()),
+                    AccountId(to.into()),
                     &amount,
                     d,
                     &description,

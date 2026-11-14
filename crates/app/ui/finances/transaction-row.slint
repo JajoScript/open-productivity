@@ -5,14 +5,22 @@ import { Date } from "std-widgets.slint";
 
 export enum TxKind { expense, income }
 
-export enum FinanceTab { movements, accounts }
+export enum FinanceTab { movements, accounts, categories }
 
-// `amount` arrives signed and formatted for display; `input` formatted for the edit field.
+// `amount` arrives signed (not for a transfer) and formatted for display; `input` formatted for the edit field.
 export struct TransactionRow {
     id: int,
     kind: TxKind,
+    // A transfer moves money from `account` to `to-account`; it has no kind nor category.
+    transfer: bool,
+    to-account-id: int,
+    to-account: string,
     account-id: int,
     account: string,
+    has-category: bool,
+    category-id: int,
+    // "" without category.
+    category: string,
     date: Date,
     description: string,
     amount: string,

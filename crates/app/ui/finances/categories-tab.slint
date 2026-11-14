@@ -1,0 +1,204 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ScrollView } from "std-widgets.slint";
+import { EmptyState } from "../empty-state.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+import { CategoryRow } from "category-row.slint";
+import { FinanceStore } from "finance-store.slint";
+import { MonthNav } from "month-nav.slint";
+import { TxKind } from "transaction-row.slint";
+
+component CategoryLine inherits Rectangle {
+    in property <CategoryRow> category;
+    // The "no category" row only shows its total.
+    in property <bool> editable: true;
+    in property <string> label: root.category.name;
+    callback opened;
+
+    height: 44px;
+    border-radius: 6px;
+    background: root.editable ? (touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent) : transparent;
+    animate background {
+        duration: Theme.fast;
+        easing: Theme.ease-out;
+    }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.category.total != "" ? Strings.category-line-label(root.label, root.category.total) : root.label;
+    accessible-action-default => {
+        if root.editable {
+            root.opened();
+        }
+    }
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 16px; // clears the ListView scroll bar
+        spacing: 8px;
+        Text {
+            text: root.label;
+            color: root.editable ? Palette.foreground : Theme.muted;
+            overflow: elide;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            opacity: root.category.archived ? 0.55 : 1;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.category.total;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            opacity: root.category.archived ? 0.55 : 1;
+            accessible-role: none;
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+
+    touch := TouchArea {
+        enabled: root.editable;
+        clicked => {
+            root.opened();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        enabled: root.editable;
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.opened();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// The categories of one kind with what each took in the month, and the suggested ones to start.
+export component CategoriesTab inherits VerticalLayout {
+    callback new-category();
+    callback edit-category(CategoryRow);
+
+    property <[TxKind]> kinds: [TxKind.expense, TxKind.income];
+    // Failure of the suggested ones, shown over the empty state.
+    property <string> error;
+    property <bool> empty: FinanceStore.categories.length == 0 && FinanceStore.archived-categories.length == 0 && FinanceStore.uncategorized-total == "";
+
+    spacing: 12px;
+
+    // Arrow keys move the choice, like the tabs they are drawn as.
+    function step(delta: int) {
+        FinanceStore.category-kind = delta > 0 ? TxKind.income : TxKind.expense;
+        FinanceStore.refresh();
+    }
+
+    if !FinanceStore.has-categories: EmptyState {
+        title: @tr("Organize your movements");
+        description: @tr("Categories show where your money goes and where it comes from. Start with a few common ones, or create your own.");
+        action: @tr("Create suggested categories");
+        clicked => {
+            root.error = FinanceStore.create-suggested();
+        }
+    }
+
+    if !FinanceStore.has-categories && root.error != "": Text {
+        text: root.error;
+        color: Theme.critical;
+        wrap: word-wrap;
+    }
+
+    if FinanceStore.has-categories: HorizontalLayout {
+        spacing: 8px;
+        HorizontalLayout {
+            horizontal-stretch: 0;
+            spacing: 0px;
+            alignment: start;
+            accessible-role: tab-list;
+            for k in root.kinds: SettingsTab {
+                text: Strings.tx-kind(k);
+                selected: FinanceStore.category-kind == k;
+                chosen => {
+                    if FinanceStore.category-kind != k {
+                        FinanceStore.category-kind = k;
+                        FinanceStore.refresh();
+                    }
+                }
+                step(d) => {
+                    root.step(d);
+                }
+            }
+        }
+
+        MonthNav {
+            horizontal-stretch: 1;
+        }
+    }
+
+    if FinanceStore.has-categories && root.empty: EmptyState {
+        title: FinanceStore.category-kind == TxKind.expense ? @tr("No expense categories") : @tr("No income categories");
+        description: @tr("Create one to classify the movements of this type.");
+        action: @tr("New category");
+        clicked => {
+            root.new-category();
+        }
+    }
+
+    if FinanceStore.has-categories && !root.empty: ScrollView {
+        vertical-stretch: 1;
+        VerticalLayout {
+            alignment: start;
+            for c in FinanceStore.categories: CategoryLine {
+                category: c;
+                opened => {
+                    root.edit-category(c);
+                }
+            }
+
+            if FinanceStore.uncategorized-total != "": CategoryLine {
+                editable: false;
+                label: @tr("No category");
+                category: {
+                    id: 0,
+                    name: "",
+                    kind: FinanceStore.category-kind,
+                    archived: false,
+                    in-use: false,
+                    total: FinanceStore.uncategorized-total,
+                };
+            }
+
+            if FinanceStore.archived-categories.length > 0: HorizontalLayout {
+                height: 32px;
+                padding-left: 8px;
+                Text {
+                    text: @tr("Archived");
+                    color: Theme.muted;
+                    vertical-alignment: bottom;
+                }
+            }
+
+            for c in FinanceStore.archived-categories: CategoryLine {
+                category: c;
+                opened => {
+                    root.edit-category(c);
+                }
+            }
+        }
+    }
+}

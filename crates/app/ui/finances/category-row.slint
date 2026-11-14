@@ -1,0 +1,17 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { TxKind } from "transaction-row.slint";
+
+// The categories offered to start with; Rust asks Strings for each one's name.
+export enum SuggestedCategory { food, transport, housing, bills, health, leisure, shopping, salary, other-income }
+
+// `total` arrives formatted for display: the month's sum, or "" when it had no movements.
+export struct CategoryRow {
+    id: int,
+    name: string,
+    kind: TxKind,
+    archived: bool,
+    in-use: bool,
+    total: string,
+}

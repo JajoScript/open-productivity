@@ -4,16 +4,16 @@
 import { Palette, ListView } from "std-widgets.slint";
 import { EmptyState } from "../empty-state.slint";
 import { Strings } from "../strings.slint";
-import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { FinanceStore } from "finance-store.slint";
+import { MonthNav } from "month-nav.slint";
 import { TransactionRow } from "transaction-row.slint";
 
 component TransactionLine inherits Rectangle {
     in property <TransactionRow> tx;
     callback opened;
 
-    property <string> title: root.tx.description != "" ? root.tx.description : Strings.tx-kind(root.tx.kind);
+    property <string> title: root.tx.description != "" ? root.tx.description : root.tx.transfer ? Strings.transfer : Strings.tx-kind(root.tx.kind);
     property <string> day: Strings.date(root.tx.date.day, root.tx.date.month, root.tx.date.year);
 
     height: 56px;
@@ -25,7 +25,7 @@ component TransactionLine inherits Rectangle {
     }
     forward-focus: focus;
     accessible-role: button;
-    accessible-label: Strings.transaction-line-label(root.title, root.tx.account, root.day, root.tx.amount);
+    accessible-label: root.tx.transfer ? Strings.transfer-line-label(root.title, root.tx.account, root.tx.to-account, root.day, root.tx.amount) : Strings.transaction-line-label(root.title, root.tx.account, root.day, root.tx.amount);
     accessible-action-default => {
         root.opened();
     }
@@ -44,7 +44,7 @@ component TransactionLine inherits Rectangle {
             }
 
             Text {
-                text: Strings.transaction-detail(root.tx.account, root.day);
+                text: root.tx.transfer ? Strings.transfer-detail(root.tx.account, root.tx.to-account, root.day) : root.tx.has-category ? Strings.transaction-detail-category(root.tx.category, root.tx.account, root.day) : Strings.transaction-detail(root.tx.account, root.day);
                 color: Theme.muted;
                 overflow: elide;
                 accessible-role: none;
@@ -97,41 +97,7 @@ export component TransactionsTab inherits VerticalLayout {
 
     spacing: 12px;
 
-    HorizontalLayout {
-        spacing: 4px;
-        SubtleButton {
-            text: @tr("Today");
-            color: Palette.foreground;
-            outlined: true;
-            clicked => {
-                FinanceStore.shift(0);
-            }
-        }
-
-        SubtleButton {
-            icon: @image-url("../icons/chevron-left.svg");
-            label: @tr("Previous month");
-            clicked => {
-                FinanceStore.shift(-1);
-            }
-        }
-
-        SubtleButton {
-            icon: @image-url("../icons/chevron-right.svg");
-            label: @tr("Next month");
-            clicked => {
-                FinanceStore.shift(1);
-            }
-        }
-
-        Text {
-            text: Strings.month-year(FinanceStore.month.month, FinanceStore.month.year);
-            font-weight: 600;
-            vertical-alignment: center;
-            overflow: elide;
-            horizontal-stretch: 1;
-        }
-    }
+    MonthNav { }
 
     if FinanceStore.transactions.length == 0: EmptyState {
         title: FinanceStore.accounts.length == 0 ? @tr("Create an account first") : @tr("No movements this month.");

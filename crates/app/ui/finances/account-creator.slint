@@ -15,12 +15,18 @@ import { FinanceStore } from "finance-store.slint";
 // Rebuilt on every show(), so the fields and the error always start fresh.
 component CreatorBody inherits FocusScope {
     in property <bool> editing;
+    in property <bool> archived;
+    in property <bool> in-use;
+    // What the delete confirmation names: the saved name, not the one being typed.
+    in property <string> saved-name;
     // The modal gives the initial values and the user edits them here.
     in-out property <string> name;
     in-out property <AccountKind> kind;
     in-out property <string> bank;
     in-out property <string> balance;
     callback save(string, AccountKind, string, string) -> string;
+    callback toggle-archived() -> string;
+    callback delete() -> string;
     callback cancel;
 
     property <string> error;
@@ -104,7 +110,27 @@ component CreatorBody inherits FocusScope {
 
         HorizontalLayout {
             spacing: 8px;
-            alignment: end;
+            if root.editing: SubtleButton {
+                text: root.archived ? @tr("Restore") : @tr("Archive");
+                color: Palette.foreground;
+                clicked => {
+                    root.error = root.toggle-archived();
+                }
+            }
+
+            // An account with movements can only be archived.
+            if root.editing && !root.in-use: SubtleButton {
+                text: @tr("Delete");
+                color: Palette.foreground;
+                clicked => {
+                    confirm.show();
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
             SubtleButton {
                 text: @tr("Cancel");
                 color: Palette.foreground;
@@ -121,6 +147,45 @@ component CreatorBody inherits FocusScope {
             }
         }
     }
+
+    confirm := PopupWindow {
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        width: 320px;
+        PopupSurface {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: Strings.delete-account-question(root.saved-name);
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Cancel");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            confirm.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Delete");
+                        clicked => {
+                            confirm.close();
+                            root.error = root.delete();
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 // Creates an account or edits one, depending on how it is opened. Closing by clicking outside
@@ -133,6 +198,8 @@ export component AccountCreator inherits PopupWindow {
     in property <AccountKind> account-kind;
     in property <string> account-bank;
     in property <string> account-balance;
+    in property <bool> account-archived;
+    in property <bool> account-in-use;
 
     close-policy: close-on-click-outside;
     width: 400px;
@@ -140,12 +207,29 @@ export component AccountCreator inherits PopupWindow {
     PopupSurface {
         CreatorBody {
             editing: root.editing;
+            archived: root.account-archived;
+            in-use: root.account-in-use;
+            saved-name: root.account-name;
             name: root.account-name;
             kind: root.account-kind;
             bank: root.account-bank;
             balance: root.account-balance;
             save(name, kind, bank, balance) => {
                 let error = root.editing ? FinanceStore.update-account(root.account-id, name, kind, bank, balance) : FinanceStore.create-account(name, kind, bank, balance);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            toggle-archived => {
+                let error = FinanceStore.archive-account(root.account-id, !root.account-archived);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            delete => {
+                let error = FinanceStore.delete-account(root.account-id);
                 if error == "" {
                     root.close();
                 }

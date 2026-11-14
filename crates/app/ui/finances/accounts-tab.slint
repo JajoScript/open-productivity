@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Palette, ListView } from "std-widgets.slint";
+import { Palette, ScrollView } from "std-widgets.slint";
 import { EmptyState } from "../empty-state.slint";
 import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
@@ -44,6 +44,7 @@ component AccountLine inherits Rectangle {
             horizontal-stretch: 1;
             Text {
                 text: root.account.name;
+                opacity: root.account.archived ? 0.55 : 1;
                 overflow: elide;
                 accessible-role: none;
             }
@@ -58,6 +59,7 @@ component AccountLine inherits Rectangle {
 
         Text {
             text: root.account.balance;
+            opacity: root.account.archived ? 0.55 : 1;
             font-weight: 600;
             vertical-alignment: center;
             horizontal-alignment: right;
@@ -100,7 +102,7 @@ export component AccountsTab inherits VerticalLayout {
     callback new-account();
     callback edit-account(AccountRow);
 
-    if FinanceStore.accounts.length == 0: EmptyState {
+    if FinanceStore.accounts.length == 0 && FinanceStore.archived-accounts.length == 0: EmptyState {
         title: @tr("Add your first account");
         description: @tr("Register where your money is, such as a bank account or cash, with what it holds today. Every account shows its balance.");
         action: @tr("New account");
@@ -111,12 +113,32 @@ export component AccountsTab inherits VerticalLayout {
         AccountPreview { }
     }
 
-    if FinanceStore.accounts.length > 0: ListView {
+    if FinanceStore.accounts.length > 0 || FinanceStore.archived-accounts.length > 0: ScrollView {
         vertical-stretch: 1;
-        for account in FinanceStore.accounts: AccountLine {
-            account: account;
-            opened => {
-                root.edit-account(account);
+        VerticalLayout {
+            alignment: start;
+            for account in FinanceStore.accounts: AccountLine {
+                account: account;
+                opened => {
+                    root.edit-account(account);
+                }
+            }
+
+            if FinanceStore.archived-accounts.length > 0: HorizontalLayout {
+                height: 32px;
+                padding-left: 8px;
+                Text {
+                    text: @tr("Archived");
+                    color: Theme.muted;
+                    vertical-alignment: bottom;
+                }
+            }
+
+            for account in FinanceStore.archived-accounts: AccountLine {
+                account: account;
+                opened => {
+                    root.edit-account(account);
+                }
             }
         }
     }

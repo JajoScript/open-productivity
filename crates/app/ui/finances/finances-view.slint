@@ -7,6 +7,8 @@ import { SettingsTab } from "../settings/settings-tab.slint";
 import { Theme } from "../theme.slint";
 import { AccountRow } from "account-row.slint";
 import { AccountsTab } from "accounts-tab.slint";
+import { CategoriesTab } from "categories-tab.slint";
+import { CategoryRow } from "category-row.slint";
 import { FinanceStore } from "finance-store.slint";
 import { FinanceTab, TransactionRow } from "transaction-row.slint";
 import { TransactionsTab } from "transactions-tab.slint";
@@ -101,13 +103,15 @@ component CurrencyPicker inherits HorizontalLayout {
     }
 }
 
-// Movements and accounts in tabs; the main currency is chosen the first time.
+// Movements, accounts and categories in tabs; the main currency is chosen the first time.
 export component FinancesView inherits VerticalLayout {
     // Open the window's modals: a new or existing account, a new or existing movement.
     callback new-account();
     callback edit-account(AccountRow);
     callback new-transaction();
     callback edit-transaction(TransactionRow);
+    callback new-category();
+    callback edit-category(CategoryRow);
 
     padding: 24px;
     padding-top: 20px;
@@ -154,8 +158,19 @@ export component FinancesView inherits VerticalLayout {
                     root.choose(FinanceTab.accounts);
                 }
                 step(d) => {
+                    root.choose(d < 0 ? FinanceTab.movements : FinanceTab.categories);
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Categories");
+                selected: FinanceStore.tab == FinanceTab.categories;
+                chosen => {
+                    root.choose(FinanceTab.categories);
+                }
+                step(d) => {
                     if d < 0 {
-                        root.choose(FinanceTab.movements);
+                        root.choose(FinanceTab.accounts);
                     }
                 }
             }
@@ -173,7 +188,14 @@ export component FinancesView inherits VerticalLayout {
             }
         }
 
-        if FinanceStore.tab == FinanceTab.accounts && FinanceStore.accounts.length > 0: InkButton {
+        if FinanceStore.tab == FinanceTab.categories && FinanceStore.has-categories: InkButton {
+            text: @tr("New category");
+            clicked => {
+                root.new-category();
+            }
+        }
+
+        if FinanceStore.tab == FinanceTab.accounts && (FinanceStore.accounts.length > 0 || FinanceStore.archived-accounts.length > 0): InkButton {
             text: @tr("New account");
             clicked => {
                 root.new-account();
@@ -206,6 +228,16 @@ export component FinancesView inherits VerticalLayout {
         }
         edit-account(a) => {
             root.edit-account(a);
+        }
+    }
+
+    if FinanceStore.has-currency && FinanceStore.tab == FinanceTab.categories: CategoriesTab {
+        vertical-stretch: 1;
+        new-category => {
+            root.new-category();
+        }
+        edit-category(c) => {
+            root.edit-category(c);
         }
     }
 }

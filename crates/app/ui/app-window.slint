@@ -15,6 +15,8 @@ import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
 import { StudyStore } from "study/study-store.slint";
 import { AccountCreator } from "finances/account-creator.slint";
+import { CategoryCreator } from "finances/category-creator.slint";
+import { CategoryRow, SuggestedCategory } from "finances/category-row.slint";
 import { FinancesView } from "finances/finances-view.slint";
 import { FinanceStore } from "finances/finance-store.slint";
 import { AccountKind, AccountRow, CurrencyRow } from "finances/account-row.slint";
@@ -101,6 +103,8 @@ export {
     AccountRow,
     FinanceTab,
     TransactionRow,
+    CategoryRow,
+    SuggestedCategory,
     TxKind,
     CurrencyRow,
     FinanceStore,
@@ -253,15 +257,28 @@ export component AppWindow inherits Window {
     property <AccountKind> account-edit-kind;
     property <string> account-edit-bank;
     property <string> account-edit-balance;
+    property <bool> account-edit-archived;
+    property <bool> account-edit-in-use;
     // What the movement modal opens with: a new movement, or the one being edited.
     property <bool> tx-editing;
     property <int> tx-edit-id;
     property <TxKind> tx-edit-kind;
+    property <bool> tx-edit-transfer;
+    property <int> tx-edit-to-account;
     property <int> tx-edit-account;
     property <string> tx-edit-amount;
     property <string> tx-edit-amount-label;
     property <Date> tx-edit-date;
     property <string> tx-edit-description;
+    property <bool> tx-edit-has-category;
+    property <int> tx-edit-category;
+    // What the category modal opens with: a new category of the tab's kind, or the one being edited.
+    property <bool> category-editing;
+    property <int> category-edit-id;
+    property <TxKind> category-edit-kind;
+    property <string> category-edit-name;
+    property <bool> category-edit-archived;
+    property <bool> category-edit-in-use;
     function open-new-topic() {
         // Same starting subject as the session modal.
         root.log-subject = StudyStore.subject-open && !StudyStore.subject-detail.archived ? StudyStore.subject-detail.id : StudyStore.active-subjects[0].id;
@@ -369,6 +386,8 @@ export component AppWindow inherits Window {
             account-kind: root.account-edit-kind;
             account-bank: root.account-edit-bank;
             account-balance: root.account-edit-balance;
+            account-archived: root.account-edit-archived;
+            account-in-use: root.account-edit-in-use;
             x: (root.width - self.width) / 2;
             y: 120px;
         }
@@ -377,13 +396,28 @@ export component AppWindow inherits Window {
             editing: root.tx-editing;
             tx-id: root.tx-edit-id;
             tx-kind: root.tx-edit-kind;
+            tx-transfer: root.tx-edit-transfer;
+            tx-to-account-id: root.tx-edit-to-account;
             tx-account-id: root.tx-edit-account;
+            tx-has-category: root.tx-edit-has-category;
+            tx-category-id: root.tx-edit-category;
             tx-amount: root.tx-edit-amount;
             tx-amount-label: root.tx-edit-amount-label;
             tx-date: root.tx-edit-date;
             tx-description: root.tx-edit-description;
             x: (root.width - self.width) / 2;
             y: 80px;
+        }
+
+        category-creator := CategoryCreator {
+            editing: root.category-editing;
+            category-id: root.category-edit-id;
+            category-kind: root.category-edit-kind;
+            category-name: root.category-edit-name;
+            category-archived: root.category-edit-archived;
+            category-in-use: root.category-edit-in-use;
+            x: (root.width - self.width) / 2;
+            y: 120px;
         }
 
         topic-creator := TopicCreator {
@@ -602,6 +636,8 @@ export component AppWindow inherits Window {
                         root.account-edit-kind = AccountKind.checking;
                         root.account-edit-bank = "";
                         root.account-edit-balance = "";
+                        root.account-edit-archived = false;
+                        root.account-edit-in-use = false;
                         account-creator.show();
                     }
                     edit-account(a) => {
@@ -611,13 +647,19 @@ export component AppWindow inherits Window {
                         root.account-edit-kind = a.kind;
                         root.account-edit-bank = a.bank;
                         root.account-edit-balance = a.initial;
+                        root.account-edit-archived = a.archived;
+                        root.account-edit-in-use = a.in-use;
                         account-creator.show();
                     }
                     new-transaction => {
                         root.tx-editing = false;
                         root.tx-edit-id = 0;
                         root.tx-edit-kind = TxKind.expense;
+                        root.tx-edit-transfer = false;
                         root.tx-edit-account = FinanceStore.accounts[0].id;
+                        root.tx-edit-to-account = FinanceStore.accounts.length > 1 ? FinanceStore.accounts[1].id : FinanceStore.accounts[0].id;
+                        root.tx-edit-has-category = false;
+                        root.tx-edit-category = 0;
                         root.tx-edit-amount = "";
                         root.tx-edit-amount-label = "";
                         root.tx-edit-date = Calendar.today();
@@ -628,12 +670,34 @@ export component AppWindow inherits Window {
                         root.tx-editing = true;
                         root.tx-edit-id = t.id;
                         root.tx-edit-kind = t.kind;
+                        root.tx-edit-transfer = t.transfer;
                         root.tx-edit-account = t.account-id;
+                        root.tx-edit-to-account = t.to-account-id;
+                        root.tx-edit-has-category = t.has-category;
+                        root.tx-edit-category = t.category-id;
                         root.tx-edit-amount = t.input;
                         root.tx-edit-amount-label = t.amount;
                         root.tx-edit-date = t.date;
                         root.tx-edit-description = t.description;
                         transaction-creator.show();
+                    }
+                    new-category => {
+                        root.category-editing = false;
+                        root.category-edit-id = 0;
+                        root.category-edit-kind = FinanceStore.category-kind;
+                        root.category-edit-name = "";
+                        root.category-edit-archived = false;
+                        root.category-edit-in-use = false;
+                        category-creator.show();
+                    }
+                    edit-category(c) => {
+                        root.category-editing = true;
+                        root.category-edit-id = c.id;
+                        root.category-edit-kind = c.kind;
+                        root.category-edit-name = c.name;
+                        root.category-edit-archived = c.archived;
+                        root.category-edit-in-use = c.in-use;
+                        category-creator.show();
                     }
                 }
 

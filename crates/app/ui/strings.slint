@@ -3,6 +3,7 @@
 
 import { AccountKind } from "finances/account-row.slint";
 import { TxKind } from "finances/transaction-row.slint";
+import { SuggestedCategory } from "finances/category-row.slint";
 
 // Messages shown by native dialogs and the log; msgids are English, see lang/README.md.
 export global Strings {
@@ -245,6 +246,17 @@ export global Strings {
     out property <string> finance-no-account: @tr("That account no longer exists.");
     out property <string> finance-no-transaction: @tr("That movement no longer exists.");
 
+    out property <string> finance-no-category: @tr("That category no longer exists.");
+    out property <string> finance-duplicate-name: @tr("A category of this type already has that name.");
+    out property <string> finance-category-in-use: @tr("Movements use this category, so it can't be deleted. Archive it instead.");
+    out property <string> finance-categories-exist: @tr("There are already categories.");
+    out property <string> finance-category-kind: @tr("That category belongs to the other type of movement.");
+    out property <string> finance-same-account: @tr("Choose two different accounts.");
+    out property <string> finance-account-in-use: @tr("Movements use this account, so it can't be deleted. Archive it instead.");
+    out property <string> finance-account-archived: @tr("That account is archived. Restore it to use it.");
+    out property <string> transfer: @tr("Transfer");
+    out property <string> finance-category-archived: @tr("That category is archived. Restore it to use it.");
+
     public pure function finance-failed(error: string) -> string {
         return @tr("Could not save: {}", error);
     }
@@ -272,6 +284,44 @@ export global Strings {
 
     public pure function tx-kind(kind: TxKind) -> string {
         return kind == TxKind.expense ? @tr("Expense") : @tr("Income");
+    }
+
+    public pure function suggested-category(category: SuggestedCategory) -> string {
+        return category == SuggestedCategory.food ? @tr("Food") : category == SuggestedCategory.transport ? @tr("Transport") : category == SuggestedCategory.housing ? @tr("Housing") : category == SuggestedCategory.bills ? @tr("Bills") : category == SuggestedCategory.health ? @tr("Health") : category == SuggestedCategory.leisure ? @tr("Leisure") : category == SuggestedCategory.shopping ? @tr("Shopping") : category == SuggestedCategory.salary ? @tr("Salary") : @tr("Other income");
+    }
+
+    public pure function archived-account(name: string) -> string {
+        return @tr("{} (archived)", name);
+    }
+
+    public pure function delete-account-question(name: string) -> string {
+        return @tr("Delete the account {}? This can't be undone.", name);
+    }
+
+    // Second line of a transfer: the accounts and the date.
+    public pure function transfer-detail(from: string, to: string, date: string) -> string {
+        return @tr("{} → {} · {}", from, to, date);
+    }
+
+    public pure function transfer-line-label(title: string, from: string, to: string, date: string, amount: string) -> string {
+        return @tr("{}, from {} to {}, {}, {}", title, from, to, date, amount);
+    }
+
+    public pure function archived-category(name: string) -> string {
+        return @tr("{} (archived)", name);
+    }
+
+    public pure function category-line-label(name: string, total: string) -> string {
+        return @tr("{}, {}", name, total);
+    }
+
+    public pure function delete-category-question(name: string) -> string {
+        return @tr("Delete the category {}? This can't be undone.", name);
+    }
+
+    // Second line of a movement with a category: category, account and date.
+    public pure function transaction-detail-category(category: string, account: string, date: string) -> string {
+        return @tr("{} · {} · {}", category, account, date);
     }
 
     // Second line of a movement: its account and date.
