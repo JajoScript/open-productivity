@@ -1,12 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-// A figure of the month, already formatted.
-export struct SummaryFigure {
-    amount: string,
-    // The change versus the month before, with its sign and "vs last month"; or "Same as last month".
-    change: string,
-}
+import { Date } from "std-widgets.slint";
 
 // One category of the expense bars.
 export struct SummaryBar {
@@ -16,3 +11,51 @@ export struct SummaryBar {
     // Total relative to the biggest, 0..1.
     width: float,
 }
+
+// Which card a sparkline belongs to.
+export enum SummaryCardKind { total, balance, income, expense }
+
+// Direction of the change against the month before; `none` draws no arrow.
+export enum Trend { none, up, down }
+
+// One KPI card, already formatted. `note` is the line under the amount.
+export struct SummaryCardRow {
+    amount: string,
+    note: string,
+    trend: Trend,
+}
+
+// The layers of the Balance of the period chart, in the order core draws them.
+export enum BalanceLayer { current, previous, gain, overdraft, zero, grid }
+
+// A tick of the balance chart: `pos` is its place along the axis, 0..1 from the top (Y) or the
+// left (X). The Y ticks carry their text; the X ticks the day, which the view formats.
+export struct AxisLabelRow {
+    text: string,
+    day: int,
+    pos: float,
+}
+
+// A slice of the category donut and its legend line.
+export struct DonutSliceRow {
+    name: string,
+    percent: string,
+}
+
+// A month of the Upcoming payments bars. `share` is relative to the biggest month.
+export struct UpcomingBarRow {
+    month: int,
+    total: string,
+    share: float,
+}
+
+// An upcoming payment of the list.
+export struct UpcomingRow {
+    description: string,
+    date: Date,
+    amount: string,
+}
+
+export enum UpcomingFilter { all, bills, installments, recurring }
+
+export enum AccountFilter { all, accounts, credit }

@@ -9,16 +9,19 @@ use std::rc::Rc;
 use open_productivity_core::chrono::NaiveDate;
 use open_productivity_core::db::Connection;
 use open_productivity_core::finances::{
-    self, Account, AccountKind as CoreKind, Bill, CURRENCIES, Currency, FinanceError, Rates,
+    self, Account, AccountFilter as CoreFilter, AccountKind as CoreKind, Bill, CURRENCIES,
+    Currency, FinanceError, Rates,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use super::style;
+use super::summary::Charts;
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
 use crate::{
-    AccountKind, AccountRow, AppWindow, BillRow, BucketRow, CategoryRow, CurrencyRow, FinanceStore,
-    FinanceTab, RateRow, ReserveRow, ScheduledRow, Strings, TransactionRow,
+    AccountFilter, AccountKind, AccountRow, AppWindow, BillRow, BucketRow, CategoryRow,
+    CurrencyRow, FinanceStore, FinanceTab, RateRow, ReserveRow, ScheduledRow, Strings,
+    TransactionRow,
 };
 use open_productivity_core::chrono::Local;
 
@@ -42,6 +45,10 @@ pub struct State {
     /// The Budget tab: the active buckets of the shown month, then the archived ones.
     pub bucket_rows: Rc<VecModel<BucketRow>>,
     pub archived_bucket_rows: Rc<VecModel<BucketRow>>,
+    /// The Summary tab: the accounts its filter keeps.
+    pub summary_account_rows: Rc<VecModel<AccountRow>>,
+    /// The series the Summary's chart paths are drawn from.
+    pub charts: RefCell<Charts>,
     /// First day of the month the Movements tab shows.
     pub shown: Cell<NaiveDate>,
     /// The exchange rates edited in the open modal (code, text), saved together.
@@ -57,6 +64,14 @@ pub fn core_kind(k: AccountKind) -> CoreKind {
         AccountKind::Cash => CoreKind::Cash,
         AccountKind::Credit => CoreKind::Credit,
         AccountKind::CreditLine => CoreKind::CreditLine,
+    }
+}
+
+fn core_account_filter(f: AccountFilter) -> CoreFilter {
+    match f {
+        AccountFilter::All => CoreFilter::All,
+        AccountFilter::Accounts => CoreFilter::Accounts,
+        AccountFilter::Credit => CoreFilter::Credit,
     }
 }
 
@@ -125,7 +140,9 @@ impl State {
         let main = finances::main_currency(&self.conn).map_err(|e| e.to_string())?;
         let has_currency = main.is_some();
         let store = w.global::<FinanceStore>();
-        let (mut active, mut archived) = (Vec::new(), Vec::new());
+        let (mut active, mut archived, mut summary_accounts) = (Vec::new(), Vec::new(), Vec::new());
+        let summary_filter = core_account_filter(store.get_summary_account_filter());
+        let on_summary = store.get_tab() == FinanceTab::Summary;
         if let Some(main) = main {
             let rates = finances::load_rates(&self.conn).map_err(|e| e.to_string())?;
             store.set_currencies(ModelRc::new(VecModel::from(currency_rows(Some(&rates)))));
@@ -151,8 +168,12 @@ impl State {
             };
             for a in finances::list_accounts(&self.conn).map_err(|e| e.to_string())? {
                 let is_archived = a.archived;
+                let on_card = on_summary && !is_archived && summary_filter.keeps(a.kind);
                 let bill = bills.iter().find(|b| b.card == a.id);
                 let r = account_row(a, main, bill)?;
+                if on_card {
+                    summary_accounts.push(r.clone());
+                }
                 if is_archived {
                     archived.push(r);
                 } else {
@@ -170,6 +191,7 @@ impl State {
                 .iter()
                 .any(|r| matches!(r.kind, AccountKind::Credit | AccountKind::CreditLine)),
         );
+        self.summary_account_rows.set_vec(summary_accounts);
         self.rows.set_vec(active);
         self.archived_account_rows.set_vec(archived);
         store.set_has_currency(has_currency);

@@ -1,0 +1,82 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { FinanceStore } from "finance-store.slint";
+import { FinanceTableHeader, FinanceTxRow } from "finance-table.slint";
+import { FinanceTab, MovementFilter, TransactionRow } from "transaction-row.slint";
+
+// The newest movements of the month, with a way to the Movements tab.
+export component LatestCard inherits FinanceCard {
+    callback edit-transaction(TransactionRow);
+
+    function filter(f: MovementFilter) {
+        if FinanceStore.summary-filter != f {
+            FinanceStore.summary-filter = f;
+            FinanceStore.refresh();
+        }
+    }
+
+    FinanceCardHeader {
+        title: @tr("Latest movements");
+        SettingsTab {
+            text: @tr("movement filter" => "All");
+            selected: FinanceStore.summary-filter == MovementFilter.all;
+            chosen => {
+                root.filter(MovementFilter.all);
+            }
+        }
+
+        SettingsTab {
+            text: @tr("Income");
+            selected: FinanceStore.summary-filter == MovementFilter.income;
+            chosen => {
+                root.filter(MovementFilter.income);
+            }
+        }
+
+        SettingsTab {
+            text: @tr("Expenses");
+            selected: FinanceStore.summary-filter == MovementFilter.expense;
+            chosen => {
+                root.filter(MovementFilter.expense);
+            }
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/chevron-right.svg");
+            label: @tr("Open Movements");
+            color: Palette.foreground;
+            clicked => {
+                FinanceStore.tab = FinanceTab.movements;
+                FinanceStore.refresh();
+            }
+        }
+    }
+
+    if FinanceStore.summary-recent.length == 0: Text {
+        text: @tr("No movements this month.");
+        color: Theme.muted;
+    }
+
+    if FinanceStore.summary-recent.length > 0: VerticalLayout {
+        FinanceTableHeader {
+            description: @tr("Description");
+            account: @tr("Account");
+            category: @tr("Category");
+            date: @tr("Date");
+            amount: @tr("Amount");
+        }
+
+        for tx in FinanceStore.summary-recent: FinanceTxRow {
+            tx: tx;
+            opened => {
+                root.edit-transaction(tx);
+            }
+        }
+    }
+}

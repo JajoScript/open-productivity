@@ -1,0 +1,193 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { FinanceStore } from "finance-store.slint";
+import { FinanceColumns, HeaderLabel } from "finance-table.slint";
+import { UpcomingFilter, UpcomingRow } from "summary-row.slint";
+import { FinanceTab } from "transaction-row.slint";
+
+component UpcomingLine inherits Rectangle {
+    in property <UpcomingRow> payment;
+
+    height: 44px;
+    accessible-role: text;
+    accessible-label: root.payment.description + ", " + Strings.short-date(root.payment.date.day, root.payment.date.month) + ", " + root.payment.amount;
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 16px;
+        spacing: FinanceColumns.gap;
+        Text {
+            text: root.payment.description;
+            overflow: elide;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            min-width: 0px;
+            preferred-width: 0px;
+            accessible-role: none;
+        }
+
+        Text {
+            text: Strings.short-date(root.payment.date.day, root.payment.date.month);
+            color: Theme.muted;
+            vertical-alignment: center;
+            width: FinanceColumns.date;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.payment.amount;
+            font-weight: 600;
+            overflow: elide;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            width: FinanceColumns.amount;
+            accessible-role: none;
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+}
+
+// What the next months have scheduled, as bars, and the next payments in a table.
+export component UpcomingCard inherits FinanceCard {
+    function filter(f: UpcomingFilter) {
+        if FinanceStore.summary-upcoming-filter != f {
+            FinanceStore.summary-upcoming-filter = f;
+            FinanceStore.refresh();
+        }
+    }
+
+    FinanceCardHeader {
+        title: @tr("Upcoming payments");
+        SettingsTab {
+            text: @tr("movement filter" => "All");
+            selected: FinanceStore.summary-upcoming-filter == UpcomingFilter.all;
+            chosen => {
+                root.filter(UpcomingFilter.all);
+            }
+        }
+
+        SettingsTab {
+            text: @tr("upcoming filter" => "Bills");
+            selected: FinanceStore.summary-upcoming-filter == UpcomingFilter.bills;
+            chosen => {
+                root.filter(UpcomingFilter.bills);
+            }
+        }
+
+        SettingsTab {
+            text: @tr("Installments");
+            selected: FinanceStore.summary-upcoming-filter == UpcomingFilter.installments;
+            chosen => {
+                root.filter(UpcomingFilter.installments);
+            }
+        }
+
+        SettingsTab {
+            text: @tr("Recurring");
+            selected: FinanceStore.summary-upcoming-filter == UpcomingFilter.recurring;
+            chosen => {
+                root.filter(UpcomingFilter.recurring);
+            }
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/chevron-right.svg");
+            label: @tr("Open Scheduled");
+            color: Palette.foreground;
+            clicked => {
+                FinanceStore.tab = FinanceTab.due;
+                FinanceStore.refresh();
+            }
+        }
+    }
+
+    HorizontalLayout {
+        spacing: 16px;
+        height: 132px;
+        for b in FinanceStore.summary-bars: VerticalLayout {
+            horizontal-stretch: 1;
+            min-width: 0px;
+            preferred-width: 0px;
+            spacing: 4px;
+            accessible-role: text;
+            accessible-label: Strings.short-month-name(b.month) + ", " + b.total;
+            Text {
+                // Only the biggest month names its amount.
+                text: b.share >= 1.0 ? b.total : "";
+                horizontal-alignment: center;
+                overflow: elide;
+                height: 18px;
+                accessible-role: none;
+            }
+
+            Rectangle {
+                vertical-stretch: 1;
+                Rectangle {
+                    height: Math.max(parent.height * b.share, 6px);
+                    y: parent.height - self.height;
+                    border-radius: 4px;
+                    background: b.share >= 1.0 ? Theme.ink : Palette.foreground.with-alpha(0.14);
+                    animate height {
+                        duration: Theme.enter;
+                        easing: Theme.ease-out;
+                    }
+                }
+            }
+
+            Text {
+                text: Strings.short-month-name(b.month);
+                color: Theme.muted;
+                horizontal-alignment: center;
+                accessible-role: none;
+            }
+        }
+    }
+
+    if FinanceStore.summary-upcoming.length == 0: Text {
+        text: @tr("Nothing pending.");
+        color: Theme.muted;
+    }
+
+    if FinanceStore.summary-upcoming.length > 0: VerticalLayout {
+        HorizontalLayout {
+            height: 28px;
+            padding-left: 8px;
+            padding-right: 16px;
+            spacing: FinanceColumns.gap;
+            accessible-role: none;
+            HeaderLabel {
+                text: @tr("Description").to-uppercase();
+                horizontal-stretch: 1;
+                min-width: 0px;
+                preferred-width: 0px;
+            }
+
+            HeaderLabel {
+                text: @tr("Date").to-uppercase();
+                width: FinanceColumns.date;
+            }
+
+            HeaderLabel {
+                text: @tr("Amount").to-uppercase();
+                width: FinanceColumns.amount;
+                horizontal-alignment: right;
+            }
+        }
+
+        for p in FinanceStore.summary-upcoming: UpcomingLine {
+            payment: p;
+        }
+    }
+}

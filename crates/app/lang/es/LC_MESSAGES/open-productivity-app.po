@@ -1568,3 +1568,70 @@ msgstr "nov"
 msgctxt "short month"
 msgid "Dec"
 msgstr "dic"
+
+msgid "Total balance"
+msgstr "Saldo total"
+
+msgid "Accumulated"
+msgstr "Acumulado"
+
+msgid "Others"
+msgstr "Otros"
+
+msgid "Bill {}"
+msgstr "Factura {}"
+
+msgid "Balance of the period"
+msgstr "Balance del periodo"
+
+msgid "This period"
+msgstr "Este periodo"
+
+msgid "Previous period"
+msgstr "Periodo anterior"
+
+msgid "Net"
+msgstr "Neto"
+
+msgctxt "summary card"
+msgid "Income"
+msgstr "Ingresos"
+
+msgid "Spending by category"
+msgstr "Gasto por categoría"
+
+msgid "Income by category"
+msgstr "Ingresos por categoría"
+
+msgid "Total"
+msgstr "Total"
+
+msgctxt "upcoming filter"
+msgid "Bills"
+msgstr "Facturas"
+
+msgid "Upcoming payments"
+msgstr "Próximos pagos"
+
+msgid "Nothing pending."
+msgstr "No hay pagos pendientes."
+
+msgid "Open Movements"
+msgstr "Abrir Movimientos"
+
+msgid "Open Scheduled"
+msgstr "Abrir Programados"
+
+msgid "Open Accounts"
+msgstr "Abrir Cuentas"
+
+msgid "No accounts to show."
+msgstr "No hay cuentas para mostrar."
+
+msgctxt "account type"
+msgid "Type"
+msgstr "Tipo"
+
+msgctxt "account balance"
+msgid "Balance"
+msgstr "Saldo"

@@ -1,0 +1,76 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+import { FinanceCard } from "finance-card.slint";
+import { FinanceStore } from "finance-store.slint";
+import { SummaryCardKind, SummaryCardRow, Trend } from "summary-row.slint";
+
+// A KPI of the Summary: label, big amount, change against the month before and a sparkline of
+// the month's running value.
+export component KpiCard inherits FinanceCard {
+    in property <string> label;
+    in property <SummaryCardRow> data;
+    in property <SummaryCardKind> kind;
+
+    min-width: 0px;
+    preferred-width: 0px; // equal start, so the four cards share the width
+    horizontal-stretch: 1;
+    accessible-role: text;
+    accessible-label: root.label + ", " + root.data.amount + ", " + root.data.note;
+
+    Text {
+        text: root.label;
+        color: Theme.muted;
+        overflow: elide;
+        accessible-role: none;
+    }
+
+    Text {
+        text: root.data.amount;
+        font-size: 22px;
+        font-weight: 700;
+        overflow: elide;
+        accessible-role: none;
+    }
+
+    HorizontalLayout {
+        spacing: 4px;
+        if root.data.trend != Trend.none: Rectangle {
+            width: 14px;
+            Image {
+                source: root.data.trend == Trend.up ? @image-url("../icons/arrow-up-right.svg") : @image-url("../icons/arrow-down-right.svg");
+                colorize: Theme.ink;
+                width: 14px;
+                height: 14px;
+                y: (parent.height - self.height) / 2;
+                accessible-role: none;
+            }
+        }
+
+        Text {
+            text: root.data.note;
+            color: Theme.muted;
+            overflow: elide;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            min-width: 0px;
+            accessible-role: none;
+        }
+    }
+
+    Rectangle {
+        height: 32px;
+        Path {
+            width: parent.width;
+            height: parent.height;
+            // pin the viewbox to the real size, or Slint stretches each path's bounds to fit
+            viewbox-width: self.width / 1px;
+            viewbox-height: self.height / 1px;
+            commands: FinanceStore.sparkline-path(root.kind, self.width / 1px, self.height / 1px, FinanceStore.chart-version);
+            stroke: Palette.foreground.with-alpha(0.7);
+            stroke-width: 1.5px;
+        }
+    }
+}

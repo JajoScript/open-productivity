@@ -181,7 +181,7 @@ export global Strings {
         return @tr("short date" => "{1} {0}", day, short-month-name(month));
     }
 
-    pure function short-month-name(month: int) -> string {
+    public pure function short-month-name(month: int) -> string {
         return month == 1 ? @tr("short month" => "Jan") : month == 2 ? @tr("short month" => "Feb") : month == 3 ? @tr("short month" => "Mar") : month == 4 ? @tr("short month" => "Apr") : month == 5 ? @tr("short month" => "May") : month == 6 ? @tr("short month" => "Jun") : month == 7 ? @tr("short month" => "Jul") : month == 8 ? @tr("short month" => "Aug") : month == 9 ? @tr("short month" => "Sep") : month == 10 ? @tr("short month" => "Oct") : month == 11 ? @tr("short month" => "Nov") : @tr("short month" => "Dec");
     }
 
@@ -270,6 +270,8 @@ export global Strings {
     out property <string> transfer: @tr("Transfer");
     out property <string> no-category: @tr("No category");
     out property <string> same-as-last-month: @tr("Same as last month");
+    out property <string> accumulated: @tr("Accumulated");
+    out property <string> others: @tr("Others");
     out property <string> finance-no-bucket: @tr("That bucket no longer exists.");
     out property <string> finance-no-reserve: @tr("That reserve no longer exists.");
     out property <string> finance-reserve-not-empty: @tr("Withdraw the money from the reserves first.");
@@ -286,6 +288,11 @@ export global Strings {
 
     public pure function worth-line(assets: string, debts: string) -> string {
         return @tr("Assets {} · Debts {}", assets, debts);
+    }
+
+    // The title of a card bill in the upcoming payments.
+    public pure function bill-title(card: string) -> string {
+        return @tr("Bill {}", card);
     }
 
     public pure function vs-last-month(change: string) -> string {

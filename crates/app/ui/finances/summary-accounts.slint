@@ -1,0 +1,170 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { AccountRow } from "account-row.slint";
+import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { FinanceStore } from "finance-store.slint";
+import { FinanceColumns, HeaderLabel } from "finance-table.slint";
+import { AccountFilter } from "summary-row.slint";
+import { FinanceTab } from "transaction-row.slint";
+
+// Columns of the table; the balance shares the width of the amounts of the other tables.
+global AccountColumns {
+    out property <float> name: 3;
+    out property <float> kind: 2;
+    out property <length> currency: 72px;
+}
+
+component AccountLine inherits Rectangle {
+    in property <AccountRow> account;
+
+    height: 44px;
+    accessible-role: text;
+    accessible-label: Strings.account-line-label(root.account.name, Strings.account-kind(root.account.kind), root.account.balance);
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 16px;
+        spacing: FinanceColumns.gap;
+        Text {
+            text: root.account.name;
+            font-weight: 600;
+            overflow: elide;
+            vertical-alignment: center;
+            horizontal-stretch: AccountColumns.name;
+            min-width: 0px;
+            preferred-width: 0px;
+            accessible-role: none;
+        }
+
+        Text {
+            text: Strings.account-kind(root.account.kind);
+            color: Theme.muted;
+            overflow: elide;
+            vertical-alignment: center;
+            horizontal-stretch: AccountColumns.kind;
+            min-width: 0px;
+            preferred-width: 0px;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.account.currency;
+            color: Theme.muted;
+            vertical-alignment: center;
+            width: AccountColumns.currency;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.account.balance;
+            font-weight: 600;
+            overflow: elide;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            width: FinanceColumns.amount;
+            accessible-role: none;
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+}
+
+// The active accounts, filtered by kind, with a way to the Accounts tab.
+export component AccountsCard inherits FinanceCard {
+    function filter(f: AccountFilter) {
+        if FinanceStore.summary-account-filter != f {
+            FinanceStore.summary-account-filter = f;
+            FinanceStore.refresh();
+        }
+    }
+
+    FinanceCardHeader {
+        title: @tr("Accounts");
+        SettingsTab {
+            text: @tr("movement filter" => "All");
+            selected: FinanceStore.summary-account-filter == AccountFilter.all;
+            chosen => {
+                root.filter(AccountFilter.all);
+            }
+        }
+
+        SettingsTab {
+            text: @tr("Accounts");
+            selected: FinanceStore.summary-account-filter == AccountFilter.accounts;
+            chosen => {
+                root.filter(AccountFilter.accounts);
+            }
+        }
+
+        SettingsTab {
+            text: @tr("Credit");
+            selected: FinanceStore.summary-account-filter == AccountFilter.credit;
+            chosen => {
+                root.filter(AccountFilter.credit);
+            }
+        }
+
+        SubtleButton {
+            icon: @image-url("../icons/chevron-right.svg");
+            label: @tr("Open Accounts");
+            color: Palette.foreground;
+            clicked => {
+                FinanceStore.tab = FinanceTab.accounts;
+                FinanceStore.refresh();
+            }
+        }
+    }
+
+    if FinanceStore.summary-accounts.length == 0: Text {
+        text: @tr("No accounts to show.");
+        color: Theme.muted;
+    }
+
+    if FinanceStore.summary-accounts.length > 0: VerticalLayout {
+        HorizontalLayout {
+            height: 28px;
+            padding-left: 8px;
+            padding-right: 16px;
+            spacing: FinanceColumns.gap;
+            accessible-role: none;
+            HeaderLabel {
+                text: @tr("Account").to-uppercase();
+                horizontal-stretch: AccountColumns.name;
+                min-width: 0px;
+                preferred-width: 0px;
+            }
+
+            HeaderLabel {
+                text: @tr("account type" => "Type").to-uppercase();
+                horizontal-stretch: AccountColumns.kind;
+                min-width: 0px;
+                preferred-width: 0px;
+            }
+
+            HeaderLabel {
+                text: @tr("Currency").to-uppercase();
+                width: AccountColumns.currency;
+            }
+
+            HeaderLabel {
+                text: @tr("account balance" => "Balance").to-uppercase();
+                width: FinanceColumns.amount;
+                horizontal-alignment: right;
+            }
+        }
+
+        for a in FinanceStore.summary-accounts: AccountLine {
+            account: a;
+        }
+    }
+}

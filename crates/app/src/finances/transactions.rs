@@ -33,7 +33,7 @@ pub(super) fn ui_kind(k: CoreKind) -> TxKind {
     }
 }
 
-fn core_filter(f: MovementFilter) -> CoreFilter {
+pub(super) fn core_filter(f: MovementFilter) -> CoreFilter {
     match f {
         MovementFilter::All => CoreFilter::All,
         MovementFilter::Income => CoreFilter::Income,

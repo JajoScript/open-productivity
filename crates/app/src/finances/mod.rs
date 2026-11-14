@@ -61,6 +61,8 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         cat_rows: Rc::default(),
         archived_rows: Rc::default(),
         choices: Rc::default(),
+        summary_account_rows: Rc::default(),
+        charts: RefCell::default(),
         shown: Cell::new(calendar::month_start(Local::now().date_naive())),
         pending_rates: RefCell::default(),
         window: window.as_weak(),
@@ -69,6 +71,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     store.set_accounts(ModelRc::from(state.rows.clone()));
     store.set_archived_accounts(ModelRc::from(state.archived_account_rows.clone()));
     store.set_transactions(ModelRc::from(state.tx_rows.clone()));
+    store.set_summary_accounts(ModelRc::from(state.summary_account_rows.clone()));
     store.set_due(ModelRc::from(state.due_rows.clone()));
     store.set_bills(ModelRc::from(state.bill_rows.clone()));
     store.set_reserves(ModelRc::from(state.reserve_rows.clone()));
@@ -86,6 +89,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     });
 
     transactions::connect(&state, &store);
+    summary::connect(&state, &store);
     scheduled::connect(&state, &store);
     categories::connect(&state, &store);
     budget::connect(&state, &store);

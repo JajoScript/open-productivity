@@ -1,0 +1,130 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Theme } from "../theme.slint";
+import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { FinanceStore } from "finance-store.slint";
+import { TxKind } from "transaction-row.slint";
+
+// The month's expenses (or income) by category as a donut with its legend.
+export component CategoryCard inherits FinanceCard {
+    min-width: 0px;
+    preferred-width: 0px;
+    horizontal-stretch: 2;
+
+    // The ink of slice `i`: darkest for the biggest, fading for the rest.
+    pure function slice-ink(i: int) -> color {
+        return Palette.foreground.with-alpha(Math.max(0.9 - i * 0.16, 0.15));
+    }
+
+    function choose(kind: TxKind) {
+        if FinanceStore.summary-kind != kind {
+            FinanceStore.summary-kind = kind;
+            FinanceStore.refresh();
+        }
+    }
+
+    FinanceCardHeader {
+        title: FinanceStore.summary-kind == TxKind.expense ? @tr("Spending by category") : @tr("Income by category");
+        SettingsTab {
+            text: @tr("Expenses");
+            selected: FinanceStore.summary-kind == TxKind.expense;
+            chosen => {
+                root.choose(TxKind.expense);
+            }
+        }
+
+        SettingsTab {
+            text: @tr("Income");
+            selected: FinanceStore.summary-kind == TxKind.income;
+            chosen => {
+                root.choose(TxKind.income);
+            }
+        }
+    }
+
+    HorizontalLayout {
+        alignment: center;
+        Rectangle {
+            width: 176px;
+            height: 176px;
+            accessible-role: text;
+            accessible-label: @tr("Total") + " " + FinanceStore.summary-kind-total;
+            Path {
+                width: parent.width;
+                height: parent.height;
+                viewbox-width: self.width / 1px;
+                viewbox-height: self.height / 1px;
+                commands: FinanceStore.donut-path(-1, self.width / 1px, self.height / 1px, FinanceStore.chart-version);
+                stroke: Palette.foreground.with-alpha(0.07);
+                stroke-width: 24px;
+            }
+
+            for s[i] in FinanceStore.summary-slices: Path {
+                width: parent.width;
+                height: parent.height;
+                viewbox-width: self.width / 1px;
+                viewbox-height: self.height / 1px;
+                commands: FinanceStore.donut-path(i, self.width / 1px, self.height / 1px, FinanceStore.chart-version);
+                stroke: slice-ink(i);
+                stroke-width: 24px;
+            }
+
+            VerticalLayout {
+                alignment: center;
+                x: 36px;
+                width: parent.width - 72px;
+                Text {
+                    text: FinanceStore.summary-kind-total;
+                    font-size: 16px;
+                    font-weight: 700;
+                    horizontal-alignment: center;
+                    overflow: elide;
+                    accessible-role: none;
+                }
+
+                Text {
+                    text: @tr("Total");
+                    color: Theme.muted;
+                    horizontal-alignment: center;
+                    accessible-role: none;
+                }
+            }
+        }
+    }
+
+    VerticalLayout {
+        spacing: 4px;
+        for s[i] in FinanceStore.summary-slices: HorizontalLayout {
+            spacing: 8px;
+            height: 22px;
+            accessible-role: text;
+            accessible-label: s.name + ", " + s.percent;
+            Rectangle {
+                width: 8px;
+                height: 8px;
+                y: (parent.height - self.height) / 2;
+                border-radius: 4px;
+                background: slice-ink(i);
+            }
+
+            Text {
+                text: s.name;
+                overflow: elide;
+                vertical-alignment: center;
+                horizontal-stretch: 1;
+                min-width: 0px;
+                accessible-role: none;
+            }
+
+            Text {
+                text: s.percent;
+                color: Theme.muted;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+        }
+    }
+}

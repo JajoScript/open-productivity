@@ -1,0 +1,173 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+import { FinanceCard, FinanceCardHeader } from "finance-card.slint";
+import { FinanceStore } from "finance-store.slint";
+import { BalanceLayer } from "summary-row.slint";
+
+// A swatch and a name: a solid or dashed stroke.
+component LegendItem inherits HorizontalLayout {
+    in property <string> text;
+    in property <bool> dashed;
+
+    spacing: 6px;
+    Rectangle {
+        width: 18px;
+        Path {
+            width: parent.width;
+            height: 2px;
+            y: (parent.height - self.height) / 2;
+            viewbox-width: 18;
+            viewbox-height: 2;
+            commands: root.dashed ? "M 0 1 L 4 1 M 7 1 L 11 1 M 14 1 L 18 1" : "M 0 1 L 18 1";
+            stroke: Palette.foreground.with-alpha(root.dashed ? 0.5 : 0.9);
+            stroke-width: root.dashed ? 1px : 1.5px;
+        }
+    }
+
+    Text {
+        text: root.text;
+        color: Theme.muted;
+        font-size: 11px;
+        vertical-alignment: center;
+    }
+}
+
+component Figure inherits VerticalLayout {
+    in property <string> label;
+    in property <string> value;
+
+    horizontal-stretch: 1;
+    min-width: 0px;
+    preferred-width: 0px;
+    accessible-role: text;
+    accessible-label: root.label + ", " + root.value;
+    Text {
+        text: root.label.to-uppercase();
+        color: Theme.muted;
+        font-size: 11px;
+        font-weight: 600;
+        overflow: elide;
+        accessible-role: none;
+    }
+
+    Text {
+        text: root.value;
+        font-weight: 700;
+        overflow: elide;
+        accessible-role: none;
+    }
+}
+
+// The month's cumulative net so far against the month before, with its axes.
+export component BalanceCard inherits FinanceCard {
+    min-width: 0px;
+    preferred-width: 0px;
+    horizontal-stretch: 3;
+
+    FinanceCardHeader {
+        title: @tr("Balance of the period");
+        spacing: 16px;
+        LegendItem {
+            text: @tr("This period");
+        }
+
+        LegendItem {
+            text: @tr("Previous period");
+            dashed: true;
+        }
+    }
+
+    Text {
+        text: Strings.short-date(1, FinanceStore.month.month).to-uppercase() + " – " + Strings.short-date(FinanceStore.balance-last-day, FinanceStore.month.month).to-uppercase();
+        color: Theme.muted;
+        font-size: 11px;
+    }
+
+    HorizontalLayout {
+        spacing: 16px;
+        Figure {
+            label: @tr("Net");
+            value: FinanceStore.balance-net;
+        }
+
+        Figure {
+            label: @tr("summary card" => "Income");
+            value: FinanceStore.balance-income;
+        }
+
+        Figure {
+            label: @tr("Expenses");
+            value: FinanceStore.balance-expense;
+        }
+
+        Figure {
+            label: @tr("Previous period");
+            value: FinanceStore.balance-previous;
+        }
+    }
+
+    VerticalLayout {
+        vertical-stretch: 1;
+        spacing: 4px;
+        HorizontalLayout {
+            spacing: 8px;
+            vertical-stretch: 1;
+            Rectangle {
+                width: 40px;
+                min-height: 180px;
+                for l in FinanceStore.balance-y-labels: Text {
+                    text: l.text;
+                    width: parent.width;
+                    horizontal-alignment: right;
+                    color: Theme.muted;
+                    font-size: 11px;
+                    y: l.pos * parent.height - self.height / 2;
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+                min-width: 0px;
+                preferred-width: 0px;
+                for layer in [BalanceLayer.grid, BalanceLayer.zero, BalanceLayer.gain, BalanceLayer.overdraft, BalanceLayer.previous, BalanceLayer.current]: Path {
+                    width: parent.width;
+                    height: parent.height;
+                    // pin the viewbox to the real size, or Slint stretches each path's bounds to fit
+                    viewbox-width: self.width / 1px;
+                    viewbox-height: self.height / 1px;
+                    commands: FinanceStore.balance-path(layer, self.width / 1px, self.height / 1px, FinanceStore.chart-version);
+                    // the gain fades toward the zero line; an overdraft deepens away from it
+                    fill: layer == BalanceLayer.gain ? @linear-gradient(180deg, Palette.foreground.with-alpha(0.16) 0%, Palette.foreground.with-alpha(0) FinanceStore.balance-zero * 100%) : layer == BalanceLayer.overdraft ? @linear-gradient(180deg, Theme.critical.with-alpha(0) FinanceStore.balance-zero * 100%, Theme.critical.with-alpha(0.25) 100%) : transparent;
+                    stroke: layer == BalanceLayer.grid ? Palette.foreground.with-alpha(0.07) : layer == BalanceLayer.zero ? Palette.foreground.with-alpha(0.2) : layer == BalanceLayer.previous ? Palette.foreground.with-alpha(0.5) : layer == BalanceLayer.current ? Palette.foreground.with-alpha(0.9) : transparent;
+                    stroke-width: layer == BalanceLayer.current ? 1.5px : 1px;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Rectangle {
+                width: 40px;
+            }
+
+            Rectangle {
+                height: 16px;
+                horizontal-stretch: 1;
+                min-width: 0px;
+                preferred-width: 0px;
+                for l in FinanceStore.balance-x-labels: Text {
+                    text: Strings.short-date(l.day, FinanceStore.month.month);
+                    width: 60px;
+                    horizontal-alignment: center;
+                    color: Theme.muted;
+                    font-size: 11px;
+                    x: l.pos * parent.width - self.width / 2;
+                }
+            }
+        }
+    }
+}
