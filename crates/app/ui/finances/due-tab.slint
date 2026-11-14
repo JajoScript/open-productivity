@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Palette, ListView } from "std-widgets.slint";
+import { Palette, ScrollView } from "std-widgets.slint";
 import { EmptyState } from "../empty-state.slint";
 import { InkButton } from "../ink-button.slint";
 import { PopupSurface } from "../popup-surface.slint";
@@ -9,6 +9,7 @@ import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { FinanceStore } from "finance-store.slint";
+import { BillRow } from "bill-row.slint";
 import { MonthNav } from "month-nav.slint";
 import { ScheduledRow } from "scheduled-row.slint";
 
@@ -169,17 +170,84 @@ component DueLine inherits Rectangle {
     }
 }
 
+// A card bill: closing, due date (red when overdue) and what is pending, with a Pay bill action.
+component BillLine inherits Rectangle {
+    in property <BillRow> bill;
+    callback pay;
+
+    property <string> closed: Strings.bill-closed(Strings.date(root.bill.closing.day, root.bill.closing.month, root.bill.closing.year));
+    property <string> day: Strings.date(root.bill.due.day, root.bill.due.month, root.bill.due.year);
+
+    height: 56px;
+    accessible-role: list-item;
+    accessible-label: Strings.bill-line-label(root.bill.card, root.closed, root.day, root.bill.pending);
+
+    HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 16px; // clears the ListView scroll bar
+        spacing: 8px;
+        VerticalLayout {
+            alignment: center;
+            horizontal-stretch: 1;
+            Text {
+                text: root.bill.card;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            Text {
+                text: root.closed;
+                color: Theme.muted;
+                overflow: elide;
+                accessible-role: none;
+            }
+        }
+
+        Text {
+            text: root.day;
+            // Only an overdue bill is red.
+            color: root.bill.overdue ? Theme.critical : Theme.muted;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.bill.pending;
+            font-weight: 600;
+            vertical-alignment: center;
+            horizontal-alignment: right;
+            min-width: 80px;
+            accessible-role: none;
+        }
+
+        if root.bill.source-id != 0: SubtleButton {
+            text: @tr("Pay bill");
+            color: Palette.foreground;
+            clicked => {
+                root.pay();
+            }
+        }
+    }
+
+    Rectangle {
+        y: parent.height - 1px;
+        height: 1px;
+        background: Theme.hairline;
+    }
+}
+
 // What is due in the month shown, with the same navigation between months as the movements.
 export component DueTab inherits VerticalLayout {
     callback new-account();
     callback edit-scheduled(ScheduledRow);
     callback confirm-scheduled(ScheduledRow);
+    callback pay-bill(BillRow);
 
     spacing: 12px;
 
     MonthNav { }
 
-    if FinanceStore.due.length == 0: EmptyState {
+    if FinanceStore.due.length == 0 && FinanceStore.bills.length == 0: EmptyState {
         title: FinanceStore.accounts.length == 0 ? @tr("Create an account first") : @tr("Nothing to pay this month.");
         description: FinanceStore.accounts.length == 0 ? @tr("Scheduled payments are recorded against an account. Add one, such as a bank account or cash, to start.") : @tr("Schedule the bills, installments and income you expect, and confirm them when they happen.");
         action: FinanceStore.accounts.length == 0 ? @tr("New account") : "";
@@ -188,15 +256,26 @@ export component DueTab inherits VerticalLayout {
         }
     }
 
-    if FinanceStore.due.length > 0: ListView {
+    if FinanceStore.due.length > 0 || FinanceStore.bills.length > 0: ScrollView {
         vertical-stretch: 1;
-        for due in FinanceStore.due: DueLine {
-            due: due;
-            opened => {
-                root.edit-scheduled(due);
+        VerticalLayout {
+            alignment: start;
+            // Card bills first, then the scheduled payments by date.
+            for bill in FinanceStore.bills: BillLine {
+                bill: bill;
+                pay => {
+                    root.pay-bill(bill);
+                }
             }
-            confirm => {
-                root.confirm-scheduled(due);
+
+            for due in FinanceStore.due: DueLine {
+                due: due;
+                opened => {
+                    root.edit-scheduled(due);
+                }
+                confirm => {
+                    root.confirm-scheduled(due);
+                }
             }
         }
     }

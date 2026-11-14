@@ -77,6 +77,7 @@ impl State {
             .map(|d| due_row(d, main))
             .collect::<Result<Vec<_>, _>>()?;
         self.due_rows.set_vec(rows);
+        self.load_bills()?;
         w.global::<FinanceStore>().set_month(ui_date(month));
         Ok(())
     }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
+import { Date } from "std-widgets.slint";
+
 export enum AccountKind { checking, demand, savings, cash, credit }
 
 // `balance` arrives formatted for display; `initial` formatted for the edit field.
@@ -26,6 +28,9 @@ export struct AccountRow {
     available: string,
     // Used part of the limit in per mille; above 1000 when over it.
     use-permille: int,
+    // The card's unpaid bill formatted, "" when there is none, and its due date.
+    bill: string,
+    bill-due: Date,
     over-limit: bool,
 }
 

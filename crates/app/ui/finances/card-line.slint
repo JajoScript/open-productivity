@@ -49,7 +49,8 @@ export component CardLine inherits Rectangle {
             }
 
             Text {
-                text: root.account.bank != "" ? root.account.bank + " · " + Strings.card-terms(root.account.closing-day, root.account.due-day) : Strings.card-terms(root.account.closing-day, root.account.due-day);
+                property <string> terms: root.account.bank != "" ? root.account.bank + " · " + Strings.card-terms(root.account.closing-day, root.account.due-day) : Strings.card-terms(root.account.closing-day, root.account.due-day);
+                text: root.account.bill != "" ? self.terms + " · " + Strings.card-bill(root.account.bill, Strings.date(root.account.bill-due.day, root.account.bill-due.month, root.account.bill-due.year)) : self.terms;
                 color: Theme.muted;
                 overflow: elide;
                 accessible-role: none;

@@ -9,16 +9,18 @@ use std::rc::Rc;
 use open_productivity_core::chrono::NaiveDate;
 use open_productivity_core::db::Connection;
 use open_productivity_core::finances::{
-    self, Account, AccountKind as CoreKind, CURRENCIES, Currency, FinanceError, Rates,
+    self, Account, AccountKind as CoreKind, Bill, CURRENCIES, Currency, FinanceError, Rates,
 };
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use super::style;
+use crate::dates::ui_date;
 use crate::tasks::ui_id;
 use crate::{
-    AccountKind, AccountRow, AppWindow, CategoryRow, CurrencyRow, FinanceStore, FinanceTab,
-    RateRow, ScheduledRow, Strings, TransactionRow,
+    AccountKind, AccountRow, AppWindow, BillRow, CategoryRow, CurrencyRow, FinanceStore,
+    FinanceTab, RateRow, ScheduledRow, Strings, TransactionRow,
 };
+use open_productivity_core::chrono::Local;
 
 pub struct State {
     pub conn: Rc<Connection>,
@@ -28,6 +30,8 @@ pub struct State {
     pub tx_rows: Rc<VecModel<TransactionRow>>,
     /// The To pay tab: what is due in the shown month.
     pub due_rows: Rc<VecModel<ScheduledRow>>,
+    /// The To pay tab: the card bills due in the shown month.
+    pub bill_rows: Rc<VecModel<BillRow>>,
     /// The Categories tab: the kind's active categories, then its archived ones.
     pub cat_rows: Rc<VecModel<CategoryRow>>,
     pub archived_rows: Rc<VecModel<CategoryRow>>,
@@ -72,7 +76,7 @@ pub fn currency_rows(rates: Option<&Rates>) -> Vec<CurrencyRow> {
         .collect()
 }
 
-fn account_row(a: Account, main: &Currency) -> Result<AccountRow, String> {
+fn account_row(a: Account, main: &Currency, bill: Option<&Bill>) -> Result<AccountRow, String> {
     let style = style();
     let (card, usage) = (a.card, a.card_usage());
     let money = |v: i64| finances::format_in(v, a.currency, main, style);
@@ -89,6 +93,8 @@ fn account_row(a: Account, main: &Currency) -> Result<AccountRow, String> {
         available: usage
             .map_or_else(String::new, |u| money(u.available))
             .into(),
+        bill: bill.map_or_else(String::new, |b| money(b.pending)).into(),
+        bill_due: bill.map_or_else(Default::default, |b| ui_date(b.due)),
         use_permille: usage.map_or(0, |u| i32::try_from(u.per_mille).unwrap_or(i32::MAX)),
         over_limit: usage.is_some_and(|u| u.over_limit),
         id: ui_id(a.id.0)?,
@@ -125,9 +131,17 @@ impl State {
                 })
                 .collect::<Vec<_>>();
             store.set_rates(ModelRc::new(VecModel::from(in_use)));
+            // Only the Accounts tab shows the cards' bills.
+            let bills = if store.get_tab() == FinanceTab::Accounts {
+                finances::list_bills(&self.conn, Local::now().date_naive())
+                    .map_err(|e| e.to_string())?
+            } else {
+                Vec::new()
+            };
             for a in finances::list_accounts(&self.conn).map_err(|e| e.to_string())? {
                 let is_archived = a.archived;
-                let r = account_row(a, main)?;
+                let bill = bills.iter().find(|b| b.card == a.id);
+                let r = account_row(a, main, bill)?;
                 if is_archived {
                     archived.push(r);
                 } else {

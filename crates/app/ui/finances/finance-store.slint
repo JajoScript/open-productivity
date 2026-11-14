@@ -4,6 +4,7 @@
 import { Date } from "std-widgets.slint";
 import { FinanceTab, TransactionRow, TxKind } from "transaction-row.slint";
 import { AccountKind, AccountRow, CurrencyRow, RateRow } from "account-row.slint";
+import { BillRow } from "bill-row.slint";
 import { CategoryRow } from "category-row.slint";
 import { ScheduleForm, ScheduledRow } from "scheduled-row.slint";
 import { SummaryBar, SummaryFigure } from "summary-row.slint";
@@ -31,6 +32,8 @@ export global FinanceStore {
     in property <[TransactionRow]> transactions;
     // The "to pay" tab: what is due in the month shown, and the overdue ones in the current month.
     in property <[ScheduledRow]> due;
+    // The card bills due in that month, and the overdue ones in the current month.
+    in property <[BillRow]> bills;
     // The Summary tab, for the month shown: each figure with its change versus the month before.
     in property <SummaryFigure> summary-income;
     in property <SummaryFigure> summary-expense;

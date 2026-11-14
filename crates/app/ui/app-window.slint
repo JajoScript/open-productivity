@@ -25,6 +25,7 @@ import { AccountKind, AccountRow, CurrencyRow } from "finances/account-row.slint
 import { ScheduledConfirm } from "finances/scheduled-confirm.slint";
 import { ScheduledCreator } from "finances/scheduled-creator.slint";
 import { ScheduleForm, NewScheduled, ScheduledRow } from "finances/scheduled-row.slint";
+import { BillRow } from "finances/bill-row.slint";
 import { TransactionCreator } from "finances/transaction-creator.slint";
 import { FinanceTab, TransactionRow, TxKind } from "finances/transaction-row.slint";
 import { SummaryBar, SummaryFigure } from "finances/summary-row.slint";
@@ -111,6 +112,7 @@ export {
     TransactionRow,
     ScheduleForm,
     ScheduledRow,
+    BillRow,
     CategoryRow,
     SuggestedCategory,
     TxKind,
@@ -774,6 +776,29 @@ export component AppWindow inherits Window {
                         root.scheduled-editing = true;
                         root.scheduled-edit = d;
                         scheduled-creator.show();
+                    }
+                    pay-bill(b) => {
+                        root.tx-editing = false;
+                        root.tx-edit-id = 0;
+                        root.tx-edit-kind = TxKind.expense;
+                        root.tx-edit-transfer = true;
+                        root.tx-edit-account = b.source-id;
+                        root.tx-edit-to-account = b.card-id;
+                        root.tx-edit-has-category = false;
+                        root.tx-edit-category = 0;
+                        // The amount is typed in the source currency; across currencies the
+                        // pending amount is what arrives.
+                        root.tx-edit-amount = b.same-currency ? b.input : "";
+                        root.tx-edit-from-currency = b.source-currency;
+                        root.tx-edit-to-currency = b.currency;
+                        root.tx-edit-to-amount = b.same-currency ? "" : b.input;
+                        root.tx-edit-amount-label = "";
+                        root.tx-edit-date = Calendar.today();
+                        root.tx-edit-description = @tr("Card bill payment");
+                        root.tx-edit-restorable = false;
+                        root.tx-edit-installment-number = 0;
+                        root.tx-edit-installment-total = 0;
+                        transaction-creator.show();
                     }
                     confirm-scheduled(d) => {
                         root.scheduled-confirm-row = d;

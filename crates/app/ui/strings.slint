@@ -395,6 +395,18 @@ export global Strings {
         return @tr("Installment {} of {}", number, total);
     }
 
+    public pure function bill-closed(date: string) -> string {
+        return @tr("Bill closed on {}", date);
+    }
+
+    public pure function card-bill(amount: string, date: string) -> string {
+        return @tr("Bill: {} · due {}", amount, date);
+    }
+
+    public pure function bill-line-label(card: string, closed: string, due: string, amount: string) -> string {
+        return @tr("{}, {}, due {}, {}", card, closed, due, amount);
+    }
+
     public pure function due-line-label(title: string, account: string, kind: string, date: string, amount: string) -> string {
         return @tr("{}, {}, {}, {}, {}", title, account, kind, date, amount);
     }

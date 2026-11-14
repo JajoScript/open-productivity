@@ -15,6 +15,7 @@ import { FinanceStore } from "finance-store.slint";
 import { FinanceTab, TransactionRow } from "transaction-row.slint";
 import { SummaryTab } from "summary-tab.slint";
 import { DueTab } from "due-tab.slint";
+import { BillRow } from "bill-row.slint";
 import { ScheduledRow } from "scheduled-row.slint";
 import { TransactionsTab } from "transactions-tab.slint";
 
@@ -118,6 +119,7 @@ export component FinancesView inherits VerticalLayout {
     callback new-scheduled();
     callback edit-scheduled(ScheduledRow);
     callback confirm-scheduled(ScheduledRow);
+    callback pay-bill(BillRow);
     callback new-category();
     callback edit-category(CategoryRow);
     callback edit-rates();
@@ -293,6 +295,9 @@ export component FinancesView inherits VerticalLayout {
         }
         confirm-scheduled(d) => {
             root.confirm-scheduled(d);
+        }
+        pay-bill(b) => {
+            root.pay-bill(b);
         }
     }
 

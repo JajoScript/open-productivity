@@ -1,0 +1,21 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date } from "std-widgets.slint";
+
+// A credit card bill in the "to pay" list. `pending` arrives formatted for display, `input` for
+// the amount field. Paying it is a transfer from `source-id` (0 when there is no account to pay
+// from) into the card; `same-currency` tells which amount field `input` fills.
+export struct BillRow {
+    card-id: int,
+    card: string,
+    currency: string,
+    closing: Date,
+    due: Date,
+    pending: string,
+    input: string,
+    overdue: bool,
+    source-id: int,
+    source-currency: string,
+    same-currency: bool,
+}
