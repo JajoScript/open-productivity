@@ -7,6 +7,7 @@ use chrono::{Months, NaiveDate};
 use rusqlite::Connection;
 
 use super::FinanceError;
+use super::budget::BucketId;
 use super::money::currency;
 use super::rates::load_rates;
 use super::transactions::TxKind;
@@ -23,6 +24,8 @@ pub struct Category {
     pub name: String,
     pub kind: TxKind,
     pub archived: bool,
+    /// The budget bucket an expense category counts in.
+    pub bucket: Option<BucketId>,
     /// Some movement uses it, so it cannot be deleted.
     pub in_use: bool,
 }
@@ -70,20 +73,21 @@ impl Suggested {
     }
 }
 
-const SELECT: &str = "SELECT c.id, c.name, c.kind, c.archived,
+const SELECT: &str = "SELECT c.id, c.name, c.kind, c.archived, c.bucket_id,
     EXISTS (SELECT 1 FROM finance_transaction t WHERE t.category_id = c.id)
         OR EXISTS (SELECT 1 FROM finance_scheduled s WHERE s.category_id = c.id)
     FROM finance_category c";
 
 fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Category, FinanceError>> {
     let kind: String = r.get(2)?;
-    let (id, name, archived, in_use): (i64, String, bool, bool) =
-        (r.get(0)?, r.get(1)?, r.get(3)?, r.get(4)?);
+    let (id, name, archived, bucket, in_use): (i64, String, bool, Option<i64>, bool) =
+        (r.get(0)?, r.get(1)?, r.get(3)?, r.get(4)?, r.get(5)?);
     Ok(TxKind::parse(&kind).map(|kind| Category {
         id: CategoryId(id),
         name,
         kind,
         archived,
+        bucket: bucket.map(BucketId),
         in_use,
     }))
 }

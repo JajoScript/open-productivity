@@ -7,6 +7,7 @@ use std::fmt;
 
 mod accounts;
 mod bills;
+mod budget;
 mod categories;
 mod money;
 mod rates;
@@ -16,6 +17,8 @@ mod summary;
 mod tests;
 #[cfg(test)]
 mod tests_bills;
+#[cfg(test)]
+mod tests_budget;
 #[cfg(test)]
 mod tests_cards;
 #[cfg(test)]
@@ -39,6 +42,7 @@ mod transfers;
 
 pub use accounts::*;
 pub use bills::*;
+pub use budget::*;
 pub use categories::*;
 pub use money::*;
 pub use rates::*;
@@ -67,6 +71,13 @@ pub enum FinanceError {
     DuplicateName,
     /// Some movement uses the category.
     InUse,
+    BucketNotFound,
+    /// Some category belongs to the bucket.
+    BucketInUse,
+    /// The suggested budget can only be created in an instance without buckets.
+    BucketsExist,
+    /// A percentage is outside 0..=100 or the active buckets would add up to more than 100.
+    InvalidShares,
     /// The suggested categories can only be created in an instance without categories.
     CategoriesExist,
     /// The category's kind differs from the movement's.
@@ -116,6 +127,10 @@ impl fmt::Display for FinanceError {
             FinanceError::CategoryNotFound => write!(f, "category not found"),
             FinanceError::DuplicateName => write!(f, "a category with that name exists"),
             FinanceError::InUse => write!(f, "the category is in use"),
+            FinanceError::BucketNotFound => write!(f, "bucket not found"),
+            FinanceError::BucketInUse => write!(f, "the bucket is in use"),
+            FinanceError::BucketsExist => write!(f, "buckets already exist"),
+            FinanceError::InvalidShares => write!(f, "the percentages are not valid"),
             FinanceError::CategoriesExist => write!(f, "categories already exist"),
             FinanceError::CategoryKindMismatch => write!(f, "the category kind differs"),
             FinanceError::CategoryArchived => write!(f, "the category is archived"),

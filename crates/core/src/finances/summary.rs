@@ -82,7 +82,7 @@ fn sum(
     Ok(total)
 }
 
-fn kind_sum(
+pub(super) fn kind_sum(
     conn: &Connection,
     rates: &Rates,
     kind: TxKind,
