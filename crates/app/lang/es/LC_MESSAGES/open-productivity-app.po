@@ -1445,3 +1445,45 @@ msgstr "Porcentaje de los ingresos de {}"
 
 msgid "Delete the bucket {}? This can't be undone."
 msgstr "¿Eliminar la bolsa {}? Esto no se puede deshacer."
+
+msgid "New reserve"
+msgstr "Nueva reserva"
+
+msgid "Reserve name"
+msgstr "Nombre de la reserva"
+
+msgid "Reserve"
+msgstr "Reserva"
+
+msgid "Reserves"
+msgstr "Reservas"
+
+msgid "Withdraw"
+msgstr "Retirar"
+
+msgid "Reserve money"
+msgstr "Reservar"
+
+msgid "History"
+msgstr "Historial"
+
+msgid "No moves yet."
+msgstr "Aún no hay movimientos."
+
+msgid "{} · {} available"
+msgstr "{} · {} disponibles"
+
+msgid "That reserve no longer exists."
+msgstr "Esa reserva ya no existe."
+
+msgid "Withdraw the money from the reserves first."
+msgstr "Primero retira el dinero de las reservas."
+
+msgid "This reserve has moves, so it can't be deleted. Archive it instead."
+msgstr "Esta reserva tiene movimientos, así que no se puede eliminar. Archívala."
+
+msgid "There isn't enough money for that."
+msgstr "No hay dinero suficiente para eso."
+
+msgid "Delete the reserve {}? This can't be undone."
+msgstr "¿Eliminar la reserva {}? Esto no se puede deshacer."

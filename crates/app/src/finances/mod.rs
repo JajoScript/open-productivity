@@ -6,6 +6,7 @@
 mod bills;
 mod budget;
 mod categories;
+mod reserves;
 mod scheduled;
 mod state;
 mod summary;
@@ -53,6 +54,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         tx_rows: Rc::default(),
         due_rows: Rc::default(),
         bill_rows: Rc::default(),
+        reserve_rows: Rc::default(),
         bucket_rows: Rc::default(),
         archived_bucket_rows: Rc::default(),
         cat_rows: Rc::default(),
@@ -68,6 +70,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     store.set_transactions(ModelRc::from(state.tx_rows.clone()));
     store.set_due(ModelRc::from(state.due_rows.clone()));
     store.set_bills(ModelRc::from(state.bill_rows.clone()));
+    store.set_reserves(ModelRc::from(state.reserve_rows.clone()));
     store.set_buckets(ModelRc::from(state.bucket_rows.clone()));
     store.set_archived_buckets(ModelRc::from(state.archived_bucket_rows.clone()));
     store.set_categories(ModelRc::from(state.cat_rows.clone()));
@@ -85,6 +88,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     scheduled::connect(&state, &store);
     categories::connect(&state, &store);
     budget::connect(&state, &store);
+    reserves::connect(&state, &store);
 
     store.on_choose_currency({
         let state = state.clone();

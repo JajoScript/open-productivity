@@ -18,7 +18,7 @@ use crate::dates::ui_date;
 use crate::tasks::ui_id;
 use crate::{
     AccountKind, AccountRow, AppWindow, BillRow, BucketRow, CategoryRow, CurrencyRow, FinanceStore,
-    FinanceTab, RateRow, ScheduledRow, Strings, TransactionRow,
+    FinanceTab, RateRow, ReserveRow, ScheduledRow, Strings, TransactionRow,
 };
 use open_productivity_core::chrono::Local;
 
@@ -37,6 +37,8 @@ pub struct State {
     pub archived_rows: Rc<VecModel<CategoryRow>>,
     /// Every category of both kinds, for the movement modal.
     pub choices: Rc<VecModel<CategoryRow>>,
+    /// The Accounts tab: the active reserves, then the archived ones.
+    pub reserve_rows: Rc<VecModel<ReserveRow>>,
     /// The Budget tab: the active buckets of the shown month, then the archived ones.
     pub bucket_rows: Rc<VecModel<BucketRow>>,
     pub archived_bucket_rows: Rc<VecModel<BucketRow>>,
@@ -96,9 +98,12 @@ fn account_row(a: Account, main: &Currency, bill: Option<&Bill>) -> Result<Accou
         closing_day: card.map_or(0, |t| t.closing_day as i32),
         due_day: card.map_or(0, |t| t.due_day as i32),
         used: usage.map_or_else(String::new, |u| money(u.used)).into(),
-        available: usage
-            .map_or_else(String::new, |u| money(u.available))
-            .into(),
+        available: match usage {
+            Some(u) => money(u.available),
+            None if a.reserved != 0 => money(a.available()),
+            None => String::new(),
+        }
+        .into(),
         bill: bill.map_or_else(String::new, |b| money(b.pending)).into(),
         bill_due: bill.map_or_else(Default::default, |b| ui_date(b.due)),
         use_permille: usage.map_or(0, |u| i32::try_from(u.per_mille).unwrap_or(i32::MAX)),
@@ -155,6 +160,11 @@ impl State {
                 }
             }
         }
+        store.set_has_reservable(
+            active
+                .iter()
+                .any(|r| !matches!(r.kind, AccountKind::Credit | AccountKind::CreditLine)),
+        );
         store.set_has_cards(
             active
                 .iter()
@@ -180,7 +190,7 @@ impl State {
                     self.load_choices()?;
                 }
                 FinanceTab::Categories => self.load_categories(w)?,
-                FinanceTab::Accounts => {}
+                FinanceTab::Accounts => self.load_reserves()?,
             }
         }
         Ok(())
@@ -225,6 +235,10 @@ impl State {
             FinanceError::CategoryNotFound => s.get_finance_no_category(),
             FinanceError::DuplicateName => s.get_finance_duplicate_name(),
             FinanceError::InUse => s.get_finance_category_in_use(),
+            FinanceError::ReserveNotFound => s.get_finance_no_reserve(),
+            FinanceError::ReserveNotEmpty => s.get_finance_reserve_not_empty(),
+            FinanceError::ReserveInUse => s.get_finance_reserve_in_use(),
+            FinanceError::Insufficient => s.get_finance_insufficient(),
             FinanceError::BucketNotFound => s.get_finance_no_bucket(),
             FinanceError::BucketInUse => s.get_finance_bucket_in_use(),
             FinanceError::BucketsExist => s.get_finance_buckets_exist(),

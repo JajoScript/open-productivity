@@ -262,6 +262,10 @@ export global Strings {
     out property <string> no-category: @tr("No category");
     out property <string> same-as-last-month: @tr("Same as last month");
     out property <string> finance-no-bucket: @tr("That bucket no longer exists.");
+    out property <string> finance-no-reserve: @tr("That reserve no longer exists.");
+    out property <string> finance-reserve-not-empty: @tr("Withdraw the money from the reserves first.");
+    out property <string> finance-reserve-in-use: @tr("This reserve has moves, so it can't be deleted. Archive it instead.");
+    out property <string> finance-insufficient: @tr("There isn't enough money for that.");
     out property <string> finance-bucket-in-use: @tr("Categories belong to this bucket, so it can't be deleted. Take them out or archive it instead.");
     out property <string> finance-buckets-exist: @tr("There are already buckets.");
     out property <string> finance-invalid-shares: @tr("Enter a whole percentage from 0 to 100; the active buckets can't add up to more than 100.");
@@ -386,6 +390,18 @@ export global Strings {
 
     public pure function bucket-percent-label(month: string) -> string {
         return @tr("Percentage of the income for {}", month);
+    }
+
+    public pure function delete-reserve-question(name: string) -> string {
+        return @tr("Delete the reserve {}? This can't be undone.", name);
+    }
+
+    public pure function reserve-line-label(name: string, account: string, balance: string) -> string {
+        return @tr("{}, {}, {}", name, account, balance);
+    }
+
+    public pure function account-available-line(kind: string, available: string) -> string {
+        return @tr("{} · {} available", kind, available);
     }
 
     public pure function delete-bucket-question(name: string) -> string {

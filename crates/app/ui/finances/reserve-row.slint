@@ -1,0 +1,34 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date } from "std-widgets.slint";
+
+// A reserve of an account; `balance` arrives formatted in the account's currency.
+export struct ReserveRow {
+    id: int,
+    name: string,
+    account-name: string,
+    currency: string,
+    balance: string,
+    archived: bool,
+    // The account is archived, so the reserve takes no deposits.
+    account-archived: bool,
+}
+
+// One deposit or withdrawal of a reserve; `amount` is formatted without sign.
+export struct ReserveMoveRow {
+    date: Date,
+    description: string,
+    amount: string,
+    withdraw: bool,
+}
+
+// What the reserve modal shows and refreshes after each move.
+export struct ReserveDetail {
+    balance: string,
+    // The balance is 0, so it can be archived.
+    empty: bool,
+    // Has moves, so it cannot be deleted.
+    in-use: bool,
+    moves: [ReserveMoveRow],
+}

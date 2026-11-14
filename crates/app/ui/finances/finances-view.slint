@@ -17,6 +17,7 @@ import { FinanceStore } from "finance-store.slint";
 import { FinanceTab, TransactionRow } from "transaction-row.slint";
 import { SummaryTab } from "summary-tab.slint";
 import { DueTab } from "due-tab.slint";
+import { ReserveRow } from "reserve-row.slint";
 import { BillRow } from "bill-row.slint";
 import { ScheduledRow } from "scheduled-row.slint";
 import { TransactionsTab } from "transactions-tab.slint";
@@ -122,6 +123,8 @@ export component FinancesView inherits VerticalLayout {
     callback edit-scheduled(ScheduledRow);
     callback confirm-scheduled(ScheduledRow);
     callback pay-bill(BillRow);
+    callback new-reserve();
+    callback edit-reserve(ReserveRow);
     callback new-bucket();
     callback edit-bucket(BucketRow);
     callback new-category();
@@ -274,6 +277,14 @@ export component FinancesView inherits VerticalLayout {
             }
         }
 
+        if FinanceStore.tab == FinanceTab.accounts && FinanceStore.has-reservable: SubtleButton {
+            text: @tr("New reserve");
+            color: Palette.foreground;
+            clicked => {
+                root.new-reserve();
+            }
+        }
+
         if FinanceStore.tab == FinanceTab.accounts && (FinanceStore.accounts.length > 0 || FinanceStore.archived-accounts.length > 0): InkButton {
             text: @tr("New account");
             clicked => {
@@ -340,6 +351,9 @@ export component FinancesView inherits VerticalLayout {
         }
         edit-account(a) => {
             root.edit-account(a);
+        }
+        edit-reserve(r) => {
+            root.edit-reserve(r);
         }
     }
 

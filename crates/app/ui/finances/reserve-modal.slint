@@ -1,0 +1,438 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette, ScrollView } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { InkDatePopup } from "../ink-date-popup.slint";
+import { InkField } from "../ink-field.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { ChoiceRow } from "../study/session-logger.slint";
+import { Theme } from "../theme.slint";
+import { AccountKind } from "account-row.slint";
+import { FinanceStore } from "finance-store.slint";
+import { ReserveDetail, ReserveRow } from "reserve-row.slint";
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component NewBody inherits FocusScope {
+    in-out property <string> name;
+    in-out property <int> account-id;
+    callback save(string, int) -> string;
+    callback cancel;
+
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.name, root.account-id);
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: @tr("New reserve");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        InkField {
+            text <=> root.name;
+            placeholder-text: @tr("Reserve name");
+            init => {
+                self.focus();
+            }
+            accepted(text) => {
+                root.submit();
+            }
+        }
+
+        Text {
+            text: @tr("Account");
+            color: Theme.muted;
+        }
+
+        ScrollView {
+            height: min(account-list.preferred-height, 128px);
+            account-list := VerticalLayout {
+                for account in FinanceStore.accounts: VerticalLayout {
+                    if account.kind != AccountKind.credit && account.kind != AccountKind.credit-line: ChoiceRow {
+                        label: account.name;
+                        icon: @image-url("../icons/wallet.svg");
+                        chosen: account.id == root.account-id;
+                        picked => {
+                            root.account-id = account.id;
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Create");
+                enabled: root.account-id != 0;
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+}
+
+// Creates an empty reserve in a plain account. Closing by clicking outside discards it.
+export component ReserveCreator inherits PopupWindow {
+    close-policy: close-on-click-outside;
+    width: 380px;
+
+    PopupSurface {
+        NewBody {
+            save(name, account) => {
+                let error = FinanceStore.create-reserve(name, account);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}
+
+component EditBody inherits FocusScope {
+    in property <ReserveRow> reserve;
+    in-out property <string> name;
+    in-out property <ReserveDetail> detail;
+    in-out property <string> amount;
+    in-out property <string> description;
+    in-out property <Date> date;
+    callback save(string) -> string;
+    callback move-money(bool, string, Date, string) -> string;
+    callback toggle-archived() -> string;
+    callback delete() -> string;
+    callback cancel;
+
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function do-move(withdraw: bool) {
+        root.error = root.move-money(withdraw, root.amount, root.date, root.description);
+        if root.error == "" {
+            root.amount = "";
+            root.description = "";
+        }
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: @tr("Reserve");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        InkField {
+            text <=> root.name;
+            placeholder-text: @tr("Reserve name");
+            accepted(text) => {
+                root.error = root.save(root.name);
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            Text {
+                text: root.reserve.account-name;
+                color: Theme.muted;
+                overflow: elide;
+                horizontal-stretch: 1;
+            }
+
+            Text {
+                text: root.detail.balance;
+                font-weight: 600;
+            }
+        }
+
+        // Hidden, not conditional: the date popup cannot be.
+        VerticalLayout {
+            visible: !root.reserve.archived;
+            height: root.reserve.archived ? 0px : self.preferred-height;
+            spacing: 8px;
+            HorizontalLayout {
+                spacing: 8px;
+                InkField {
+                    text <=> root.amount;
+                    placeholder-text: @tr("Amount");
+                    accepted(text) => {
+                        root.do-move(false);
+                    }
+                }
+
+                Text {
+                    text: root.reserve.currency;
+                    color: Theme.muted;
+                    vertical-alignment: center;
+                }
+            }
+
+            InkField {
+                text <=> root.description;
+                placeholder-text: @tr("Description (optional)");
+            }
+
+            HorizontalLayout {
+                height: 36px;
+                spacing: 8px;
+                Rectangle {
+                    picker := InkDatePopup {
+                        y: 36px;
+                        day: root.date.day;
+                        month: root.date.month;
+                        year: root.date.year;
+                        picked(date) => {
+                            root.date = date;
+                        }
+                    }
+
+                    SubtleButton {
+                        text: Strings.date(root.date.day, root.date.month, root.date.year);
+                        icon: @image-url("../icons/calendar.svg");
+                        color: Palette.foreground;
+                        clicked => {
+                            picker.show();
+                        }
+                    }
+                }
+
+                Rectangle {
+                    horizontal-stretch: 1;
+                }
+
+                SubtleButton {
+                    text: @tr("Withdraw");
+                    color: Palette.foreground;
+                    clicked => {
+                        root.do-move(true);
+                    }
+                }
+
+                // A deposit needs an active account.
+                InkButton {
+                    text: @tr("Reserve money");
+                    enabled: !root.reserve.account-archived;
+                    clicked => {
+                        root.do-move(false);
+                    }
+                }
+            }
+        }
+
+        Text {
+            text: @tr("History");
+            color: Theme.muted;
+        }
+
+        if root.detail.moves.length == 0: Text {
+            text: @tr("No moves yet.");
+            color: Theme.muted;
+        }
+
+        if root.detail.moves.length > 0: ScrollView {
+            height: min(move-list.preferred-height, 120px);
+            move-list := VerticalLayout {
+                for m in root.detail.moves: HorizontalLayout {
+                    height: 28px;
+                    spacing: 8px;
+                    padding-right: 16px;
+                    Text {
+                        text: Strings.date(m.date.day, m.date.month, m.date.year);
+                        color: Theme.muted;
+                        vertical-alignment: center;
+                    }
+
+                    Text {
+                        text: m.description;
+                        vertical-alignment: center;
+                        overflow: elide;
+                        horizontal-stretch: 1;
+                    }
+
+                    Text {
+                        text: m.withdraw ? "\u{2212}" + m.amount : "+" + m.amount;
+                        font-weight: 600;
+                        vertical-alignment: center;
+                        horizontal-alignment: right;
+                    }
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            if root.reserve.archived || root.detail.empty: SubtleButton {
+                text: root.reserve.archived ? @tr("Restore") : @tr("Archive");
+                color: Palette.foreground;
+                clicked => {
+                    root.error = root.toggle-archived();
+                }
+            }
+
+            if !root.detail.in-use: SubtleButton {
+                text: @tr("Delete");
+                color: Palette.foreground;
+                clicked => {
+                    confirm.show();
+                }
+            }
+
+            Rectangle {
+                horizontal-stretch: 1;
+            }
+
+            SubtleButton {
+                text: @tr("Close");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Save");
+                clicked => {
+                    root.error = root.save(root.name);
+                }
+            }
+        }
+    }
+
+    confirm := PopupWindow {
+        x: (root.width - self.width) / 2;
+        y: 72px;
+        width: 320px;
+        PopupSurface {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: Strings.delete-reserve-question(root.reserve.name);
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Cancel");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            confirm.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Delete");
+                        clicked => {
+                            confirm.close();
+                            root.error = root.delete();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// Renames a reserve, reserves or withdraws money with a history, archives or deletes it.
+export component ReserveEditor inherits PopupWindow {
+    // Set by the opener before show().
+    in property <ReserveRow> reserve;
+    in property <Date> today;
+
+    close-policy: close-on-click-outside;
+    width: 420px;
+
+    PopupSurface {
+        EditBody {
+            reserve: root.reserve;
+            name: root.reserve.name;
+            date: root.today;
+            init => {
+                self.detail = FinanceStore.reserve-detail(root.reserve.id);
+            }
+            save(name) => {
+                let error = FinanceStore.rename-reserve(root.reserve.id, name);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            move-money(withdraw, amount, date, description) => {
+                let error = withdraw ? FinanceStore.withdraw-reserve(root.reserve.id, amount, date, description) : FinanceStore.reserve-money(root.reserve.id, amount, date, description);
+                self.detail = FinanceStore.reserve-detail(root.reserve.id);
+                return error;
+            }
+            toggle-archived => {
+                let error = FinanceStore.archive-reserve(root.reserve.id, !root.reserve.archived);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            delete => {
+                let error = FinanceStore.delete-reserve(root.reserve.id);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

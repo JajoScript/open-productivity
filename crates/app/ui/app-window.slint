@@ -17,6 +17,8 @@ import { StudyStore } from "study/study-store.slint";
 import { AccountCreator } from "finances/account-creator.slint";
 import { MainCurrencyEditor } from "finances/main-currency-editor.slint";
 import { RatesEditor } from "finances/rates-editor.slint";
+import { ReserveCreator, ReserveEditor } from "finances/reserve-modal.slint";
+import { ReserveDetail, ReserveMoveRow, ReserveRow } from "finances/reserve-row.slint";
 import { BucketCreator } from "finances/bucket-creator.slint";
 import { BucketRow } from "finances/bucket-row.slint";
 import { CategoryCreator } from "finances/category-creator.slint";
@@ -117,6 +119,9 @@ export {
     BillRow,
     CategoryRow,
     BucketRow,
+    ReserveRow,
+    ReserveMoveRow,
+    ReserveDetail,
     SuggestedCategory,
     TxKind,
     SummaryFigure,
@@ -302,6 +307,8 @@ export component AppWindow inherits Window {
     property <ScheduledRow> scheduled-edit;
     property <ScheduledRow> scheduled-confirm-row;
 
+    property <ReserveRow> reserve-edit;
+
     property <bool> bucket-editing;
     property <int> bucket-edit-id;
     property <string> bucket-edit-name;
@@ -476,6 +483,18 @@ export component AppWindow inherits Window {
             today: Calendar.today();
             x: (root.width - self.width) / 2;
             y: 120px;
+        }
+
+        reserve-creator := ReserveCreator {
+            x: (root.width - self.width) / 2;
+            y: 120px;
+        }
+
+        reserve-editor := ReserveEditor {
+            reserve: root.reserve-edit;
+            today: Calendar.today();
+            x: (root.width - self.width) / 2;
+            y: 60px;
         }
 
         bucket-creator := BucketCreator {
@@ -822,6 +841,13 @@ export component AppWindow inherits Window {
                     confirm-scheduled(d) => {
                         root.scheduled-confirm-row = d;
                         scheduled-confirm.show();
+                    }
+                    new-reserve => {
+                        reserve-creator.show();
+                    }
+                    edit-reserve(r) => {
+                        root.reserve-edit = r;
+                        reserve-editor.show();
                     }
                     new-bucket => {
                         root.bucket-editing = false;

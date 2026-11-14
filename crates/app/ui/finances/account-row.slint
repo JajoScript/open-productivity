@@ -25,6 +25,7 @@ export struct AccountRow {
     closing-day: int,
     due-day: int,
     used: string,
+    // A card: the limit left. A plain account with reserves: the balance minus them; "" otherwise.
     available: string,
     // Used part of the limit in per mille; above 1000 when over it.
     use-permille: int,

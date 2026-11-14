@@ -8,6 +8,7 @@ import { BillRow } from "bill-row.slint";
 import { BucketRow } from "bucket-row.slint";
 import { CategoryRow } from "category-row.slint";
 import { ScheduleForm, ScheduledRow } from "scheduled-row.slint";
+import { ReserveDetail, ReserveRow } from "reserve-row.slint";
 import { SummaryBar, SummaryFigure } from "summary-row.slint";
 
 // What the Finances views show and ask for. Rust fills the data and answers the callbacks;
@@ -25,6 +26,10 @@ export global FinanceStore {
     in property <[AccountRow]> archived-accounts;
     // Some active account is a credit card.
     in property <bool> has-cards;
+    // The Accounts tab: some active account is plain, so it can hold a reserve.
+    in property <bool> has-reservable;
+    // The reserves, active then archived.
+    in property <[ReserveRow]> reserves;
     in property <string> error;
     // The tab shown; Rust loads only what it needs.
     in-out property <FinanceTab> tab: FinanceTab.summary;
@@ -89,6 +94,14 @@ export global FinanceStore {
     callback change-main-currency(string) -> string;
     callback archive-account(int, bool) -> string;
     callback delete-account(int) -> string;
+    callback create-reserve(string, int) -> string;
+    callback rename-reserve(int, string) -> string;
+    callback archive-reserve(int, bool) -> string;
+    callback delete-reserve(int) -> string;
+    // reserve, amount, date, description.
+    callback reserve-money(int, string, Date, string) -> string;
+    callback withdraw-reserve(int, string, Date, string) -> string;
+    callback reserve-detail(int) -> ReserveDetail;
     callback create-transaction(TxKind, int, bool, int, string, Date, string) -> string;
     callback update-transaction(int, TxKind, int, bool, int, string, Date, string) -> string;
     callback create-transfer(int, int, string, string, Date, string) -> string;
