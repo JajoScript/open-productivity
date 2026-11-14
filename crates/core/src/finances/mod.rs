@@ -10,6 +10,7 @@ mod bills;
 mod budget;
 mod categories;
 mod charts;
+mod due_view;
 mod money;
 mod overview;
 mod rates;
@@ -32,6 +33,8 @@ mod tests_charts;
 mod tests_credit_lines;
 #[cfg(test)]
 mod tests_currencies;
+#[cfg(test)]
+mod tests_due_view;
 #[cfg(test)]
 mod tests_main_currency;
 #[cfg(test)]
@@ -57,6 +60,7 @@ pub use bills::*;
 pub use budget::*;
 pub use categories::*;
 pub use charts::*;
+pub use due_view::*;
 pub use money::*;
 pub use overview::*;
 pub use rates::*;
