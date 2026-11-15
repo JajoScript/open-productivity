@@ -909,6 +909,18 @@ fn a_very_late_task_does_not_come_back_overdue() {
 }
 
 #[test]
+fn a_repeated_study_topic_keeps_its_subject() {
+    let conn = db::test_conn();
+    let subject = crate::study::create_subject(&conn, "Math").unwrap();
+    let id = crate::study::create_topic(&conn, subject, "Limits", Some(d("2026-06-20"))).unwrap();
+    set_recurrence(&conn, id, Some((Frequency::Weekly, "1"))).unwrap();
+    set_done(&conn, id, true, d(TODAY)).unwrap();
+    let topics = crate::study::list_topics(&conn, at("2026-06-15T10:00:00+00:00")).unwrap();
+    assert_eq!(topics.len(), 2);
+    assert!(topics.iter().all(|t| t.subject == subject));
+}
+
+#[test]
 fn a_task_without_a_rule_creates_nothing() {
     let conn = db::test_conn();
     let id = create_on(&conn, "x", d("2026-06-10")).unwrap();

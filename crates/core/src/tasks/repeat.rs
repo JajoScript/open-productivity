@@ -38,8 +38,9 @@ pub(super) fn complete(conn: &Connection, id: TaskId, today: NaiveDate) -> Resul
         }
     }
     conn.execute(
-        "INSERT INTO task (title, note, due_date, list_id, urgent, important, due_time, end_time) \
-         SELECT title, note, ?1, list_id, urgent, important, due_time, end_time FROM task \
+        "INSERT INTO task (title, note, due_date, list_id, urgent, important, due_time, end_time, \
+         subject_id) SELECT title, note, ?1, list_id, urgent, important, due_time, end_time, \
+         subject_id FROM task \
          WHERE id = ?2",
         (next.to_string(), id.0),
     )?;
