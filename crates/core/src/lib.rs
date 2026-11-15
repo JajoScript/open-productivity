@@ -10,6 +10,7 @@ pub mod agenda;
 pub mod calendar;
 pub mod db;
 pub mod finances;
+pub mod goals;
 pub mod habits;
 pub mod instance_settings;
 pub mod instances;

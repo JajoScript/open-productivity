@@ -1,0 +1,163 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ScrollView } from "std-widgets.slint";
+import { InkButton } from "../ink-button.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { KindLabel } from "goal-card.slint";
+import { GoalRow, GoalsStore } from "goals-store.slint";
+
+// One goal in a side panel: its emoji, title, description and deadline, with edit and delete.
+export component GoalDetail inherits Rectangle {
+    in property <GoalRow> goal;
+    callback close;
+    callback edit;
+    callback delete;
+
+    border-width: 1px;
+    border-color: Theme.hairline;
+    border-radius: 8px;
+    clip: true;
+
+    VerticalLayout {
+        Rectangle {
+            height: 96px;
+            background: Theme.selected;
+
+            if root.goal.emoji != "": Text {
+                text: root.goal.emoji;
+                font-size: 44px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+
+            if root.goal.emoji == "": Image {
+                source: @image-url("../icons/target.svg");
+                colorize: Theme.muted;
+                width: 36px;
+                height: 36px;
+                accessible-role: none;
+            }
+
+            SubtleButton {
+                x: parent.width - self.width - 8px;
+                y: 8px;
+                icon: @image-url("../icons/x.svg");
+                label: @tr("Close");
+                clicked => {
+                    root.close();
+                }
+            }
+        }
+
+        ScrollView {
+            vertical-stretch: 1;
+            VerticalLayout {
+                padding: 16px;
+                spacing: 8px;
+                alignment: start;
+                width: parent.width;
+                KindLabel {
+                    kind: root.goal.kind;
+                }
+
+                Text {
+                    text: root.goal.title;
+                    font-size: 18px;
+                    font-weight: 700;
+                    wrap: word-wrap;
+                }
+
+                Text {
+                    text: root.goal.description != "" ? root.goal.description : @tr("No description.");
+                    color: root.goal.description != "" ? Palette.foreground : Theme.muted;
+                    wrap: word-wrap;
+                }
+
+                Rectangle {
+                    height: 8px;
+                }
+
+                Text {
+                    text: @tr("Deadline");
+                    font-size: 12px;
+                    color: Theme.muted;
+                }
+
+                Text {
+                    text: root.goal.has-deadline ? Strings.date(root.goal.deadline.day, root.goal.deadline.month, root.goal.deadline.year) : @tr("No deadline");
+                    wrap: word-wrap;
+                }
+
+                if root.goal.has-deadline: Text {
+                    text: GoalsStore.days-text(true, root.goal.days-left);
+                    color: root.goal.days-left < 0 ? Theme.critical : Palette.foreground;
+                    font-weight: 600;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            padding: 12px;
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Delete");
+                color: Palette.foreground;
+                clicked => {
+                    confirm.show();
+                }
+            }
+
+            InkButton {
+                text: @tr("Edit");
+                clicked => {
+                    root.edit();
+                }
+            }
+        }
+    }
+
+    confirm := PopupWindow {
+        x: (root.width - self.width) / 2;
+        y: root.height - 160px;
+        width: min(root.width - 24px, 320px);
+        PopupSurface {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: GoalsStore.delete-question(root.goal.title);
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Cancel");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            confirm.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Delete");
+                        clicked => {
+                            confirm.close();
+                            root.delete();
+                        }
+                    }
+                }
+            }
+        }
+    }
+}

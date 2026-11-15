@@ -1,0 +1,61 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date } from "std-widgets.slint";
+
+export enum GoalKind { goal, project }
+
+// One goal or project; `days-left` is negative once the deadline passed.
+export struct GoalRow {
+    id: int,
+    title: string,
+    emoji: string,
+    description: string,
+    kind: GoalKind,
+    has-deadline: bool,
+    deadline: Date,
+    days-left: int,
+}
+
+// What the Goals views show and ask for. Rust fills the data and answers the callbacks.
+export global GoalsStore {
+    // Nearest deadline first, undated last.
+    in property <[GoalRow]> goals;
+    in property <bool> any-goal;
+    in property <GoalRow> detail;
+    in-out property <bool> detail-open;
+    in-out property <string> error;
+
+    // Texts Rust shows for the errors of core.
+    out property <string> empty-title: @tr("Give it a title.");
+    out property <string> not-found: @tr("That goal no longer exists.");
+
+    public pure function load-failed(error: string) -> string {
+        return @tr("Could not load the goals: {}", error);
+    }
+
+    public pure function failed(error: string) -> string {
+        return @tr("Could not save the goal: {}", error);
+    }
+
+    public pure function days-text(has-deadline: bool, days: int) -> string {
+        if !has-deadline {
+            return @tr("No deadline");
+        }
+        if days == 0 {
+            return @tr("Due today");
+        }
+        return days > 0 ? @tr("{} d left", days) : @tr("{} d overdue", -days);
+    }
+
+    public pure function delete-question(title: string) -> string {
+        return @tr("Delete {}? This can't be undone.", title);
+    }
+
+    // The ones that return a string give the error to show; empty means it worked.
+    callback create(GoalKind, string, string, string, bool, Date) -> string;
+    callback update(int, string, string, string, bool, Date) -> string;
+    callback delete(int) -> string;
+    callback open(int);
+    callback refresh();
+}

@@ -1,0 +1,151 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { ScrollView } from "std-widgets.slint";
+import { EmptyState } from "../empty-state.slint";
+import { InkButton } from "../ink-button.slint";
+import { Theme } from "../theme.slint";
+import { GoalCard } from "goal-card.slint";
+import { GoalDetail } from "goal-detail.slint";
+import { GoalsStore } from "goals-store.slint";
+
+// What the empty state shows: three cards in use, quiet and non-interactive.
+component GoalsPreview inherits HorizontalLayout {
+    spacing: 8px;
+    accessible-role: none;
+    for n in 3: Rectangle {
+        width: 56px;
+        height: 68px;
+        border-radius: 8px;
+        border-width: 1px;
+        border-color: Theme.hairline;
+        opacity: n == 0 ? 1 : 0.6;
+        Rectangle {
+            height: 28px;
+            y: 0px;
+            background: Theme.selected;
+            border-top-left-radius: 7px;
+            border-top-right-radius: 7px;
+        }
+
+        Rectangle {
+            x: 8px;
+            y: 38px;
+            width: 40px;
+            height: 6px;
+            border-radius: 3px;
+            background: Theme.hairline;
+        }
+
+        Rectangle {
+            x: 8px;
+            y: 50px;
+            width: 24px;
+            height: 6px;
+            border-radius: 3px;
+            background: Theme.hairline;
+        }
+    }
+}
+
+// Goals and projects as cards, nearest deadline first, with the open one in a side panel.
+export component GoalsView inherits VerticalLayout {
+    // Open the window's editor modal.
+    callback new-goal();
+    callback edit-goal();
+
+    property <length> gap: 16px;
+    property <length> min-card: 240px;
+
+    padding: 24px;
+    padding-top: 20px;
+    spacing: 12px;
+
+    HorizontalLayout {
+        spacing: 8px;
+        Text {
+            text: @tr("Goals");
+            font-size: 24px;
+            font-weight: 700;
+            vertical-alignment: center;
+            overflow: elide;
+        }
+
+        Rectangle {
+            horizontal-stretch: 1;
+        }
+
+        InkButton {
+            text: @tr("New goal");
+            clicked => {
+                root.new-goal();
+            }
+        }
+    }
+
+    Text {
+        text: @tr("What you want to reach, and the projects that get you there.");
+        color: Theme.muted;
+        wrap: word-wrap;
+    }
+
+    if GoalsStore.error != "": Text {
+        text: GoalsStore.error;
+        color: Theme.critical;
+        wrap: word-wrap;
+    }
+
+    if !GoalsStore.any-goal: EmptyState {
+        title: @tr("Set your first goal");
+        description: @tr("Write down what you want to reach, with an emoji and a deadline. Each card counts the days you have left.");
+        action: @tr("New goal");
+        clicked => {
+            root.new-goal();
+        }
+
+        GoalsPreview { }
+    }
+
+    if GoalsStore.any-goal: HorizontalLayout {
+        vertical-stretch: 1;
+        spacing: 24px;
+        padding-top: 12px;
+        // Room for the floating create button under the panel's actions.
+        padding-bottom: 64px;
+
+        grid := ScrollView {
+            // The scroll bar takes the right edge of the viewport.
+            property <length> avail: self.visible-width - 16px;
+            property <int> cols: max(1, floor((self.avail + root.gap) / (root.min-card + root.gap)));
+            property <length> card-w: (self.avail - (self.cols - 1) * root.gap) / self.cols;
+
+            content-height: ceil(GoalsStore.goals.length / self.cols) * (148px + root.gap);
+            horizontal-stretch: 1;
+
+            for goal[i] in GoalsStore.goals: GoalCard {
+                x: mod(i, grid.cols) * (grid.card-w + root.gap);
+                y: floor(i / grid.cols) * (self.height + root.gap);
+                width: grid.card-w;
+                goal: goal;
+                selected: GoalsStore.detail-open && GoalsStore.detail.id == goal.id;
+                opened => {
+                    GoalsStore.open(goal.id);
+                }
+            }
+        }
+
+        if GoalsStore.detail-open: GoalDetail {
+            width: 320px;
+            goal: GoalsStore.detail;
+            close => {
+                GoalsStore.detail-open = false;
+            }
+            edit => {
+                root.edit-goal();
+            }
+            delete => {
+                GoalsStore.error = GoalsStore.delete(GoalsStore.detail.id);
+            }
+        }
+    }
+}

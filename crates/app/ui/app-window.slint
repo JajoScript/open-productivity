@@ -14,6 +14,9 @@ import { TopicCreator } from "study/topic-creator.slint";
 import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
 import { StudyStore } from "study/study-store.slint";
+import { GoalEditor } from "goals/goal-editor.slint";
+import { GoalKind, GoalRow, GoalsStore } from "goals/goals-store.slint";
+import { GoalsView } from "goals/goals-view.slint";
 import { AccountCreator } from "finances/account-creator.slint";
 import { MainCurrencyEditor } from "finances/main-currency-editor.slint";
 import { RatesEditor } from "finances/rates-editor.slint";
@@ -146,6 +149,9 @@ export {
     FinanceStore,
     DayBarRow,
     DaysTab,
+    GoalKind,
+    GoalRow,
+    GoalsStore,
     HoursTab,
     RankRow,
     Language,
@@ -280,6 +286,7 @@ export component AppWindow inherits Window {
     property <string> habit-edit-name;
     property <[bool]> habit-edit-days;
     property <Date> habit-edit-start;
+    property <bool> goal-editing;
     property <bool> study-session-open;
     // What the session modal opens with.
     property <int> log-subject;
@@ -416,6 +423,9 @@ export component AppWindow inherits Window {
         if root.module == Module.settings {
             root.instances-opened();
         }
+        if root.module == Module.goals {
+            GoalsStore.refresh();
+        }
         if root.module == Module.finances {
             FinanceStore.refresh();
         }
@@ -465,6 +475,12 @@ export component AppWindow inherits Window {
             archive(id) => {
                 root.archive-habit(id);
             }
+        }
+
+        goal-editor := GoalEditor {
+            editing: root.goal-editing;
+            x: (root.width - self.width) / 2;
+            y: 80px;
         }
 
         subject-creator := SubjectCreator {
@@ -790,6 +806,19 @@ export component AppWindow inherits Window {
                     }
                     new-topic => {
                         root.open-new-topic();
+                    }
+                }
+
+                if root.module == Module.goals: GoalsView {
+                    width: parent.width;
+                    height: parent.height;
+                    new-goal => {
+                        root.goal-editing = false;
+                        goal-editor.show();
+                    }
+                    edit-goal => {
+                        root.goal-editing = true;
+                        goal-editor.show();
                     }
                 }
 

@@ -1741,3 +1741,75 @@ msgstr "Movimiento guardado"
 
 msgid "Payment scheduled"
 msgstr "Pago programado guardado"
+
+msgid "Goals"
+msgstr "Objetivos"
+
+msgid "What you want to reach, and the projects that get you there."
+msgstr "Lo que quieres lograr y los proyectos que te llevan allí."
+
+msgid "New goal"
+msgstr "Nuevo objetivo"
+
+msgid "Set your first goal"
+msgstr "Define tu primer objetivo"
+
+msgid "Write down what you want to reach, with an emoji and a deadline. Each card counts the days you have left."
+msgstr "Anota lo que quieres lograr, con un emoji y una fecha límite. Cada tarjeta cuenta los días que te quedan."
+
+msgid "Goal"
+msgstr "Meta"
+
+msgid "Project"
+msgstr "Proyecto"
+
+msgid "New goal or project"
+msgstr "Nuevo objetivo"
+
+msgid "Edit goal"
+msgstr "Editar objetivo"
+
+msgid "Edit"
+msgstr "Editar"
+
+msgid "Emoji"
+msgstr "Emoji"
+
+msgid "Title"
+msgstr "Título"
+
+msgid "Deadline"
+msgstr "Fecha límite"
+
+msgid "No deadline"
+msgstr "Sin fecha límite"
+
+msgid "Remove deadline"
+msgstr "Quitar la fecha límite"
+
+msgid "No description."
+msgstr "Sin descripción."
+
+msgid "Due today"
+msgstr "Vence hoy"
+
+msgid "{} d left"
+msgstr "Faltan {} d"
+
+msgid "{} d overdue"
+msgstr "Venció hace {} d"
+
+msgid "Delete {}? This can't be undone."
+msgstr "¿Eliminar {}? No se puede deshacer."
+
+msgid "Give it a title."
+msgstr "Ponle un título."
+
+msgid "That goal no longer exists."
+msgstr "Ese objetivo ya no existe."
+
+msgid "Could not load the goals: {}"
+msgstr "No se pudieron cargar los objetivos: {}"
+
+msgid "Could not save the goal: {}"
+msgstr "No se pudo guardar el objetivo: {}"

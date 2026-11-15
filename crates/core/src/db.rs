@@ -93,6 +93,7 @@ const MIGRATIONS: &[&str] = &[
     include_str!("../migrations/0027_noop.sql"),
     include_str!("../migrations/0028_finance_budget.sql"),
     include_str!("../migrations/0029_finance_reserve.sql"),
+    include_str!("../migrations/0030_goal.sql"),
 ];
 
 pub fn open(path: &Path) -> Result<Connection, DbError> {

@@ -1,0 +1,211 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette } from "std-widgets.slint";
+import { FormField } from "../form-field.slint";
+import { InkButton } from "../ink-button.slint";
+import { Calendar, InkDatePopup } from "../ink-date-popup.slint";
+import { InkField } from "../ink-field.slint";
+import { InkFieldButton } from "../ink-field-button.slint";
+import { InkTextArea } from "../ink-text-area.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { GoalKind, GoalsStore } from "goals-store.slint";
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component EditorBody inherits FocusScope {
+    in property <bool> editing;
+    in-out property <GoalKind> kind;
+    in-out property <string> goal-title;
+    in-out property <string> emoji;
+    in-out property <string> description;
+    in-out property <bool> has-deadline;
+    in-out property <Date> deadline;
+    callback save(GoalKind, string, string, string, bool, Date) -> string;
+    callback cancel;
+
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.kind, root.goal-title, root.emoji, root.description, root.has-deadline, root.deadline);
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: root.editing ? @tr("Edit goal") : @tr("New goal or project");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        // The kind is chosen once; it never changes afterwards.
+        if !root.editing: HorizontalLayout {
+            alignment: start;
+            accessible-role: tab-list;
+            SettingsTab {
+                text: @tr("Goal");
+                selected: root.kind == GoalKind.goal;
+                chosen => {
+                    root.kind = GoalKind.goal;
+                }
+                step(d) => {
+                    root.kind = d < 0 ? GoalKind.goal : GoalKind.project;
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Project");
+                selected: root.kind == GoalKind.project;
+                chosen => {
+                    root.kind = GoalKind.project;
+                }
+                step(d) => {
+                    root.kind = d < 0 ? GoalKind.goal : GoalKind.project;
+                }
+            }
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            FormField {
+                width: 96px;
+                label: @tr("Emoji");
+                InkField {
+                    text <=> root.emoji;
+                    placeholder-text: "🎯";
+                }
+            }
+
+            FormField {
+                label: @tr("Title");
+                InkField {
+                    text <=> root.goal-title;
+                    placeholder-text: @tr("Title");
+                    init => {
+                        self.focus();
+                    }
+                    accepted(text) => {
+                        root.submit();
+                    }
+                }
+            }
+        }
+
+        FormField {
+            label: @tr("Description");
+            InkTextArea {
+                text <=> root.description;
+                placeholder-text: @tr("Optional");
+                min-height: 80px;
+                submitted => {
+                    root.submit();
+                }
+            }
+        }
+
+        FormField {
+            label: @tr("Deadline");
+            HorizontalLayout {
+                spacing: 8px;
+                Rectangle {
+                    height: 36px;
+                    picker := InkDatePopup {
+                        y: 38px;
+                        day: root.has-deadline ? root.deadline.day : 0;
+                        month: root.deadline.month;
+                        year: root.deadline.year;
+                        picked(date) => {
+                            root.deadline = date;
+                            root.has-deadline = true;
+                        }
+                    }
+
+                    InkFieldButton {
+                        label: @tr("Deadline");
+                        text: root.has-deadline ? Strings.date(root.deadline.day, root.deadline.month, root.deadline.year) : @tr("No deadline");
+                        icon: @image-url("../icons/calendar.svg");
+                        clicked => {
+                            picker.show();
+                        }
+                    }
+                }
+
+                if root.has-deadline: SubtleButton {
+                    icon: @image-url("../icons/x.svg");
+                    label: @tr("Remove deadline");
+                    clicked => {
+                        root.has-deadline = false;
+                    }
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: root.editing ? @tr("Save") : @tr("Create");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+}
+
+// Creates a goal or project, or edits the open one, depending on how it is opened. Closing by
+// clicking outside discards it.
+export component GoalEditor inherits PopupWindow {
+    // Set by the opener before show(); editing starts from the open goal.
+    in property <bool> editing;
+
+    close-policy: close-on-click-outside;
+    width: 440px;
+
+    PopupSurface {
+        EditorBody {
+            editing: root.editing;
+            goal-title: root.editing ? GoalsStore.detail.title : "";
+            emoji: root.editing ? GoalsStore.detail.emoji : "";
+            description: root.editing ? GoalsStore.detail.description : "";
+            has-deadline: root.editing ? GoalsStore.detail.has-deadline : false;
+            deadline: root.editing ? GoalsStore.detail.deadline : Calendar.today();
+            save(kind, title, emoji, description, has-deadline, deadline) => {
+                let error = root.editing ? GoalsStore.update(GoalsStore.detail.id, title, emoji, description, has-deadline, deadline) : GoalsStore.create(kind, title, emoji, description, has-deadline, deadline);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

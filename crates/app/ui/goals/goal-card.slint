@@ -1,0 +1,115 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+import { GoalKind, GoalRow, GoalsStore } from "goals-store.slint";
+
+// The kind of a goal as a small label.
+export component KindLabel inherits Text {
+    in property <GoalKind> kind;
+
+    text: root.kind == GoalKind.project ? @tr("Project") : @tr("Goal");
+    font-size: 12px;
+    color: Theme.muted;
+    accessible-role: none;
+}
+
+// A goal as a card: a band with its emoji, then title, deadline and the days left.
+export component GoalCard inherits Rectangle {
+    in property <GoalRow> goal;
+    in property <bool> selected;
+    callback opened;
+
+    height: 148px;
+    border-radius: 8px;
+    border-width: root.selected ? 2px : 1px;
+    border-color: root.selected ? Theme.ink : Theme.hairline;
+    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background, border-color { duration: Theme.fast; easing: Theme.ease-out; }
+    forward-focus: focus;
+    accessible-role: button;
+    accessible-label: root.goal.title + ", " + GoalsStore.days-text(root.goal.has-deadline, root.goal.days-left);
+    accessible-action-default => {
+        root.opened();
+    }
+
+    VerticalLayout {
+        Rectangle {
+            height: 64px;
+            background: Theme.selected;
+            border-top-left-radius: 7px;
+            border-top-right-radius: 7px;
+
+            if root.goal.emoji != "": Text {
+                text: root.goal.emoji;
+                font-size: 32px;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                accessible-role: none;
+            }
+
+            if root.goal.emoji == "": Image {
+                source: @image-url("../icons/target.svg");
+                colorize: Theme.muted;
+                width: 28px;
+                height: 28px;
+                accessible-role: none;
+            }
+
+            KindLabel {
+                x: parent.width - self.width - 10px;
+                y: 8px;
+                kind: root.goal.kind;
+            }
+        }
+
+        VerticalLayout {
+            padding: 12px;
+            spacing: 4px;
+            Text {
+                text: root.goal.title;
+                font-weight: 700;
+                overflow: elide;
+                accessible-role: none;
+            }
+
+            if root.goal.has-deadline: Text {
+                text: Strings.date(root.goal.deadline.day, root.goal.deadline.month, root.goal.deadline.year);
+                color: Theme.muted;
+                accessible-role: none;
+            }
+
+            Text {
+                text: GoalsStore.days-text(root.goal.has-deadline, root.goal.days-left);
+                color: root.goal.has-deadline && root.goal.days-left < 0 ? Theme.critical : Palette.foreground;
+                font-weight: 600;
+                accessible-role: none;
+            }
+        }
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.opened();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.opened();
+                return accept;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
