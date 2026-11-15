@@ -1714,3 +1714,30 @@ msgstr "Monto ({})"
 
 msgid "Amount that arrives ({})"
 msgstr "Monto que llega ({})"
+
+msgid "Payments"
+msgstr "Pagos"
+
+msgid "PAYMENTS · {}"
+msgstr "PAGOS · {}"
+
+msgid "{0}, {1}"
+msgstr "{0}, {1}"
+
+msgid "{0}, {1}, overdue"
+msgstr "{0}, {1}, atrasado"
+
+msgid "Movement"
+msgstr "Movimiento"
+
+msgid "Scheduled payment"
+msgstr "Pago programado"
+
+msgid "Create an account in Finances first"
+msgstr "Crea primero una cuenta en Finanzas"
+
+msgid "Movement saved"
+msgstr "Movimiento guardado"
+
+msgid "Payment scheduled"
+msgstr "Pago programado guardado"

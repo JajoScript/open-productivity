@@ -57,6 +57,7 @@ import {
     CalendarEntry,
     CalendarHabit,
     CalendarMode,
+    CalendarPayment,
     CalendarSource,
     CalendarTask,
     CalendarView,
@@ -74,6 +75,7 @@ import {
 import { InstanceRow } from "settings/data-section.slint";
 import {
     DayHabit,
+    DayPayment,
     DueKind,
     KanbanColumn,
     Quadrant,
@@ -94,11 +96,13 @@ export {
     CalendarEntry,
     CalendarHabit,
     CalendarMode,
+    CalendarPayment,
     CalendarSource,
     CalendarTask,
     WeekBlock,
     WeekColumn,
     DayHabit,
+    DayPayment,
     Date,
     DayState,
     DueKind,
@@ -187,7 +191,7 @@ export component AppWindow inherits Window {
     in property <[InstanceRow]> instances;
     in-out property <string> instances-status;
     callback instances-opened;
-    // Habits changed in another view: the calendar reloads.
+    // Habits or payments changed in another view: the calendar and Today reload.
     callback refresh-calendar();
     callback open-instance(string);
     callback remove-instance(string);
@@ -258,6 +262,7 @@ export component AppWindow inherits Window {
     callback set-habit-done(int, int, bool);
     in property <[DayHabit]> day-habits;
     in property <int> habits-done;
+    in property <[DayPayment]> day-payments;
     callback set-day-habit-done(int, bool);
     title: "Open Productivity — " + instance-name;
     preferred-width: 1280px;
@@ -297,6 +302,8 @@ export component AppWindow inherits Window {
     property <bool> account-edit-in-use;
     // What the movement modal opens with: a new movement, or the one being edited.
     property <bool> tx-editing;
+    // Confirmation to show when the open Finances modal was started from the floating button; "" otherwise.
+    property <string> finance-notice;
     property <int> tx-edit-id;
     property <TxKind> tx-edit-kind;
     property <bool> tx-edit-transfer;
@@ -354,6 +361,37 @@ export component AppWindow inherits Window {
         session-logger.show();
     }
 
+    // `notice` is shown after saving; "" when opened from Finances itself.
+    function open-new-transaction(notice: string) {
+        root.finance-notice = notice;
+        root.tx-editing = false;
+        root.tx-edit-id = 0;
+        root.tx-edit-kind = TxKind.expense;
+        root.tx-edit-transfer = false;
+        root.tx-edit-account = FinanceStore.accounts[0].id;
+        root.tx-edit-to-account = FinanceStore.accounts.length > 1 ? FinanceStore.accounts[1].id : FinanceStore.accounts[0].id;
+        root.tx-edit-has-category = false;
+        root.tx-edit-category = 0;
+        root.tx-edit-amount = "";
+        root.tx-edit-from-currency = FinanceStore.accounts[0].currency;
+        root.tx-edit-to-currency = FinanceStore.accounts.length > 1 ? FinanceStore.accounts[1].currency : FinanceStore.accounts[0].currency;
+        root.tx-edit-to-amount = "";
+        root.tx-edit-amount-label = "";
+        root.tx-edit-date = Calendar.today();
+        root.tx-edit-description = "";
+        root.tx-edit-restorable = false;
+        root.tx-edit-installment-number = 0;
+        root.tx-edit-installment-total = 0;
+        transaction-creator.show();
+    }
+
+    function open-new-scheduled(notice: string) {
+        root.finance-notice = notice;
+        root.scheduled-editing = false;
+        root.scheduled-edit = NewScheduled.row(FinanceStore.accounts[0].id, FinanceStore.accounts[0].currency, Calendar.today());
+        scheduled-creator.show();
+    }
+
     function open-new-habit() {
         root.habit-editing = false;
         root.habit-edit-name = "";
@@ -380,6 +418,10 @@ export component AppWindow inherits Window {
         }
         if root.module == Module.finances {
             FinanceStore.refresh();
+        }
+        // Payments change in Finances; Calendar and Today read them when entered.
+        if root.module == Module.calendar || root.module == Module.tasks {
+            root.refresh-calendar();
         }
         root.entering = true;
     }
@@ -461,6 +503,13 @@ export component AppWindow inherits Window {
         }
 
         transaction-creator := TransactionCreator {
+            saved => {
+                if root.finance-notice != "" {
+                    quick.notify(root.finance-notice);
+                }
+                // From the floating button the Calendar or Today may be open, showing payments.
+                root.refresh-calendar();
+            }
             editing: root.tx-editing;
             tx-id: root.tx-edit-id;
             tx-kind: root.tx-edit-kind;
@@ -484,6 +533,13 @@ export component AppWindow inherits Window {
         }
 
         scheduled-creator := ScheduledCreator {
+            saved => {
+                if root.finance-notice != "" {
+                    quick.notify(root.finance-notice);
+                }
+                // From the floating button the Calendar or Today may be open, showing payments.
+                root.refresh-calendar();
+            }
             editing: root.scheduled-editing;
             due: root.scheduled-edit;
             x: (root.width - self.width) / 2;
@@ -776,27 +832,10 @@ export component AppWindow inherits Window {
                         main-currency-editor.show();
                     }
                     new-transaction => {
-                        root.tx-editing = false;
-                        root.tx-edit-id = 0;
-                        root.tx-edit-kind = TxKind.expense;
-                        root.tx-edit-transfer = false;
-                        root.tx-edit-account = FinanceStore.accounts[0].id;
-                        root.tx-edit-to-account = FinanceStore.accounts.length > 1 ? FinanceStore.accounts[1].id : FinanceStore.accounts[0].id;
-                        root.tx-edit-has-category = false;
-                        root.tx-edit-category = 0;
-                        root.tx-edit-amount = "";
-                        root.tx-edit-from-currency = FinanceStore.accounts[0].currency;
-                        root.tx-edit-to-currency = FinanceStore.accounts.length > 1 ? FinanceStore.accounts[1].currency : FinanceStore.accounts[0].currency;
-                        root.tx-edit-to-amount = "";
-                        root.tx-edit-amount-label = "";
-                        root.tx-edit-date = Calendar.today();
-                        root.tx-edit-description = "";
-                        root.tx-edit-restorable = false;
-                        root.tx-edit-installment-number = 0;
-                        root.tx-edit-installment-total = 0;
-                        transaction-creator.show();
+                        root.open-new-transaction("");
                     }
                     edit-transaction(t) => {
+                        root.finance-notice = "";
                         root.tx-editing = true;
                         root.tx-edit-id = t.id;
                         root.tx-edit-kind = t.kind;
@@ -818,16 +857,16 @@ export component AppWindow inherits Window {
                         transaction-creator.show();
                     }
                     new-scheduled => {
-                        root.scheduled-editing = false;
-                        root.scheduled-edit = NewScheduled.row(FinanceStore.accounts[0].id, FinanceStore.accounts[0].currency, Calendar.today());
-                        scheduled-creator.show();
+                        root.open-new-scheduled("");
                     }
                     edit-scheduled(d) => {
+                        root.finance-notice = "";
                         root.scheduled-editing = true;
                         root.scheduled-edit = d;
                         scheduled-creator.show();
                     }
                     pay-bill(b) => {
+                        root.finance-notice = "";
                         root.tx-editing = false;
                         root.tx-edit-id = 0;
                         root.tx-edit-kind = TxKind.expense;
@@ -916,6 +955,7 @@ export component AppWindow inherits Window {
                     }
                     day-habits: root.day-habits;
                     habits-done: root.habits-done;
+                    day-payments: root.day-payments;
                     set-habit-done(id, done) => {
                         root.set-day-habit-done(id, done);
                     }
@@ -991,7 +1031,7 @@ export component AppWindow inherits Window {
         create(title) => {
             let error = root.quick-create-task(title);
             if error == "" {
-                quick.notify();
+                quick.notify(@tr("Task added to Inbox"));
             }
             return error;
         }
@@ -1015,6 +1055,16 @@ export component AppWindow inherits Window {
         }
         new-habit => {
             root.open-new-habit();
+        }
+        finance-ready: FinanceStore.has-currency && FinanceStore.accounts.length > 0;
+        opening => {
+            FinanceStore.prepare-forms();
+        }
+        new-movement => {
+            root.open-new-transaction(@tr("Movement saved"));
+        }
+        new-scheduled => {
+            root.open-new-scheduled(@tr("Payment scheduled"));
         }
     }
 }

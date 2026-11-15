@@ -10,14 +10,15 @@ use std::time::Duration;
 use open_productivity_core::calendar;
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
+use open_productivity_core::finances::{self, Currency, Payment, TxKind};
 use open_productivity_core::recurrence::Frequency;
 use open_productivity_core::tasks::{self, DueLabel, Priority, Task, TaskError, TaskId, View};
 use slint::{ComponentHandle, ModelRc, SharedString, Timer, TimerMode, VecModel};
 
 use crate::dates::{core_date, ui_date};
 use crate::{
-    AppWindow, Date, DueKind, KanbanColumn, ListEntry, Quadrant, Repeat, Strings, TaskRow,
-    TaskView, TasksTab, WeekDay, calendar_view, habits, kanban, lists, matrix, week,
+    AppWindow, Date, DayPayment, DueKind, KanbanColumn, ListEntry, Quadrant, Repeat, Strings,
+    TaskRow, TaskView, TasksTab, WeekDay, calendar_view, habits, kanban, lists, matrix, week,
 };
 
 pub struct State {
@@ -146,6 +147,39 @@ pub fn show_today(w: &AppWindow, today: NaiveDate) {
     w.set_today_weekday(today.weekday().num_days_from_monday() as i32);
 }
 
+/// A payment's amount as Finances shows it: signed, and with its code unless in the main currency.
+pub fn payment_amount(p: &Payment, main: Option<&Currency>) -> String {
+    let signed = match p.kind {
+        TxKind::Expense => -p.amount,
+        TxKind::Income => p.amount,
+    };
+    finances::format_in(
+        signed,
+        p.currency,
+        main.unwrap_or(p.currency),
+        crate::finances::style(),
+    )
+}
+
+/// Publishes today's payments and the overdue ones for the Today tab of Tasks.
+pub fn load_today_payments(w: &AppWindow, conn: &Connection) -> Result<(), String> {
+    let today = Local::now().date_naive();
+    let main = finances::main_currency(conn).map_err(|e| e.to_string())?;
+    let rows = finances::payments_due(conn, today)
+        .map_err(|e| e.to_string())?
+        .into_iter()
+        .map(|p| DayPayment {
+            amount: payment_amount(&p, main).into(),
+            description: p.description.into(),
+            bill: p.bill,
+            overdue: p.overdue,
+            date: ui_date(p.date),
+        })
+        .collect::<Vec<_>>();
+    w.set_day_payments(ModelRc::new(VecModel::from(rows)));
+    Ok(())
+}
+
 impl State {
     /// Shows a ready message in the tasks error line.
     pub fn show_message(&self, msg: SharedString) {
@@ -189,6 +223,7 @@ impl State {
             w.set_done_count(done_count);
             if self.tab.get() == TasksTab::Today {
                 habits::load_today(&w, &self.conn)?;
+                load_today_payments(&w, &self.conn)?;
             }
         }
         self.reload_panel()

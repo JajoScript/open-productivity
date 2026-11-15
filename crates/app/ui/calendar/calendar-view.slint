@@ -10,14 +10,15 @@ import { DragBoard } from "../tasks/drag-board.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
 import { CalendarTask, TaskChip } from "task-chip.slint";
 import { CalendarHabit } from "habit-row.slint";
+import { CalendarPayment } from "payment-row.slint";
 import { CalendarCell, CalendarDay } from "calendar-cell.slint";
 import { WeekBlock, WeekColumn, WeekGrid } from "week-grid.slint";
 
-export { CalendarDay, CalendarHabit, CalendarTask, WeekBlock, WeekColumn }
+export { CalendarDay, CalendarHabit, CalendarPayment, CalendarTask, WeekBlock, WeekColumn }
 
 export enum CalendarMode { month, week, day }
 
-export enum CalendarSource { tasks, habits }
+export enum CalendarSource { tasks, habits, payments }
 
 // One checkbox of the "Calendars" section.
 export struct CalendarEntry {
@@ -103,7 +104,7 @@ export component CalendarView inherits DragBoard {
     property <bool> show-panel: root.width >= 800px;
 
     pure function source-name(s: CalendarSource) -> string {
-        return s == CalendarSource.tasks ? @tr("Tasks") : @tr("Habits");
+        return s == CalendarSource.tasks ? @tr("Tasks") : s == CalendarSource.habits ? @tr("Habits") : @tr("Payments");
     }
 
     HorizontalLayout {

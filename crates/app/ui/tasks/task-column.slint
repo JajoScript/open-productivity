@@ -24,6 +24,16 @@ export struct DayHabit {
     done: bool,
 }
 
+// A pending payment of Finances due today or overdue; Today only shows it.
+export struct DayPayment {
+    description: string,
+    // Already formatted, with its currency.
+    amount: string,
+    bill: bool,
+    overdue: bool,
+    date: Date,
+}
+
 // The tasks of one view: title, the button that opens the creator, and the rows.
 export component TaskColumn inherits VerticalLayout {
     in property <TaskView> view;
@@ -51,6 +61,8 @@ export component TaskColumn inherits VerticalLayout {
     in property <[DayHabit]> day-habits;
     in property <int> habits-done;
     callback set-habit-done(int, bool);
+    // Today's payments and the overdue ones; only the Today tab passes any.
+    in property <[DayPayment]> day-payments;
 
     // The task the editor shows; set before it opens.
     property <TaskRow> editing;
@@ -80,7 +92,7 @@ export component TaskColumn inherits VerticalLayout {
         }
 
         // Beside the habits, the section labels already carry the count.
-        if root.day-habits.length == 0: Text {
+        if root.day-habits.length == 0 && root.day-payments.length == 0: Text {
             text: @tr("{n} pending" | "{n} pending" % root.pending-count);
             color: Theme.muted;
             vertical-alignment: center;
@@ -194,6 +206,54 @@ export component TaskColumn inherits VerticalLayout {
         }
     }
 
+    if root.day-payments.length > 0: VerticalLayout {
+        spacing: 2px;
+        Text {
+            text: @tr("PAYMENTS · {}", root.day-payments.length);
+            font-size: 12px;
+            font-weight: 600;
+            color: Theme.muted;
+        }
+
+        for pay in root.day-payments: Rectangle {
+            height: 40px;
+            border-radius: 6px;
+            HorizontalLayout {
+                padding-left: 10px;
+                padding-right: 10px;
+                spacing: 8px;
+                Image {
+                    source: pay.bill ? @image-url("../icons/credit-card.svg") : @image-url("../icons/wallet.svg");
+                    colorize: Theme.muted;
+                    width: 16px;
+                    y: (parent.height - self.height) / 2;
+                    height: 16px;
+                }
+
+                Text {
+                    text: pay.description;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    horizontal-stretch: 1;
+                    color: Palette.foreground;
+                }
+
+                Text {
+                    text: Strings.date(pay.date.day, pay.date.month, pay.date.year);
+                    visible: pay.overdue;
+                    vertical-alignment: center;
+                    color: Theme.critical;
+                }
+
+                Text {
+                    text: pay.amount;
+                    vertical-alignment: center;
+                    color: Theme.muted;
+                }
+            }
+        }
+    }
+
     editor := TaskEditor {
         // Fixed spot under the title, so it never runs off the bottom for low rows.
         x: (root.width - self.width) / 2;
@@ -223,7 +283,7 @@ export component TaskColumn inherits VerticalLayout {
     }
 
     // Only beside the habits: alone under the view's title it would say the same thing twice.
-    if root.day-habits.length > 0: Text {
+    if root.day-habits.length > 0 || root.day-payments.length > 0: Text {
         text: Strings.tasks-today(root.done-count, root.tasks.length);
         font-size: 12px;
         font-weight: 600;

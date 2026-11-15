@@ -12,22 +12,24 @@ use open_productivity_core::agenda;
 use open_productivity_core::calendar;
 use open_productivity_core::chrono::{Datelike, Local, NaiveDate};
 use open_productivity_core::db::Connection;
+use open_productivity_core::finances::{self, Currency, Payment};
 use open_productivity_core::habits::DayHabit;
 use open_productivity_core::settings::{self, CalendarSource as CoreSource, Settings};
 use open_productivity_core::tasks::{self, Task, TaskError, TaskId};
 use slint::{ComponentHandle, ModelRc, Timer, TimerMode, VecModel};
 
 use crate::dates::{core_date, ui_date};
-use crate::tasks::{State, task_message, ui_id};
+use crate::tasks::{State, load_today_payments, payment_amount, task_message, ui_id};
 use crate::{
-    AppWindow, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarSource,
-    CalendarTask, Date, Strings, WeekBlock, WeekColumn,
+    AppWindow, CalendarDay, CalendarEntry, CalendarHabit, CalendarMode, CalendarPayment,
+    CalendarSource, CalendarTask, Date, Strings, WeekBlock, WeekColumn,
 };
 
 fn source_to_ui(s: CoreSource) -> CalendarSource {
     match s {
         CoreSource::Tasks => CalendarSource::Tasks,
         CoreSource::Habits => CalendarSource::Habits,
+        CoreSource::Payments => CalendarSource::Payments,
     }
 }
 
@@ -35,6 +37,7 @@ fn source_from_ui(s: CalendarSource) -> CoreSource {
     match s {
         CalendarSource::Tasks => CoreSource::Tasks,
         CalendarSource::Habits => CoreSource::Habits,
+        CalendarSource::Payments => CoreSource::Payments,
     }
 }
 
@@ -73,7 +76,23 @@ fn habit_rows(habits: Vec<DayHabit>) -> Result<ModelRc<CalendarHabit>, String> {
     Ok(ModelRc::new(VecModel::from(rows)))
 }
 
-fn week_columns(days: Vec<agenda::WeekDay>) -> Result<ModelRc<WeekColumn>, String> {
+fn payment_rows(payments: Vec<Payment>, main: Option<&Currency>) -> ModelRc<CalendarPayment> {
+    let rows = payments
+        .into_iter()
+        .map(|p| CalendarPayment {
+            amount: payment_amount(&p, main).into(),
+            description: p.description.into(),
+            bill: p.bill,
+            overdue: p.overdue,
+        })
+        .collect::<Vec<_>>();
+    ModelRc::new(VecModel::from(rows))
+}
+
+fn week_columns(
+    days: Vec<agenda::WeekDay>,
+    main: Option<&Currency>,
+) -> Result<ModelRc<WeekColumn>, String> {
     let cols = days
         .into_iter()
         .map(|d| {
@@ -96,6 +115,7 @@ fn week_columns(days: Vec<agenda::WeekDay>) -> Result<ModelRc<WeekColumn>, Strin
                 today: d.today,
                 untimed: rows(d.untimed)?,
                 habits: habit_rows(d.habits)?,
+                payments: payment_rows(d.payments, main),
                 blocks: ModelRc::new(VecModel::from(blocks)),
             })
         })
@@ -116,6 +136,7 @@ fn load(
 ) -> Result<(), String> {
     let today = Local::now().date_naive();
     let backlog = agenda::backlog(conn, today).map_err(|e| e.to_string())?;
+    let main = finances::main_currency(conn).map_err(|e| e.to_string())?;
     if mode != CalendarMode::Month {
         let days = match mode {
             CalendarMode::Day => agenda::day(conn, anchor, today),
@@ -123,7 +144,7 @@ fn load(
         };
         let mut days = days.map_err(|e| e.to_string())?;
         agenda::filter_week(&mut days, shown);
-        w.set_calendar_week(week_columns(days)?);
+        w.set_calendar_week(week_columns(days, main)?);
     } else {
         let mut weeks =
             agenda::month(conn, calendar::month_start(anchor), today).map_err(|e| e.to_string())?;
@@ -142,6 +163,7 @@ fn load(
                             habits_done: d.habits_done() as i32,
                             habits_total: d.habits.len() as i32,
                             tasks: rows(d.tasks)?,
+                            payments: payment_rows(d.payments, main),
                         })
                     })
                     .collect::<Result<Vec<_>, String>>()?;
@@ -196,10 +218,18 @@ pub fn init(window: &AppWindow, state: &Rc<State>, app_dir: &Path) -> Timer {
         move || reload()
     }));
 
-    // Habits are marked or created in their own view; the calendar only reads them.
+    // Habits and payments are managed in their own views; the calendar only reads them.
     window.on_refresh_calendar({
-        let reload = reload.clone();
-        move || reload()
+        let (reload, conn, weak) = (reload.clone(), state.conn.clone(), window.as_weak());
+        move || {
+            reload();
+            // Payments are paid or planned in Finances; Today reads them again too.
+            if let Some(w) = weak.upgrade()
+                && let Err(e) = load_today_payments(&w, &conn)
+            {
+                w.set_tasks_error(w.global::<Strings>().invoke_task_failed(e.into()));
+            }
+        }
     });
 
     window.on_calendar_set_source({

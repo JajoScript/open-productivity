@@ -5,12 +5,12 @@ import { Date, Palette } from "std-widgets.slint";
 import { ListEntry } from "../list-entry.slint";
 import { Theme } from "../theme.slint";
 import { ListsPanel, ViewCounts } from "lists-panel.slint";
-import { DayHabit, DueKind, TaskColumn, TaskRow, TaskView } from "task-column.slint";
+import { DayHabit, DayPayment, DueKind, TaskColumn, TaskRow, TaskView } from "task-column.slint";
 import { Repeat } from "task-editor.slint";
 import { WeekDay, WeekView } from "week-view.slint";
 import { KanbanColumn, KanbanView, Stage } from "kanban-view.slint";
 import { MatrixView, Quadrant } from "matrix-view.slint";
-export { DayHabit, DueKind, KanbanColumn, Quadrant, Repeat, Stage, TaskRow, TaskView, ViewCounts, WeekDay }
+export { DayHabit, DayPayment, DueKind, KanbanColumn, Quadrant, Repeat, Stage, TaskRow, TaskView, ViewCounts, WeekDay }
 
 // One per tab of the Tasks module.
 export enum TasksTab { today, week, lists, kanban, eisenhower }
@@ -96,6 +96,7 @@ export component TasksView inherits VerticalLayout {
     in property <[DayHabit]> day-habits;
     in property <int> habits-done;
     callback set-habit-done(int, bool);
+    in property <[DayPayment]> day-payments;
     // Tells the app which tab is open, so it loads only what that tab shows.
     callback select-tab(TasksTab);
     in property <[WeekDay]> week-days;
@@ -305,6 +306,7 @@ export component TasksView inherits VerticalLayout {
                 }
                 day-habits: root.tab == TasksTab.today ? root.day-habits : [];
                 habits-done: root.habits-done;
+                day-payments: root.tab == TasksTab.today ? root.day-payments : [];
                 set-habit-done(id, done) => {
                     root.set-habit-done(id, done);
                 }

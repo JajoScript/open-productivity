@@ -1,0 +1,54 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette } from "std-widgets.slint";
+import { Theme } from "../theme.slint";
+
+// A pending payment of Finances due on a day; the calendar only shows it.
+export struct CalendarPayment {
+    description: string,
+    // Already formatted, with its currency.
+    amount: string,
+    // A card's bill instead of a scheduled payment.
+    bill: bool,
+    overdue: bool,
+}
+
+// One payment in a day. It has no input handling, so a press falls through to the day beneath it.
+export component PaymentLine inherits Rectangle {
+    in property <CalendarPayment> payment;
+    in property <color> ink: Palette.foreground;
+
+    accessible-role: text;
+    accessible-label: root.payment.overdue ? @tr("{0}, {1}, overdue", root.payment.description, root.payment.amount) : @tr("{0}, {1}", root.payment.description, root.payment.amount);
+
+    HorizontalLayout {
+        padding-left: 2px;
+        spacing: 4px;
+        Image {
+            source: root.payment.bill ? @image-url("../icons/credit-card.svg") : @image-url("../icons/wallet.svg");
+            colorize: Theme.muted;
+            width: 12px;
+            y: (parent.height - self.height) / 2;
+            height: 12px;
+        }
+
+        Text {
+            text: root.payment.description;
+            font-size: 12px;
+            overflow: elide;
+            vertical-alignment: center;
+            horizontal-stretch: 1;
+            color: root.ink;
+            accessible-role: none;
+        }
+
+        Text {
+            text: root.payment.amount;
+            font-size: 12px;
+            vertical-alignment: center;
+            color: root.payment.overdue ? Theme.critical : Theme.muted;
+            accessible-role: none;
+        }
+    }
+}

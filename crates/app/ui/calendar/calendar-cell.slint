@@ -6,6 +6,7 @@ import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
 import { CalendarTask, TaskChip } from "task-chip.slint";
 import { HabitLine } from "habit-row.slint";
+import { CalendarPayment, PaymentLine } from "payment-row.slint";
 
 // One cell of the month grid: the day and the tasks due on it.
 export struct CalendarDay {
@@ -15,6 +16,8 @@ export struct CalendarDay {
     in-month: bool,
     today: bool,
     tasks: [CalendarTask],
+    // The pending payments due that day; rows after the tasks.
+    payments: [CalendarPayment],
     // The habits that apply that day and those done; one summary row after the tasks.
     habits-done: int,
     habits-total: int,
@@ -31,12 +34,13 @@ export component CalendarCell inherits Rectangle {
 
     property <length> row-h: 20px;
     // Rows that fit under the day number. The habit summary keeps its row unless a single row is
-    // left and there are tasks; when the tasks do not fit, the last of theirs is "+N".
+    // left and there are tasks or payments; when those do not fit, the last of theirs is "+N".
     property <int> fit: max(1, Math.floor((root.height - 38px) / root.row-h));
-    property <bool> summary: root.cell.habits-total > 0 && (root.fit > 1 || root.cell.tasks.length == 0);
+    property <int> total: root.cell.tasks.length + root.cell.payments.length;
+    property <bool> summary: root.cell.habits-total > 0 && (root.fit > 1 || root.total == 0);
     property <int> room: root.summary ? root.fit - 1 : root.fit;
-    property <bool> overflow: root.cell.tasks.length > root.room;
-    property <int> shown: root.overflow ? root.room - 1 : root.cell.tasks.length;
+    property <bool> overflow: root.total > root.room;
+    property <int> shown: root.overflow ? root.room - 1 : root.total;
 
     // Equal cells whatever their content.
     preferred-width: 0px;
@@ -109,6 +113,16 @@ export component CalendarCell inherits Rectangle {
             }
         }
 
+        for pay[j] in root.cell.payments: PaymentLine {
+            visible: root.cell.tasks.length + j < root.shown;
+            x: 6px;
+            y: 32px + (root.cell.tasks.length + j) * root.row-h;
+            width: parent.width - 12px;
+            height: root.row-h;
+            payment: pay;
+            ink: root.cell.in-month ? Palette.foreground : Theme.muted;
+        }
+
         if root.summary: HabitLine {
             x: 6px;
             y: 32px + (root.shown + (root.overflow ? 1 : 0)) * root.row-h;
@@ -126,7 +140,7 @@ export component CalendarCell inherits Rectangle {
             y: 32px + root.shown * root.row-h;
             width: parent.width - 12px;
             height: root.row-h;
-            text: Strings.more-tasks(root.cell.tasks.length - root.shown);
+            text: Strings.more-tasks(root.total - root.shown);
             font-size: 12px;
             color: Theme.muted;
             overflow: elide;
