@@ -119,7 +119,8 @@ pub fn parse_amount(text: &str, c: &Currency) -> Option<i64> {
     let (int_part, frac) = match text.rfind(['.', ',']) {
         Some(i) => {
             let tail = &text[i + 1..];
-            if tail.len() == 3 {
+            // As in `parse_rate`, a leading 0 is never grouped: `0,125` is not 125.
+            if tail.len() == 3 && &text[..i] != "0" {
                 (text, "")
             } else if c.decimals > 0 && (1..=2).contains(&tail.len()) {
                 let int_part = &text[..i];
@@ -326,6 +327,8 @@ mod tests {
             ("30,50", None),
             ("30.50", None),
             ("1.2.3", None),
+            ("0,125", None),
+            ("0.500", None),
         ] {
             assert_eq!(parse_amount(t, clp()), v, "{t}");
         }
@@ -343,6 +346,11 @@ mod tests {
             ("17,062.05", Some(1706205)),
             ("1.000.000,5", Some(100000050)),
             ("30,5055", None),
+            ("0,125", None),
+            ("0.500", None),
+            ("0,50", Some(50)),
+            ("1.234,56", Some(123456)),
+            ("12,345", Some(1234500)),
             ("1.2.3", None),
             ("1.234.56.78", None),
             ("1,234,56", None),
