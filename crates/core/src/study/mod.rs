@@ -224,6 +224,9 @@ pub fn delete_session(conn: &Connection, id: SessionId) -> Result<(), StudyError
     Ok(())
 }
 
+/// Most minutes one session can hold: a whole day.
+pub const MAX_MINUTES: i64 = 24 * 60;
+
 /// A positive whole number typed in a text field; surrounding spaces are ignored.
 pub fn parse_minutes(text: &str) -> Result<i64, StudyError> {
     let text = text.trim();
@@ -248,7 +251,7 @@ pub fn log_manual_session(
     topic: Option<TaskId>,
     today: NaiveDate,
 ) -> Result<(), StudyError> {
-    if minutes <= 0 {
+    if !(1..=MAX_MINUTES).contains(&minutes) {
         return Err(StudyError::BadMinutes);
     }
     if date > today {

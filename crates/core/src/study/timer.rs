@@ -7,7 +7,7 @@ use chrono::{DateTime, FixedOffset, SecondsFormat, Utc};
 use rusqlite::{Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 
-use super::{StudyError, SubjectId, log_manual_session, rejection};
+use super::{StudyError, SubjectId, rejection};
 use crate::tasks::TaskId;
 
 /// A gap since the last banked instant longer than this (app closed, PC asleep) is not studied time.
@@ -324,17 +324,15 @@ pub fn finish_session(conn: &Connection, now: DateTime<FixedOffset>) -> Result<i
     if minutes < 1 {
         return Err(StudyError::TooShort);
     }
-    let day = started_on
+    let day: chrono::NaiveDate = started_on
         .parse()
         .map_err(|_| StudyError::BadDate(started_on))?;
-    log_manual_session(
-        &tx,
-        SubjectId(subject),
-        day,
-        minutes,
-        "",
-        topic.map(TaskId),
-        day,
+    // Time already studied is kept even if the topic got done or the subject archived meanwhile,
+    // so no manual-log rules here; the foreign keys guarantee subject and topic exist.
+    tx.execute(
+        "INSERT INTO study_session (subject_id, date, focus_minutes, description, topic_id)
+         VALUES (?1, ?2, ?3, '', ?4)",
+        (subject, day.to_string(), minutes, topic),
     )?;
     tx.execute("DELETE FROM study_active", [])?;
     tx.commit()?;

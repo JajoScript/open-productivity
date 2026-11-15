@@ -50,6 +50,12 @@ fn manual_session_validations() {
         ));
     }
     assert!(matches!(
+        log_manual_session(&conn, s, today, MAX_MINUTES + 1, "", None, today),
+        Err(StudyError::BadMinutes)
+    ));
+    log_manual_session(&conn, s, today, MAX_MINUTES, "", None, today).unwrap();
+    conn.execute("DELETE FROM study_session", []).unwrap();
+    assert!(matches!(
         log_manual_session(&conn, s, day("2026-11-09"), 10, "", None, today),
         Err(StudyError::FutureDate)
     ));
@@ -591,21 +597,32 @@ mod timer {
         crate::tasks::set_done(&conn, topic, true, day("2026-11-08")).unwrap();
         heartbeat(&conn, at("2026-11-08T10:01:00Z")).unwrap();
         heartbeat(&conn, at("2026-11-08T10:02:00Z")).unwrap();
-        assert!(matches!(
-            finish_session(&conn, at("2026-11-08T10:02:00Z")),
-            Err(StudyError::TopicNotFound)
-        ));
-        assert_eq!(elapsed(&conn, "2026-11-08T10:02:00Z"), 120);
-        assert!(list_sessions(&conn, s).unwrap().is_empty());
-        set_subject_archived(&conn, s, true).unwrap();
-        assert!(matches!(
-            finish_session(&conn, at("2026-11-08T10:02:00Z")),
-            Err(StudyError::TopicNotFound | StudyError::SubjectArchived)
-        ));
+        // A topic done meanwhile does not lose the minutes.
+        assert_eq!(
+            finish_session(&conn, at("2026-11-08T10:02:00Z")).unwrap(),
+            2
+        );
+        assert_eq!(list_sessions(&conn, s).unwrap().len(), 1);
         assert!(
             active_session(&conn, at("2026-11-08T10:02:00Z"))
                 .unwrap()
-                .is_some()
+                .is_none()
+        );
+        // Neither does an archived subject.
+        start_session(&conn, s, None, at("2026-11-08T11:00:00Z"), None).unwrap();
+        set_subject_archived(&conn, s, true).unwrap();
+        heartbeat(&conn, at("2026-11-08T11:01:00Z")).unwrap();
+        heartbeat(&conn, at("2026-11-08T11:02:00Z")).unwrap();
+        heartbeat(&conn, at("2026-11-08T11:03:00Z")).unwrap();
+        assert_eq!(
+            finish_session(&conn, at("2026-11-08T11:03:00Z")).unwrap(),
+            3
+        );
+        assert_eq!(list_sessions(&conn, s).unwrap().len(), 2);
+        assert!(
+            active_session(&conn, at("2026-11-08T11:03:00Z"))
+                .unwrap()
+                .is_none()
         );
     }
 

@@ -759,8 +759,8 @@ msgstr "Ponle un nombre a la materia."
 msgid "Give the topic a title."
 msgstr "Ponle un título al tema."
 
-msgid "Enter the minutes as a whole number, like 45."
-msgstr "Escribe los minutos como un número entero, por ejemplo 45."
+msgid "Enter the minutes as a whole number from 1 to 1440, like 45."
+msgstr "Escribe los minutos como un número entero de 1 a 1440, por ejemplo 45."
 
 msgid "The date can't be in the future."
 msgstr "La fecha no puede ser futura."
