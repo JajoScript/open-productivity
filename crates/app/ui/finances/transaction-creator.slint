@@ -1,16 +1,17 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Date, Palette, ScrollView } from "std-widgets.slint";
+import { Date, Palette } from "std-widgets.slint";
 import { InkCheck } from "../ink-check.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkDatePopup } from "../ink-date-popup.slint";
 import { InkField } from "../ink-field.slint";
+import { InkFieldButton } from "../ink-field-button.slint";
+import { InkOption, InkSelect } from "../ink-select.slint";
+import { FormField } from "../form-field.slint";
 import { PopupSurface } from "../popup-surface.slint";
-import { SettingsTab } from "../settings/settings-tab.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
-import { ChoiceRow } from "../study/session-logger.slint";
 import { Theme } from "../theme.slint";
 import { FinanceStore } from "finance-store.slint";
 import { TxKind } from "transaction-row.slint";
@@ -52,6 +53,10 @@ component CreatorBody inherits FocusScope {
 
     property <string> error;
     property <bool> restore;
+    // What the selects show for the chosen ids.
+    property <string> account-name;
+    property <string> to-account-name;
+    property <string> category-name;
 
     capture-key-pressed(event) => {
         if event.text == Key.Escape {
@@ -73,24 +78,6 @@ component CreatorBody inherits FocusScope {
         root.kind = kind;
     }
 
-    // Arrow keys move the choice, like the tabs they are drawn as.
-    function step(delta: int) {
-        if delta > 0 {
-            if root.transfer {
-                return;
-            }
-            if root.kind == TxKind.income {
-                root.transfer = true;
-            } else {
-                root.set-kind(TxKind.income);
-            }
-        } else if root.transfer {
-            root.set-kind(TxKind.income);
-        } else {
-            root.set-kind(TxKind.expense);
-        }
-    }
-
     VerticalLayout {
         padding: 16px;
         spacing: 12px;
@@ -101,69 +88,76 @@ component CreatorBody inherits FocusScope {
         }
 
         HorizontalLayout {
-            spacing: 0px;
-            alignment: start;
-            accessible-role: tab-list;
-            SettingsTab {
-                text: Strings.tx-kind(TxKind.expense);
-                selected: !root.transfer && root.kind == TxKind.expense;
-                chosen => {
-                    root.set-kind(TxKind.expense);
-                }
-                step(d) => {
-                    root.step(d);
+            spacing: 12px;
+            FormField {
+                label: @tr("Type");
+                InkSelect {
+                    label: @tr("Type");
+                    text: root.transfer ? Strings.transfer : Strings.tx-kind(root.kind);
+                    InkOption {
+                        label: Strings.tx-kind(TxKind.expense);
+                        chosen: !root.transfer && root.kind == TxKind.expense;
+                        picked => {
+                            root.set-kind(TxKind.expense);
+                        }
+                    }
+
+                    InkOption {
+                        label: Strings.tx-kind(TxKind.income);
+                        chosen: !root.transfer && root.kind == TxKind.income;
+                        picked => {
+                            root.set-kind(TxKind.income);
+                        }
+                    }
+
+                    InkOption {
+                        label: Strings.transfer;
+                        chosen: root.transfer;
+                        picked => {
+                            root.transfer = true;
+                        }
+                    }
                 }
             }
 
-            SettingsTab {
-                text: Strings.tx-kind(TxKind.income);
-                selected: !root.transfer && root.kind == TxKind.income;
-                chosen => {
-                    root.set-kind(TxKind.income);
-                }
-                step(d) => {
-                    root.step(d);
-                }
-            }
-
-            SettingsTab {
-                text: Strings.transfer;
-                selected: root.transfer;
-                chosen => {
-                    root.transfer = true;
-                }
-                step(d) => {
-                    root.step(d);
+            FormField {
+                label: root.from-currency == "" ? @tr("Amount") : @tr("Amount ({})", root.from-currency);
+                InkField {
+                    text <=> root.amount;
+                    placeholder-text: @tr("Amount");
+                    init => {
+                        self.focus();
+                    }
+                    accepted(text) => {
+                        root.submit();
+                    }
                 }
             }
         }
 
-        Text {
-            text: root.transfer ? @tr("From account") : @tr("Account");
-            color: Theme.muted;
-        }
-
-        ScrollView {
-            height: min(from-list.preferred-height, 128px);
-            from-list := VerticalLayout {
-                for account in FinanceStore.accounts: ChoiceRow {
+        FormField {
+            label: root.transfer ? @tr("From account") : @tr("Account");
+            InkSelect {
+                label: root.transfer ? @tr("From account") : @tr("Account");
+                text: root.account-name;
+                for account in FinanceStore.accounts: InkOption {
                     label: account.name;
-                    icon: @image-url("../icons/wallet.svg");
                     chosen: account.id == root.account-id;
                     picked => {
                         root.account-id = account.id;
+                        root.account-name = account.name;
                         root.from-currency = account.currency;
                     }
                 }
 
                 // The archived account the movement already has stays pickable.
                 for account in FinanceStore.archived-accounts: VerticalLayout {
-                    if account.id == root.orig-account-id: ChoiceRow {
+                    if account.id == root.orig-account-id: InkOption {
                         label: Strings.archived-account(account.name);
-                        icon: @image-url("../icons/wallet.svg");
                         chosen: account.id == root.account-id;
                         picked => {
                             root.account-id = account.id;
+                            root.account-name = Strings.archived-account(account.name);
                             root.from-currency = account.currency;
                         }
                     }
@@ -171,32 +165,29 @@ component CreatorBody inherits FocusScope {
             }
         }
 
-        if root.transfer: Text {
-            text: @tr("To account");
-            color: Theme.muted;
-        }
-
-        if root.transfer: ScrollView {
-            height: min(to-list.preferred-height, 128px);
-            to-list := VerticalLayout {
-                for account in FinanceStore.accounts: ChoiceRow {
+        if root.transfer: FormField {
+            label: @tr("To account");
+            InkSelect {
+                label: @tr("To account");
+                text: root.to-account-name;
+                for account in FinanceStore.accounts: InkOption {
                     label: account.name;
-                    icon: @image-url("../icons/wallet.svg");
                     chosen: account.id == root.to-account-id;
                     picked => {
                         root.to-account-id = account.id;
+                        root.to-account-name = account.name;
                         root.to-currency = account.currency;
                     }
                 }
 
                 // The archived account the movement already has stays pickable.
                 for account in FinanceStore.archived-accounts: VerticalLayout {
-                    if account.id == root.orig-to-id: ChoiceRow {
+                    if account.id == root.orig-to-id: InkOption {
                         label: Strings.archived-account(account.name);
-                        icon: @image-url("../icons/wallet.svg");
                         chosen: account.id == root.to-account-id;
                         picked => {
                             root.to-account-id = account.id;
+                            root.to-account-name = Strings.archived-account(account.name);
                             root.to-currency = account.currency;
                         }
                     }
@@ -204,17 +195,24 @@ component CreatorBody inherits FocusScope {
             }
         }
 
-        if !root.transfer: Text {
-            text: @tr("Category");
-            color: Theme.muted;
+        if root.transfer && root.to-currency != "" && root.to-currency != root.from-currency: FormField {
+            label: @tr("Amount that arrives ({})", root.to-currency);
+            InkField {
+                text <=> root.to-amount;
+                placeholder-text: @tr("Amount that arrives");
+                accepted(text) => {
+                    root.submit();
+                }
+            }
         }
 
-        if !root.transfer: ScrollView {
-            height: 128px;
-            VerticalLayout {
-                ChoiceRow {
+        if !root.transfer: FormField {
+            label: @tr("Category");
+            InkSelect {
+                label: @tr("Category");
+                text: root.has-category ? root.category-name : @tr("No category");
+                InkOption {
                     label: @tr("No category");
-                    icon: @image-url("../icons/x.svg");
                     chosen: !root.has-category;
                     picked => {
                         root.has-category = false;
@@ -223,90 +221,53 @@ component CreatorBody inherits FocusScope {
 
                 // Those of the kind, and the archived one the movement already has.
                 for c in FinanceStore.category-choices: VerticalLayout {
-                    if c.kind == root.kind && (!c.archived || (root.has-category && c.id == root.category-id)): ChoiceRow {
+                    if c.kind == root.kind && (!c.archived || (root.has-category && c.id == root.category-id)): InkOption {
                         label: c.archived ? Strings.archived-category(c.name) : c.name;
-                        icon: @image-url("../icons/tag.svg");
                         chosen: root.has-category && c.id == root.category-id;
                         picked => {
                             root.has-category = true;
                             root.category-id = c.id;
                             root.category-kind = c.kind;
+                            root.category-name = c.archived ? Strings.archived-category(c.name) : c.name;
                         }
                     }
                 }
             }
         }
 
-        HorizontalLayout {
-            spacing: 8px;
-            InkField {
-                text <=> root.amount;
-                placeholder-text: @tr("Amount");
-                init => {
-                    self.focus();
+        FormField {
+            label: @tr("Date");
+            Rectangle {
+                height: 36px;
+                picker := InkDatePopup {
+                    y: 38px;
+                    day: root.date.day;
+                    month: root.date.month;
+                    year: root.date.year;
+                    picked(date) => {
+                        root.date = date;
+                    }
                 }
+
+                InkFieldButton {
+                    label: @tr("Date");
+                    text: Strings.date(root.date.day, root.date.month, root.date.year);
+                    icon: @image-url("../icons/calendar.svg");
+                    clicked => {
+                        picker.show();
+                    }
+                }
+            }
+        }
+
+        FormField {
+            label: @tr("Description");
+            InkField {
+                text <=> root.description;
+                placeholder-text: @tr("Optional");
                 accepted(text) => {
                     root.submit();
                 }
-            }
-
-            Text {
-                text: root.from-currency;
-                color: Theme.muted;
-                vertical-alignment: center;
-            }
-        }
-
-        if root.transfer && root.to-currency != "" && root.to-currency != root.from-currency: HorizontalLayout {
-            spacing: 8px;
-            InkField {
-                text <=> root.to-amount;
-                placeholder-text: @tr("Amount that arrives");
-                accepted(text) => {
-                    root.submit();
-                }
-            }
-
-            Text {
-                text: root.to-currency;
-                color: Theme.muted;
-                vertical-alignment: center;
-            }
-        }
-
-        Text {
-            text: @tr("Date");
-            color: Theme.muted;
-        }
-
-        HorizontalLayout {
-            height: 36px;
-            alignment: start;
-            picker := InkDatePopup {
-                y: 36px;
-                day: root.date.day;
-                month: root.date.month;
-                year: root.date.year;
-                picked(date) => {
-                    root.date = date;
-                }
-            }
-
-            SubtleButton {
-                text: Strings.date(root.date.day, root.date.month, root.date.year);
-                icon: @image-url("../icons/calendar.svg");
-                color: Palette.foreground;
-                clicked => {
-                    picker.show();
-                }
-            }
-        }
-
-        InkField {
-            text <=> root.description;
-            placeholder-text: @tr("Description (optional)");
-            accepted(text) => {
-                root.submit();
             }
         }
 
@@ -343,6 +304,43 @@ component CreatorBody inherits FocusScope {
                 clicked => {
                     root.submit();
                 }
+            }
+        }
+    }
+
+    // The opener gives ids; these fill in the names the selects show, once, when the form is built.
+    for account in FinanceStore.accounts: Rectangle {
+        width: 0px;
+        height: 0px;
+        init => {
+            if account.id == root.account-id {
+                root.account-name = account.name;
+            }
+            if account.id == root.to-account-id {
+                root.to-account-name = account.name;
+            }
+        }
+    }
+
+    for account in FinanceStore.archived-accounts: Rectangle {
+        width: 0px;
+        height: 0px;
+        init => {
+            if account.id == root.account-id {
+                root.account-name = Strings.archived-account(account.name);
+            }
+            if account.id == root.to-account-id {
+                root.to-account-name = Strings.archived-account(account.name);
+            }
+        }
+    }
+
+    for c in FinanceStore.category-choices: Rectangle {
+        width: 0px;
+        height: 0px;
+        init => {
+            if root.has-category && c.id == root.category-id {
+                root.category-name = c.archived ? Strings.archived-category(c.name) : c.name;
             }
         }
     }
@@ -429,7 +427,7 @@ export component TransactionCreator inherits PopupWindow {
     in property <int> tx-installment-total;
 
     close-policy: close-on-click-outside;
-    width: 400px;
+    width: 440px;
 
     PopupSurface {
         CreatorBody {

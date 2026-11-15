@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Palette, ScrollView } from "std-widgets.slint";
+import { Palette } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkField } from "../ink-field.slint";
+import { InkOption, InkSelect } from "../ink-select.slint";
+import { FormField } from "../form-field.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
-import { ChoiceRow } from "../study/session-logger.slint";
 import { AccountKind } from "account-row.slint";
 import { FinanceStore } from "finance-store.slint";
 
@@ -42,6 +43,8 @@ component CreatorBody inherits FocusScope {
     callback cancel;
 
     property <string> error;
+    // What the select shows for the chosen currency.
+    property <string> currency-label;
     // A card stays a card and an account stays an account, so the other kinds are not offered.
     // Credit kinds are picked in their own row when creating, so the plain kinds fit in one row.
     property <bool> credit: root.kind == AccountKind.credit || root.kind == AccountKind.credit-line;
@@ -74,14 +77,17 @@ component CreatorBody inherits FocusScope {
             font-weight: 700;
         }
 
-        InkField {
-            text <=> root.name;
-            placeholder-text: @tr("Account name");
-            init => {
-                self.focus();
-            }
-            accepted(text) => {
-                root.submit();
+        FormField {
+            label: @tr("Account name");
+            InkField {
+                text <=> root.name;
+                placeholder-text: @tr("Account name");
+                init => {
+                    self.focus();
+                }
+                accepted(text) => {
+                    root.submit();
+                }
             }
         }
 
@@ -130,47 +136,58 @@ component CreatorBody inherits FocusScope {
             }
         }
 
-        InkField {
-            text <=> root.bank;
-            placeholder-text: @tr("Bank (optional)");
-            accepted(text) => {
-                root.submit();
+        FormField {
+            label: @tr("Bank (optional)");
+            InkField {
+                text <=> root.bank;
+                placeholder-text: @tr("Optional");
+                accepted(text) => {
+                    root.submit();
+                }
             }
         }
 
-        Text {
-            text: @tr("Currency");
-            color: Theme.muted;
-        }
+        HorizontalLayout {
+            spacing: 12px;
+            FormField {
+                label: @tr("Currency");
+                if root.in-use: Text {
+                    text: root.currency;
+                    vertical-alignment: center;
+                    min-height: 36px;
+                    accessible-description: @tr("Movements use this account, so its currency can't be changed.");
+                }
 
-        if root.in-use: Text {
-            text: root.currency;
-            accessible-description: @tr("Movements use this account, so its currency can't be changed.");
-        }
+                if !root.in-use: InkSelect {
+                    label: @tr("Currency");
+                    text: root.currency-label;
+                    for c in FinanceStore.currencies: InkOption {
+                        label: c.code + " " + c.symbol;
+                        chosen: c.code == root.currency;
+                        picked => {
+                            root.currency = c.code;
+                            root.currency-label = c.code + " " + c.symbol;
+                            root.needs-rate = c.needs-rate;
+                        }
+                    }
+                }
+            }
 
-        if !root.in-use: ScrollView {
-            height: min(currency-list.preferred-height, 128px);
-            currency-list := VerticalLayout {
-                for c in FinanceStore.currencies: ChoiceRow {
-                    label: c.code + " " + c.symbol;
-                    icon: @image-url("../icons/wallet.svg");
-                    chosen: c.code == root.currency;
-                    picked => {
-                        root.currency = c.code;
-                        root.needs-rate = c.needs-rate;
+            if root.kind != AccountKind.credit: FormField {
+                label: @tr("Initial balance");
+                InkField {
+                    text <=> root.balance;
+                    placeholder-text: @tr("Initial balance");
+                    accepted(text) => {
+                        root.submit();
                     }
                 }
             }
         }
 
         // Asked only the first time a currency is used.
-        if root.needs-rate: HorizontalLayout {
-            spacing: 8px;
-            Text {
-                text: Strings.rate-prefix(root.currency);
-                vertical-alignment: center;
-            }
-
+        if root.needs-rate: FormField {
+            label: Strings.rate-prefix(root.currency) + " " + FinanceStore.main-currency;
             InkField {
                 text <=> root.rate;
                 placeholder-text: @tr("Exchange rate");
@@ -178,44 +195,40 @@ component CreatorBody inherits FocusScope {
                     root.submit();
                 }
             }
-
-            Text {
-                text: FinanceStore.main-currency;
-                vertical-alignment: center;
-            }
         }
 
-        if root.kind != AccountKind.credit: InkField {
-            text <=> root.balance;
-            placeholder-text: @tr("Initial balance");
-            accepted(text) => {
-                root.submit();
-            }
-        }
-
-        if root.kind == AccountKind.credit || root.kind == AccountKind.credit-line: InkField {
-            text <=> root.limit;
-            placeholder-text: @tr("Credit limit");
-            accepted(text) => {
-                root.submit();
-            }
-        }
-
-        if root.kind == AccountKind.credit: HorizontalLayout {
-            spacing: 8px;
+        if root.kind == AccountKind.credit || root.kind == AccountKind.credit-line: FormField {
+            label: @tr("Credit limit");
             InkField {
-                text <=> root.closing;
-                placeholder-text: @tr("Closing day (1-31)");
+                text <=> root.limit;
+                placeholder-text: @tr("Credit limit");
                 accepted(text) => {
                     root.submit();
                 }
             }
+        }
 
-            InkField {
-                text <=> root.due;
-                placeholder-text: @tr("Payment day (1-31)");
-                accepted(text) => {
-                    root.submit();
+        if root.kind == AccountKind.credit: HorizontalLayout {
+            spacing: 12px;
+            FormField {
+                label: @tr("Closing day (1-31)");
+                InkField {
+                    text <=> root.closing;
+                    placeholder-text: @tr("Closing day (1-31)");
+                    accepted(text) => {
+                        root.submit();
+                    }
+                }
+            }
+
+            FormField {
+                label: @tr("Payment day (1-31)");
+                InkField {
+                    text <=> root.due;
+                    placeholder-text: @tr("Payment day (1-31)");
+                    accepted(text) => {
+                        root.submit();
+                    }
                 }
             }
         }
@@ -262,6 +275,17 @@ component CreatorBody inherits FocusScope {
                 clicked => {
                     root.submit();
                 }
+            }
+        }
+    }
+
+    // The opener gives the code; this fills in the label the select shows, once.
+    for c in FinanceStore.currencies: Rectangle {
+        width: 0px;
+        height: 0px;
+        init => {
+            if c.code == root.currency {
+                root.currency-label = c.code + " " + c.symbol;
             }
         }
     }
@@ -324,7 +348,7 @@ export component AccountCreator inherits PopupWindow {
     in property <bool> account-in-use;
 
     close-policy: close-on-click-outside;
-    width: 400px;
+    width: 440px;
 
     PopupSurface {
         CreatorBody {

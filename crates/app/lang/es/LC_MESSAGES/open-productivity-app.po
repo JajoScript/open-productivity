@@ -1705,3 +1705,12 @@ msgstr "Sin bolsa"
 msgctxt "reserve action"
 msgid "Reserve"
 msgstr "Reservar"
+
+msgid "Optional"
+msgstr "Opcional"
+
+msgid "Amount ({})"
+msgstr "Monto ({})"
+
+msgid "Amount that arrives ({})"
+msgstr "Monto que llega ({})"

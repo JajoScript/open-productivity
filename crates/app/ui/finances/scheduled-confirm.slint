@@ -5,6 +5,8 @@ import { Date, Palette } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkDatePopup } from "../ink-date-popup.slint";
 import { InkField } from "../ink-field.slint";
+import { InkFieldButton } from "../ink-field-button.slint";
+import { FormField } from "../form-field.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
@@ -50,51 +52,43 @@ component ConfirmBody inherits FocusScope {
         }
 
         HorizontalLayout {
-            spacing: 8px;
-            InkField {
-                text <=> root.amount;
-                placeholder-text: @tr("Amount");
-                init => {
-                    self.focus();
-                }
-                accepted(text) => {
-                    root.submit();
-                }
-            }
-
-            Text {
-                text: root.due.currency;
-                color: Theme.muted;
-                vertical-alignment: center;
-            }
-        }
-
-        HorizontalLayout {
-            height: 36px;
-            spacing: 8px;
-            alignment: start;
-            Text {
-                text: @tr("Date");
-                color: Theme.muted;
-                vertical-alignment: center;
-            }
-
-            picker := InkDatePopup {
-                y: 36px;
-                day: root.date.day;
-                month: root.date.month;
-                year: root.date.year;
-                picked(date) => {
-                    root.date = date;
+            spacing: 12px;
+            FormField {
+                label: root.due.currency == "" ? @tr("Amount") : @tr("Amount ({})", root.due.currency);
+                InkField {
+                    text <=> root.amount;
+                    placeholder-text: @tr("Amount");
+                    init => {
+                        self.focus();
+                    }
+                    accepted(text) => {
+                        root.submit();
+                    }
                 }
             }
 
-            SubtleButton {
-                text: Strings.date(root.date.day, root.date.month, root.date.year);
-                icon: @image-url("../icons/calendar.svg");
-                color: Palette.foreground;
-                clicked => {
-                    picker.show();
+            FormField {
+                label: @tr("Date");
+                Rectangle {
+                    height: 36px;
+                    picker := InkDatePopup {
+                        y: 38px;
+                        day: root.date.day;
+                        month: root.date.month;
+                        year: root.date.year;
+                        picked(date) => {
+                            root.date = date;
+                        }
+                    }
+
+                    InkFieldButton {
+                        label: @tr("Date");
+                        text: Strings.date(root.date.day, root.date.month, root.date.year);
+                        icon: @image-url("../icons/calendar.svg");
+                        clicked => {
+                            picker.show();
+                        }
+                    }
                 }
             }
         }
@@ -134,7 +128,7 @@ export component ScheduledConfirm inherits PopupWindow {
     in property <Date> today;
 
     close-policy: close-on-click-outside;
-    width: 360px;
+    width: 420px;
 
     PopupSurface {
         ConfirmBody {

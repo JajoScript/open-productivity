@@ -5,6 +5,7 @@ import { Palette, ScrollView } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkCheck } from "../ink-check.slint";
 import { InkField } from "../ink-field.slint";
+import { FormField } from "../form-field.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
@@ -52,65 +53,63 @@ component BucketBody inherits FocusScope {
             font-weight: 700;
         }
 
-        InkField {
-            text <=> root.name;
-            placeholder-text: @tr("Bucket name");
-            init => {
-                self.focus();
-            }
-            accepted(text) => {
-                root.submit();
-            }
-        }
-
-        if root.editing && !root.archived: Text {
-            text: Strings.bucket-percent-label(root.month-label);
-            color: Theme.muted;
-            wrap: word-wrap;
-        }
-
-        if root.editing && !root.archived: InkField {
-            text <=> root.percent;
-            placeholder-text: @tr("Percent (0-100)");
-            accepted(text) => {
-                root.submit();
+        FormField {
+            label: @tr("Bucket name");
+            InkField {
+                text <=> root.name;
+                placeholder-text: @tr("Bucket name");
+                init => {
+                    self.focus();
+                }
+                accepted(text) => {
+                    root.submit();
+                }
             }
         }
 
-        if root.editing && !root.archived: Text {
-            text: @tr("Expense categories");
-            color: Theme.muted;
+        if root.editing && !root.archived: FormField {
+            label: Strings.bucket-percent-label(root.month-label);
+            InkField {
+                text <=> root.percent;
+                placeholder-text: @tr("Percent (0-100)");
+                accepted(text) => {
+                    root.submit();
+                }
+            }
         }
 
-        if root.editing && !root.archived: ScrollView {
-            height: 120px;
-            VerticalLayout {
-                // Those of the bucket, or free to take; checking one of another bucket moves it here.
-                for c in FinanceStore.category-choices: VerticalLayout {
-                    if c.kind == TxKind.expense && (!c.archived || c.bucket-id == root.bucket-id): HorizontalLayout {
-                        height: 32px;
-                        spacing: 4px;
-                        InkCheck {
-                            checked: c.bucket-id == root.bucket-id;
-                            label: c.name;
-                            toggled(on) => {
-                                root.error = FinanceStore.assign-category(c.id, root.bucket-id, on);
+        if root.editing && !root.archived: FormField {
+            label: @tr("Expense categories");
+            ScrollView {
+                height: 120px;
+                VerticalLayout {
+                    // Those of the bucket, or free to take; checking one of another bucket moves it here.
+                    for c in FinanceStore.category-choices: VerticalLayout {
+                        if c.kind == TxKind.expense && (!c.archived || c.bucket-id == root.bucket-id): HorizontalLayout {
+                            height: 32px;
+                            spacing: 4px;
+                            InkCheck {
+                                checked: c.bucket-id == root.bucket-id;
+                                label: c.name;
+                                toggled(on) => {
+                                    root.error = FinanceStore.assign-category(c.id, root.bucket-id, on);
+                                }
                             }
-                        }
-
-                        Text {
-                            text: c.archived ? Strings.archived-category(c.name) : c.name;
-                            vertical-alignment: center;
-                            overflow: elide;
-                            horizontal-stretch: 1;
-                            accessible-role: none;
-                        }
-
-                        if c.bucket-id != 0 && c.bucket-id != root.bucket-id: Text {
-                            text: @tr("In another bucket");
-                            color: Theme.muted;
-                            vertical-alignment: center;
-                            accessible-role: none;
+    
+                            Text {
+                                text: c.archived ? Strings.archived-category(c.name) : c.name;
+                                vertical-alignment: center;
+                                overflow: elide;
+                                horizontal-stretch: 1;
+                                accessible-role: none;
+                            }
+    
+                            if c.bucket-id != 0 && c.bucket-id != root.bucket-id: Text {
+                                text: @tr("In another bucket");
+                                color: Theme.muted;
+                                vertical-alignment: center;
+                                accessible-role: none;
+                            }
                         }
                     }
                 }

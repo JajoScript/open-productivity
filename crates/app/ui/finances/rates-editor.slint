@@ -4,6 +4,7 @@
 import { Palette, ScrollView } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkField } from "../ink-field.slint";
+import { FormField } from "../form-field.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
@@ -54,15 +55,9 @@ component EditorBody inherits FocusScope {
         ScrollView {
             height: min(list.preferred-height, 240px);
             list := VerticalLayout {
-                spacing: 8px;
-                for r in FinanceStore.rates: HorizontalLayout {
-                    spacing: 8px;
-                    Text {
-                        text: Strings.rate-prefix(r.code);
-                        min-width: 72px;
-                        vertical-alignment: center;
-                    }
-
+                spacing: 12px;
+                for r in FinanceStore.rates: FormField {
+                    label: Strings.rate-prefix(r.code) + " " + FinanceStore.main-currency;
                     InkField {
                         text: r.rate;
                         placeholder-text: @tr("Exchange rate");
@@ -72,11 +67,6 @@ component EditorBody inherits FocusScope {
                         accepted(text) => {
                             root.submit();
                         }
-                    }
-
-                    Text {
-                        text: FinanceStore.main-currency;
-                        vertical-alignment: center;
                     }
                 }
             }
@@ -116,7 +106,7 @@ component EditorBody inherits FocusScope {
 // discards the changes.
 export component RatesEditor inherits PopupWindow {
     close-policy: close-on-click-outside;
-    width: 400px;
+    width: 440px;
 
     PopupSurface {
         EditorBody {

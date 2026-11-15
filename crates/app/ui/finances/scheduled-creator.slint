@@ -1,15 +1,16 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 // Copyright (C) 2026 JajoScript
 
-import { Date, Palette, ScrollView } from "std-widgets.slint";
+import { Date, Palette } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkDatePopup } from "../ink-date-popup.slint";
 import { InkField } from "../ink-field.slint";
+import { InkFieldButton } from "../ink-field-button.slint";
+import { InkOption, InkSelect } from "../ink-select.slint";
+import { FormField } from "../form-field.slint";
 import { PopupSurface } from "../popup-surface.slint";
-import { SettingsTab } from "../settings/settings-tab.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
-import { ChoiceRow } from "../study/session-logger.slint";
 import { Theme } from "../theme.slint";
 import { FinanceStore } from "finance-store.slint";
 import { ScheduleForm, ScheduledRow } from "scheduled-row.slint";
@@ -36,6 +37,9 @@ component ScheduledBody inherits FocusScope {
 
     property <string> error;
     property <bool> recurring: root.form == ScheduleForm.weekly || root.form == ScheduleForm.monthly || root.form == ScheduleForm.yearly;
+    // What the selects show for the chosen ids.
+    property <string> account-name;
+    property <string> category-name;
 
     capture-key-pressed(event) => {
         if event.text == Key.Escape {
@@ -56,164 +60,138 @@ component ScheduledBody inherits FocusScope {
         root.kind = kind;
     }
 
-    function set-recurring() {
-        if !root.recurring {
-            root.form = ScheduleForm.monthly;
-        }
-    }
-
     VerticalLayout {
         padding: 16px;
-        spacing: 10px;
+        spacing: 12px;
         Text {
             text: root.editing ? @tr("Edit scheduled payment") : @tr("New scheduled payment");
             font-size: 14px;
             font-weight: 700;
         }
 
-        // The kind of a saved payment does not change.
-        if !root.editing: HorizontalLayout {
-            spacing: 0px;
-            alignment: start;
-            accessible-role: tab-list;
-            SettingsTab {
-                text: Strings.tx-kind(TxKind.expense);
-                selected: root.kind == TxKind.expense;
-                chosen => {
-                    root.set-kind(TxKind.expense);
-                }
-                step(d) => {
-                    if d > 0 {
-                        root.set-kind(TxKind.income);
+        HorizontalLayout {
+            spacing: 12px;
+            // The kind of a saved payment does not change.
+            if !root.editing: FormField {
+                label: @tr("Type");
+                InkSelect {
+                    label: @tr("Type");
+                    text: Strings.tx-kind(root.kind);
+                    InkOption {
+                        label: Strings.tx-kind(TxKind.expense);
+                        chosen: root.kind == TxKind.expense;
+                        picked => {
+                            root.set-kind(TxKind.expense);
+                        }
+                    }
+
+                    InkOption {
+                        label: Strings.tx-kind(TxKind.income);
+                        chosen: root.kind == TxKind.income;
+                        picked => {
+                            root.set-kind(TxKind.income);
+                        }
                     }
                 }
             }
 
-            SettingsTab {
-                text: Strings.tx-kind(TxKind.income);
-                selected: root.kind == TxKind.income;
-                chosen => {
-                    root.set-kind(TxKind.income);
-                }
-                step(d) => {
-                    if d < 0 {
-                        root.set-kind(TxKind.expense);
+            FormField {
+                label: root.currency == "" ? @tr("Amount") : @tr("Amount ({})", root.currency);
+                InkField {
+                    text <=> root.amount;
+                    placeholder-text: @tr("Amount");
+                    init => {
+                        self.focus();
+                    }
+                    accepted(text) => {
+                        root.submit();
                     }
                 }
             }
         }
 
         // The form of a saved payment is fixed; only a recurring one changes its frequency.
-        if !root.editing: HorizontalLayout {
-            spacing: 0px;
-            alignment: start;
-            accessible-role: tab-list;
-            SettingsTab {
-                text: @tr("One-time");
-                selected: root.form == ScheduleForm.once;
-                chosen => {
-                    root.form = ScheduleForm.once;
-                }
-                step(d) => {
-                    if d > 0 {
-                        root.set-recurring();
+        if !root.editing || root.recurring: FormField {
+            label: @tr("Recurring");
+            InkSelect {
+                label: @tr("Recurring");
+                text: root.form == ScheduleForm.once ? @tr("One-time") : root.form == ScheduleForm.installments ? @tr("Installments") : Strings.schedule-form(root.form, 0, 0);
+                if !root.editing: InkOption {
+                    label: @tr("One-time");
+                    chosen: root.form == ScheduleForm.once;
+                    picked => {
+                        root.form = ScheduleForm.once;
                     }
                 }
-            }
 
-            SettingsTab {
-                text: @tr("Recurring");
-                selected: root.recurring;
-                chosen => {
-                    root.set-recurring();
-                }
-                step(d) => {
-                    root.form = d < 0 ? ScheduleForm.once : ScheduleForm.installments;
-                }
-            }
-
-            SettingsTab {
-                text: @tr("Installments");
-                selected: root.form == ScheduleForm.installments;
-                chosen => {
-                    root.form = ScheduleForm.installments;
-                }
-                step(d) => {
-                    if d < 0 {
-                        root.set-recurring();
+                InkOption {
+                    label: Strings.schedule-form(ScheduleForm.weekly, 0, 0);
+                    chosen: root.form == ScheduleForm.weekly;
+                    picked => {
+                        root.form = ScheduleForm.weekly;
                     }
                 }
-            }
-        }
 
-        if root.recurring: HorizontalLayout {
-            spacing: 0px;
-            alignment: start;
-            accessible-role: tab-list;
-            SettingsTab {
-                text: Strings.schedule-form(ScheduleForm.weekly, 0, 0);
-                selected: root.form == ScheduleForm.weekly;
-                chosen => {
-                    root.form = ScheduleForm.weekly;
-                }
-                step(d) => {
-                    if d > 0 {
+                InkOption {
+                    label: Strings.schedule-form(ScheduleForm.monthly, 0, 0);
+                    chosen: root.form == ScheduleForm.monthly;
+                    picked => {
                         root.form = ScheduleForm.monthly;
                     }
                 }
-            }
 
-            SettingsTab {
-                text: Strings.schedule-form(ScheduleForm.monthly, 0, 0);
-                selected: root.form == ScheduleForm.monthly;
-                chosen => {
-                    root.form = ScheduleForm.monthly;
+                InkOption {
+                    label: Strings.schedule-form(ScheduleForm.yearly, 0, 0);
+                    chosen: root.form == ScheduleForm.yearly;
+                    picked => {
+                        root.form = ScheduleForm.yearly;
+                    }
                 }
-                step(d) => {
-                    root.form = d < 0 ? ScheduleForm.weekly : ScheduleForm.yearly;
-                }
-            }
 
-            SettingsTab {
-                text: Strings.schedule-form(ScheduleForm.yearly, 0, 0);
-                selected: root.form == ScheduleForm.yearly;
-                chosen => {
-                    root.form = ScheduleForm.yearly;
-                }
-                step(d) => {
-                    if d < 0 {
-                        root.form = ScheduleForm.monthly;
+                if !root.editing: InkOption {
+                    label: @tr("Installments");
+                    chosen: root.form == ScheduleForm.installments;
+                    picked => {
+                        root.form = ScheduleForm.installments;
                     }
                 }
             }
         }
 
-        Text {
-            text: @tr("Account");
-            color: Theme.muted;
+        if root.form == ScheduleForm.installments && !root.editing: FormField {
+            label: @tr("Installments");
+            InkField {
+                text <=> root.installments;
+                placeholder-text: @tr("Number of installments (2 or more)");
+                accepted(text) => {
+                    root.submit();
+                }
+            }
         }
 
-        ScrollView {
-            height: min(account-list.preferred-height, 96px);
-            account-list := VerticalLayout {
-                for account in FinanceStore.accounts: ChoiceRow {
+        FormField {
+            label: @tr("Account");
+            InkSelect {
+                label: @tr("Account");
+                text: root.account-name;
+                for account in FinanceStore.accounts: InkOption {
                     label: account.name;
-                    icon: @image-url("../icons/wallet.svg");
                     chosen: account.id == root.account-id;
                     picked => {
                         root.account-id = account.id;
+                        root.account-name = account.name;
                         root.currency = account.currency;
                     }
                 }
 
                 // The archived account the payment already has stays pickable.
                 for account in FinanceStore.archived-accounts: VerticalLayout {
-                    if account.id == root.due.account-id: ChoiceRow {
+                    if account.id == root.due.account-id: InkOption {
                         label: Strings.archived-account(account.name);
-                        icon: @image-url("../icons/wallet.svg");
                         chosen: account.id == root.account-id;
                         picked => {
                             root.account-id = account.id;
+                            root.account-name = Strings.archived-account(account.name);
                             root.currency = account.currency;
                         }
                     }
@@ -221,17 +199,13 @@ component ScheduledBody inherits FocusScope {
             }
         }
 
-        Text {
-            text: @tr("Category");
-            color: Theme.muted;
-        }
-
-        ScrollView {
-            height: 96px;
-            VerticalLayout {
-                ChoiceRow {
+        FormField {
+            label: @tr("Category");
+            InkSelect {
+                label: @tr("Category");
+                text: root.has-category ? root.category-name : @tr("No category");
+                InkOption {
                     label: @tr("No category");
-                    icon: @image-url("../icons/x.svg");
                     chosen: !root.has-category;
                     picked => {
                         root.has-category = false;
@@ -240,82 +214,52 @@ component ScheduledBody inherits FocusScope {
 
                 // Those of the kind, and the archived one the payment already has.
                 for c in FinanceStore.category-choices: VerticalLayout {
-                    if c.kind == root.kind && (!c.archived || (root.has-category && c.id == root.category-id)): ChoiceRow {
+                    if c.kind == root.kind && (!c.archived || (root.has-category && c.id == root.category-id)): InkOption {
                         label: c.archived ? Strings.archived-category(c.name) : c.name;
-                        icon: @image-url("../icons/tag.svg");
                         chosen: root.has-category && c.id == root.category-id;
                         picked => {
                             root.has-category = true;
                             root.category-id = c.id;
+                            root.category-name = c.archived ? Strings.archived-category(c.name) : c.name;
                         }
                     }
                 }
             }
         }
 
-        HorizontalLayout {
-            spacing: 8px;
-            InkField {
-                text <=> root.amount;
-                placeholder-text: @tr("Amount");
-                init => {
-                    self.focus();
+        FormField {
+            label: root.editing ? @tr("Next date") : @tr("First date");
+            Rectangle {
+                height: 36px;
+                picker := InkDatePopup {
+                    y: 38px;
+                    day: root.date.day;
+                    month: root.date.month;
+                    year: root.date.year;
+                    picked(date) => {
+                        root.date = date;
+                    }
                 }
+
+                InkFieldButton {
+                    label: root.editing ? @tr("Next date") : @tr("First date");
+                    text: Strings.date(root.date.day, root.date.month, root.date.year);
+                    icon: @image-url("../icons/calendar.svg");
+                    clicked => {
+                        picker.show();
+                    }
+                }
+            }
+        }
+
+        FormField {
+            label: @tr("Description");
+            InkField {
+                text <=> root.description;
+                placeholder-text: @tr("Optional");
                 accepted(text) => {
                     root.submit();
                 }
-            }
-
-            Text {
-                text: root.currency;
-                color: Theme.muted;
-                vertical-alignment: center;
-            }
-        }
-
-        if root.form == ScheduleForm.installments && !root.editing: InkField {
-            text <=> root.installments;
-            placeholder-text: @tr("Number of installments (2 or more)");
-            accepted(text) => {
-                root.submit();
-            }
-        }
-
-        HorizontalLayout {
-            height: 36px;
-            spacing: 8px;
-            alignment: start;
-            Text {
-                text: root.editing ? @tr("Next date") : @tr("First date");
-                color: Theme.muted;
-                vertical-alignment: center;
-            }
-
-            picker := InkDatePopup {
-                y: 36px;
-                day: root.date.day;
-                month: root.date.month;
-                year: root.date.year;
-                picked(date) => {
-                    root.date = date;
-                }
-            }
-
-            SubtleButton {
-                text: Strings.date(root.date.day, root.date.month, root.date.year);
-                icon: @image-url("../icons/calendar.svg");
-                color: Palette.foreground;
-                clicked => {
-                    picker.show();
-                }
-            }
-        }
-
-        InkField {
-            text <=> root.description;
-            placeholder-text: @tr("Description (optional)");
-            accepted(text) => {
-                root.submit();
             }
         }
 
@@ -352,6 +296,37 @@ component ScheduledBody inherits FocusScope {
                 clicked => {
                     root.submit();
                 }
+            }
+        }
+    }
+
+    // The opener gives ids; these fill in the names the selects show, once, when the form is built.
+    for account in FinanceStore.accounts: Rectangle {
+        width: 0px;
+        height: 0px;
+        init => {
+            if account.id == root.account-id {
+                root.account-name = account.name;
+            }
+        }
+    }
+
+    for account in FinanceStore.archived-accounts: Rectangle {
+        width: 0px;
+        height: 0px;
+        init => {
+            if account.id == root.account-id {
+                root.account-name = Strings.archived-account(account.name);
+            }
+        }
+    }
+
+    for c in FinanceStore.category-choices: Rectangle {
+        width: 0px;
+        height: 0px;
+        init => {
+            if root.has-category && c.id == root.category-id {
+                root.category-name = c.archived ? Strings.archived-category(c.name) : c.name;
             }
         }
     }
@@ -404,7 +379,7 @@ export component ScheduledCreator inherits PopupWindow {
     in property <ScheduledRow> due;
 
     close-policy: close-on-click-outside;
-    width: 400px;
+    width: 440px;
 
     PopupSurface {
         ScheduledBody {

@@ -4,11 +4,12 @@
 import { Palette, ScrollView } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkField } from "../ink-field.slint";
+import { InkOption, InkSelect } from "../ink-select.slint";
+import { FormField } from "../form-field.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
-import { ChoiceRow } from "../study/session-logger.slint";
 import { RateRow } from "account-row.slint";
 import { FinanceStore } from "finance-store.slint";
 
@@ -18,6 +19,8 @@ component EditorBody inherits FocusScope {
 
     property <string> error;
     property <string> chosen: FinanceStore.main-currency;
+    // What the select shows for `chosen`.
+    property <string> chosen-label;
     // The rates asked for when `chosen` becomes the main currency.
     property <[RateRow]> rows;
 
@@ -50,15 +53,17 @@ component EditorBody inherits FocusScope {
             font-weight: 700;
         }
 
-        ScrollView {
-            height: min(currency-list.preferred-height, 128px);
-            currency-list := VerticalLayout {
-                for c in FinanceStore.currencies: ChoiceRow {
+        FormField {
+            label: @tr("Main currency");
+            InkSelect {
+                label: @tr("Main currency");
+                text: root.chosen-label;
+                for c in FinanceStore.currencies: InkOption {
                     label: c.code + " " + c.symbol;
-                    icon: @image-url("../icons/wallet.svg");
                     chosen: c.code == root.chosen;
                     picked => {
                         root.chosen = c.code;
+                        root.chosen-label = c.code + " " + c.symbol;
                         root.rows = FinanceStore.main-change-rates(c.code);
                     }
                 }
@@ -74,15 +79,9 @@ component EditorBody inherits FocusScope {
         ScrollView {
             height: min(list.preferred-height, 160px);
             list := VerticalLayout {
-                spacing: 8px;
-                for r in root.rows: HorizontalLayout {
-                    spacing: 8px;
-                    Text {
-                        text: Strings.rate-prefix(r.code);
-                        min-width: 72px;
-                        vertical-alignment: center;
-                    }
-
+                spacing: 12px;
+                for r in root.rows: FormField {
+                    label: Strings.rate-prefix(r.code) + " " + root.chosen;
                     InkField {
                         text: r.rate;
                         placeholder-text: @tr("Exchange rate");
@@ -92,11 +91,6 @@ component EditorBody inherits FocusScope {
                         accepted(text) => {
                             root.submit();
                         }
-                    }
-
-                    Text {
-                        text: root.chosen;
-                        vertical-alignment: center;
                     }
                 }
             }
@@ -130,13 +124,24 @@ component EditorBody inherits FocusScope {
             }
         }
     }
+
+    // Fills in the label the select shows for the current main currency, once.
+    for c in FinanceStore.currencies: Rectangle {
+        width: 0px;
+        height: 0px;
+        init => {
+            if c.code == root.chosen {
+                root.chosen-label = c.code + " " + c.symbol;
+            }
+        }
+    }
 }
 
 // Changes the main currency, asking the exchange rate of every other currency in use.
 // Closing by clicking outside discards the changes.
 export component MainCurrencyEditor inherits PopupWindow {
     close-policy: close-on-click-outside;
-    width: 400px;
+    width: 440px;
 
     PopupSurface {
         EditorBody {

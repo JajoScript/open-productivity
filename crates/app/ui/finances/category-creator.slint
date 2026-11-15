@@ -4,6 +4,7 @@
 import { Palette } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkField } from "../ink-field.slint";
+import { FormField } from "../form-field.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
@@ -49,19 +50,26 @@ component CreatorBody inherits FocusScope {
             font-weight: 700;
         }
 
-        Text {
-            text: Strings.tx-kind(root.kind);
-            color: Theme.muted;
+        FormField {
+            label: @tr("Type");
+            Text {
+                text: Strings.tx-kind(root.kind);
+                vertical-alignment: center;
+                min-height: 20px;
+            }
         }
 
-        InkField {
-            text <=> root.name;
-            placeholder-text: @tr("Category name");
-            init => {
-                self.focus();
-            }
-            accepted(text) => {
-                root.submit();
+        FormField {
+            label: @tr("Category name");
+            InkField {
+                text <=> root.name;
+                placeholder-text: @tr("Category name");
+                init => {
+                    self.focus();
+                }
+                accepted(text) => {
+                    root.submit();
+                }
             }
         }
 

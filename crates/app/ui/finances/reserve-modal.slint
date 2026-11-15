@@ -5,10 +5,12 @@ import { Date, Palette, ScrollView } from "std-widgets.slint";
 import { InkButton } from "../ink-button.slint";
 import { InkDatePopup } from "../ink-date-popup.slint";
 import { InkField } from "../ink-field.slint";
+import { InkFieldButton } from "../ink-field-button.slint";
+import { InkOption, InkSelect } from "../ink-select.slint";
+import { FormField } from "../form-field.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
-import { ChoiceRow } from "../study/session-logger.slint";
 import { Theme } from "../theme.slint";
 import { AccountKind } from "account-row.slint";
 import { FinanceStore } from "finance-store.slint";
@@ -22,6 +24,8 @@ component NewBody inherits FocusScope {
     callback cancel;
 
     property <string> error;
+    // What the select shows for the chosen id.
+    property <string> account-name;
 
     capture-key-pressed(event) => {
         if event.text == Key.Escape {
@@ -44,32 +48,32 @@ component NewBody inherits FocusScope {
             font-weight: 700;
         }
 
-        InkField {
-            text <=> root.name;
-            placeholder-text: @tr("Reserve name");
-            init => {
-                self.focus();
-            }
-            accepted(text) => {
-                root.submit();
+        FormField {
+            label: @tr("Reserve name");
+            InkField {
+                text <=> root.name;
+                placeholder-text: @tr("Reserve name");
+                init => {
+                    self.focus();
+                }
+                accepted(text) => {
+                    root.submit();
+                }
             }
         }
 
-        Text {
-            text: @tr("Account");
-            color: Theme.muted;
-        }
-
-        ScrollView {
-            height: min(account-list.preferred-height, 128px);
-            account-list := VerticalLayout {
+        FormField {
+            label: @tr("Account");
+            InkSelect {
+                label: @tr("Account");
+                text: root.account-name;
                 for account in FinanceStore.accounts: VerticalLayout {
-                    if account.kind != AccountKind.credit && account.kind != AccountKind.credit-line: ChoiceRow {
+                    if account.kind != AccountKind.credit && account.kind != AccountKind.credit-line: InkOption {
                         label: account.name;
-                        icon: @image-url("../icons/wallet.svg");
                         chosen: account.id == root.account-id;
                         picked => {
                             root.account-id = account.id;
+                            root.account-name = account.name;
                         }
                     }
                 }
@@ -165,11 +169,14 @@ component EditBody inherits FocusScope {
             font-weight: 700;
         }
 
-        InkField {
-            text <=> root.name;
-            placeholder-text: @tr("Reserve name");
-            accepted(text) => {
-                root.error = root.save(root.name);
+        FormField {
+            label: @tr("Reserve name");
+            InkField {
+                text <=> root.name;
+                placeholder-text: @tr("Reserve name");
+                accepted(text) => {
+                    root.error = root.save(root.name);
+                }
             }
         }
 
@@ -194,54 +201,55 @@ component EditBody inherits FocusScope {
             height: root.reserve.archived ? 0px : self.preferred-height;
             spacing: 8px;
             HorizontalLayout {
-                spacing: 8px;
-                InkField {
-                    text <=> root.amount;
-                    placeholder-text: @tr("Amount");
-                    accepted(text) => {
-                        root.do-move(false);
+                spacing: 12px;
+                FormField {
+                    label: @tr("Amount ({})", root.reserve.currency);
+                    InkField {
+                        text <=> root.amount;
+                        placeholder-text: @tr("Amount");
+                        accepted(text) => {
+                            root.do-move(false);
+                        }
                     }
                 }
 
-                Text {
-                    text: root.reserve.currency;
-                    color: Theme.muted;
-                    vertical-alignment: center;
+                FormField {
+                    label: @tr("Date");
+                    Rectangle {
+                        height: 36px;
+                        picker := InkDatePopup {
+                            y: 38px;
+                            day: root.date.day;
+                            month: root.date.month;
+                            year: root.date.year;
+                            picked(date) => {
+                                root.date = date;
+                            }
+                        }
+
+                        InkFieldButton {
+                            label: @tr("Date");
+                            text: Strings.date(root.date.day, root.date.month, root.date.year);
+                            icon: @image-url("../icons/calendar.svg");
+                            clicked => {
+                                picker.show();
+                            }
+                        }
+                    }
                 }
             }
 
-            InkField {
-                text <=> root.description;
-                placeholder-text: @tr("Description (optional)");
+            FormField {
+                label: @tr("Description");
+                InkField {
+                    text <=> root.description;
+                    placeholder-text: @tr("Optional");
+                }
             }
 
             HorizontalLayout {
-                height: 36px;
                 spacing: 8px;
-                Rectangle {
-                    picker := InkDatePopup {
-                        y: 36px;
-                        day: root.date.day;
-                        month: root.date.month;
-                        year: root.date.year;
-                        picked(date) => {
-                            root.date = date;
-                        }
-                    }
-
-                    SubtleButton {
-                        text: Strings.date(root.date.day, root.date.month, root.date.year);
-                        icon: @image-url("../icons/calendar.svg");
-                        color: Palette.foreground;
-                        clicked => {
-                            picker.show();
-                        }
-                    }
-                }
-
-                Rectangle {
-                    horizontal-stretch: 1;
-                }
+                alignment: end;
 
                 SubtleButton {
                     text: @tr("Withdraw");
