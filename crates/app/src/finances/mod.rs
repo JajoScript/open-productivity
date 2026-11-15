@@ -84,6 +84,11 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         move || state.show_load()
     });
 
+    store.on_prepare_forms({
+        let state = state.clone();
+        move || state.prepare_forms()
+    });
+
     transactions::connect(&state, &store);
     summary::connect(&state, &store);
     worth::connect(&state, &store);

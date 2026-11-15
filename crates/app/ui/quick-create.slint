@@ -8,16 +8,24 @@ import { Theme } from "theme.slint";
 // One row of the create menu. Adding an option is one more MenuRow in the menu below.
 component MenuRow inherits Rectangle {
     in property <string> text;
+    // A disabled row is dimmed and does nothing; `hint` says why.
+    in property <bool> enabled: true;
+    in property <string> hint;
     callback activated;
 
     height: 36px;
     border-radius: 4px;
-    background: touch.pressed ? Theme.pressed : touch.has-hover || focus.has-focus ? Theme.hover : transparent;
+    opacity: root.enabled ? 1 : 0.45;
+    background: !root.enabled ? transparent : touch.pressed ? Theme.pressed : touch.has-hover || focus.has-focus ? Theme.hover : transparent;
     forward-focus: focus;
     accessible-role: button;
     accessible-label: root.text;
+    accessible-description: root.enabled ? "" : root.hint;
+    accessible-enabled: root.enabled;
     accessible-action-default => {
-        root.activated();
+        if root.enabled {
+            root.activated();
+        }
     }
 
     Text {
@@ -30,14 +38,16 @@ component MenuRow inherits Rectangle {
 
     touch := TouchArea {
         clicked => {
-            root.activated();
+            if root.enabled {
+                root.activated();
+            }
         }
     }
 
     focus := FocusScope {
         width: 0px; // keyboard only; clicks go to the TouchArea
         key-pressed(event) => {
-            if event.text == Key.Space || event.text == Key.Return {
+            if root.enabled && (event.text == Key.Space || event.text == Key.Return) {
                 root.activated();
                 return accept;
             }
@@ -50,12 +60,24 @@ component MenuRow inherits Rectangle {
 export component QuickCreate inherits Rectangle {
     callback new-task;
     callback new-habit;
+    callback new-movement;
+    callback new-scheduled;
+    // The menu is about to open: the host refreshes what `finance-ready` depends on.
+    callback opening;
+    // Whether the Finances options can be used (an account and a main currency exist).
+    in property <bool> finance-ready;
     // Shows the brief confirmation next to the button.
-    public function notify() {
+    public function notify(text: string) {
+        root.notice-text = text;
         root.notice = true;
     }
 
     property <bool> notice;
+    property <string> notice-text;
+    function open-menu() {
+        root.opening();
+        menu.show();
+    }
 
     width: 48px;
     height: 48px;
@@ -63,7 +85,7 @@ export component QuickCreate inherits Rectangle {
     accessible-role: button;
     accessible-label: @tr("Create");
     accessible-action-default => {
-        menu.show();
+        root.open-menu();
     }
 
     Rectangle {
@@ -85,7 +107,7 @@ export component QuickCreate inherits Rectangle {
 
     touch := TouchArea {
         clicked => {
-            menu.show();
+            root.open-menu();
         }
     }
 
@@ -93,7 +115,7 @@ export component QuickCreate inherits Rectangle {
         width: 0px; // keyboard only; clicks go to the TouchArea
         key-pressed(event) => {
             if event.text == Key.Space || event.text == Key.Return {
-                menu.show();
+                root.open-menu();
                 return accept;
             }
             reject
@@ -124,7 +146,7 @@ export component QuickCreate inherits Rectangle {
         accessible-label: message.text;
 
         message := Text {
-            text: @tr("Task added to Inbox");
+            text: root.notice-text;
             vertical-alignment: center;
             horizontal-alignment: center;
             accessible-role: none;
@@ -143,8 +165,8 @@ export component QuickCreate inherits Rectangle {
         // Opens upwards, right edges aligned.
         x: root.width - self.width;
         y: -self.height - 8px;
-        width: 168px;
-        height: 88px;
+        width: 204px;
+        height: rows.preferred-height;
         close-policy: close-on-click-outside;
 
         PopupSurface {
@@ -157,7 +179,7 @@ export component QuickCreate inherits Rectangle {
                     reject
                 }
 
-                VerticalLayout {
+                rows := VerticalLayout {
                     padding: 8px;
                     MenuRow {
                         text: @tr("Task");
@@ -174,6 +196,32 @@ export component QuickCreate inherits Rectangle {
                         activated => {
                             menu.close();
                             root.new-habit();
+                        }
+                    }
+                    Rectangle {
+                        height: 9px;
+                        Rectangle {
+                            y: 4px;
+                            height: 1px;
+                            background: Theme.hairline;
+                        }
+                    }
+                    MenuRow {
+                        text: @tr("Movement");
+                        enabled: root.finance-ready;
+                        hint: @tr("Create an account in Finances first");
+                        activated => {
+                            menu.close();
+                            root.new-movement();
+                        }
+                    }
+                    MenuRow {
+                        text: @tr("Scheduled payment");
+                        enabled: root.finance-ready;
+                        hint: @tr("Create an account in Finances first");
+                        activated => {
+                            menu.close();
+                            root.new-scheduled();
                         }
                     }
                 }

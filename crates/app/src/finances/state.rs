@@ -266,6 +266,16 @@ impl State {
         w.global::<FinanceStore>().set_error(msg);
     }
 
+    /// Loads what the movement and scheduled-payment forms need, whatever tab is shown.
+    pub fn prepare_forms(&self) {
+        self.show_load();
+        if self.main().is_ok()
+            && let Err(e) = self.load_choices()
+        {
+            self.show_error(e);
+        }
+    }
+
     /// Shows a failure in the view, like a load failure.
     pub fn show_error(&self, e: String) {
         if let Some(w) = self.window.upgrade() {

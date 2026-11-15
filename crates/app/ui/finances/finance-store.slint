@@ -182,4 +182,7 @@ export global FinanceStore {
     callback shift(int);
     // Reload on entering the module or when the language changes the amount style.
     callback refresh();
+    // Loads the accounts, currency and categories the movement and scheduled-payment forms need,
+    // for opening them outside the module.
+    callback prepare-forms();
 }

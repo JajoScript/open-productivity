@@ -378,6 +378,9 @@ export component ScheduledCreator inherits PopupWindow {
     in property <bool> editing;
     in property <ScheduledRow> due;
 
+    // A payment was scheduled (not edited or deleted), just before the modal closes.
+    callback saved;
+
     close-policy: close-on-click-outside;
     width: 440px;
 
@@ -398,6 +401,9 @@ export component ScheduledCreator inherits PopupWindow {
             save(kind, account, has-category, category, amount, description, date, form, installments) => {
                 let error = root.editing ? FinanceStore.update-scheduled(root.due.id, account, has-category, category, amount, description, date, form) : FinanceStore.create-scheduled(kind, account, has-category, category, amount, description, date, form, installments);
                 if error == "" {
+                    if !root.editing {
+                        root.saved();
+                    }
                     root.close();
                 }
                 return error;
