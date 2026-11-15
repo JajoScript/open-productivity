@@ -1,0 +1,123 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Palette, ScrollView } from "std-widgets.slint";
+import { InkFieldButton } from "ink-field-button.slint";
+import { PopupSurface } from "popup-surface.slint";
+import { Theme } from "theme.slint";
+
+// One option of an `InkSelect`: an ink wash when chosen. Clicking it also closes the popup.
+export component InkOption inherits Rectangle {
+    in property <string> label;
+    in property <bool> chosen;
+    callback picked;
+
+    height: 32px;
+    border-radius: 4px;
+    background: root.chosen ? Theme.selected : touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+    animate background { duration: Theme.fast; easing: Theme.ease-out; }
+    forward-focus: focus;
+    accessible-role: list-item;
+    accessible-label: root.label;
+    accessible-item-selectable: true;
+    accessible-item-selected: root.chosen;
+    accessible-action-default => {
+        root.picked();
+    }
+
+    Text {
+        x: 10px;
+        width: root.width - 20px;
+        text: root.label;
+        vertical-alignment: center;
+        overflow: elide;
+        font-weight: root.chosen ? 600 : 400;
+        accessible-role: none;
+    }
+
+    touch := TouchArea {
+        clicked => {
+            root.picked();
+        }
+    }
+
+    focus := FocusScope {
+        width: 0px; // keyboard only; clicks go to the TouchArea
+        // The chosen option takes the focus when the popup opens, so Tab moves from it.
+        init => {
+            if root.chosen {
+                self.focus();
+            }
+        }
+        key-pressed(event) => {
+            if event.text == Key.Space || event.text == Key.Return {
+                root.picked();
+                // Rejected on purpose: the popup's own handler closes on this key.
+                return reject;
+            }
+            reject
+        }
+    }
+
+    if focus.has-focus: Rectangle {
+        border-radius: root.border-radius;
+        border-width: 2px;
+        border-color: Palette.foreground;
+    }
+}
+
+// Dropdown with the look of an `InkField`. The options are its children, `InkOption`s, so the
+// owner keeps deciding which ones exist; `text` shows the chosen one.
+//
+//     InkSelect {
+//         label: "Account";
+//         text: root.account-name;
+//         for a in accounts: InkOption { label: a.name; chosen: a.id == root.id; picked => { root.id = a.id; } }
+//     }
+//
+// Enter, Space or the vertical arrows open it; Tab and Shift+Tab move through the options,
+// Enter or Space picks and Escape closes.
+export component InkSelect {
+    in property <string> text;
+    // Names the field for screen readers.
+    in property <string> label;
+
+    min-height: 36px;
+    horizontal-stretch: 1;
+    forward-focus: face;
+
+    face := InkFieldButton {
+        text: root.text;
+        label: root.label;
+        icon: @image-url("icons/chevron-down.svg");
+        clicked => {
+            popup.show();
+        }
+    }
+
+    popup := PopupWindow {
+        x: 0px;
+        y: root.height + 2px;
+        width: root.width;
+        height: min(list.preferred-height + 8px, 240px);
+
+        PopupSurface {
+            FocusScope {
+                key-pressed(event) => {
+                    if event.text == Key.Escape || event.text == Key.Return || event.text == Key.Space {
+                        popup.close();
+                        return accept;
+                    }
+                    reject
+                }
+
+                ScrollView {
+                    list := VerticalLayout {
+                        padding: 4px;
+                        @children
+                    }
+                }
+            }
+        }
+    }
+}
