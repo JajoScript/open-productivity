@@ -7,6 +7,7 @@ use chrono::{Datelike, NaiveDate, NaiveTime, Timelike};
 use rusqlite::Connection;
 
 use crate::calendar;
+use crate::finances::{self, FinanceError, Payment};
 use crate::habits::{self, DayHabit};
 use crate::settings::{CalendarSource, Settings};
 use crate::tasks::{SELECT_TASKS, Task, TaskError, TaskId, View, move_anchor, query};
@@ -22,6 +23,8 @@ pub struct Day {
     pub tasks: Vec<Task>,
     /// The habits that apply that day, after the tasks, in the order of the habit grid.
     pub habits: Vec<DayHabit>,
+    /// The pending payments due that day, by description; after the tasks, before the habits.
+    pub payments: Vec<Payment>,
 }
 
 impl Day {
@@ -50,6 +53,7 @@ pub fn month(
                 today: date == today,
                 tasks: Vec::new(),
                 habits: Vec::new(),
+                payments: Vec::new(),
             })
         })
         .collect::<Option<Vec<_>>>()
@@ -68,6 +72,10 @@ pub fn month(
     for (day, h) in days.iter_mut().zip(found) {
         day.habits = h;
     }
+    for p in finances::payments_between(conn, start, end, today).map_err(payment_err)? {
+        // In range by the query, so the offset is 0..=41.
+        days[(p.date - start).num_days() as usize].payments.push(p);
+    }
     let mut weeks = Vec::with_capacity(6);
     while !days.is_empty() {
         weeks.push(days.drain(..7).collect());
@@ -84,6 +92,9 @@ pub fn filter_month(weeks: &mut [Vec<Day>], settings: &Settings) {
         if !settings.shows(CalendarSource::Habits) {
             day.habits.clear();
         }
+        if !settings.shows(CalendarSource::Payments) {
+            day.payments.clear();
+        }
     }
 }
 
@@ -97,6 +108,17 @@ pub fn filter_week(days: &mut [WeekDay], settings: &Settings) {
         if !settings.shows(CalendarSource::Habits) {
             day.habits.clear();
         }
+        if !settings.shows(CalendarSource::Payments) {
+            day.payments.clear();
+        }
+    }
+}
+
+fn payment_err(e: FinanceError) -> TaskError {
+    match e {
+        FinanceError::Sqlite(e) => e.into(),
+        FinanceError::BadDate(d) => TaskError::BadDate(d),
+        e => TaskError::BadDate(e.to_string()),
     }
 }
 
@@ -186,6 +208,8 @@ pub struct WeekDay {
     pub blocks: Vec<Block>,
     /// The habits that apply that day, in the order of the habit grid.
     pub habits: Vec<DayHabit>,
+    /// The pending payments due that day, by description.
+    pub payments: Vec<Payment>,
 }
 
 /// The 7 days (Monday first) of the week that holds `date`, with the tasks due on each. One
@@ -206,6 +230,7 @@ pub fn week(
                 untimed: Vec::new(),
                 blocks: Vec::new(),
                 habits: Vec::new(),
+                payments: Vec::new(),
             })
         })
         .collect::<Option<Vec<_>>>()
@@ -238,6 +263,10 @@ pub fn week(
     let found = habits::range(conn, start, 7, today).map_err(habit_err)?;
     for (day, h) in days.iter_mut().zip(found) {
         day.habits = h;
+    }
+    for p in finances::payments_between(conn, start, end, today).map_err(payment_err)? {
+        // In range by the query, so the offset is 0..=6.
+        days[(p.date - start).num_days() as usize].payments.push(p);
     }
     for day in &mut days {
         let spans: Vec<_> = day
@@ -454,6 +483,40 @@ mod tests {
         assert!(wk[0].habits[0].done);
         let before = week(&conn, d("2026-11-03"), today).unwrap();
         assert!(before.iter().all(|x| x.habits.is_empty()));
+    }
+
+    #[test]
+    fn payments_show_in_month_and_week_and_can_be_hidden() {
+        use crate::finances::{self, AccountKind, ScheduleForm, TxKind};
+        let conn = db::test_conn();
+        let today = d("2026-11-09");
+        // Without finances configured there is nothing, and no error.
+        assert!(month(&conn, d("2026-11-01"), today).is_ok());
+        finances::set_main_currency(&conn, "CLP").unwrap();
+        let a = finances::create_account(&conn, "A", AccountKind::Checking, "", "CLP", "0", None)
+            .unwrap();
+        finances::create_scheduled(
+            &conn,
+            TxKind::Expense,
+            "Rent",
+            a,
+            "10",
+            None,
+            d("2026-11-10"),
+            ScheduleForm::Once,
+        )
+        .unwrap();
+        let at = |w: &[Vec<Day>]| w.iter().flatten().map(|x| x.payments.len()).sum::<usize>();
+        let mut m = month(&conn, d("2026-11-01"), today).unwrap();
+        let cell = m.iter().flatten().nth(day(&m, "2026-11-10")).unwrap();
+        assert_eq!(cell.payments[0].description, "Rent");
+        let mut w = week(&conn, today, today).unwrap();
+        assert_eq!(w[1].payments.len(), 1);
+        let mut s = Settings::default();
+        s.set_shown(CalendarSource::Payments, false);
+        filter_month(&mut m, &s);
+        filter_week(&mut w, &s);
+        assert_eq!((at(&m), w[1].payments.len()), (0, 0));
     }
 
     #[test]

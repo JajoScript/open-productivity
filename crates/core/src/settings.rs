@@ -62,15 +62,21 @@ pub struct Settings {
 pub enum CalendarSource {
     Tasks,
     Habits,
+    Payments,
 }
 
 impl CalendarSource {
-    pub const ALL: [CalendarSource; 2] = [CalendarSource::Tasks, CalendarSource::Habits];
+    pub const ALL: [CalendarSource; 3] = [
+        CalendarSource::Tasks,
+        CalendarSource::Habits,
+        CalendarSource::Payments,
+    ];
 
     fn id(self) -> &'static str {
         match self {
             CalendarSource::Tasks => "tasks",
             CalendarSource::Habits => "habits",
+            CalendarSource::Payments => "payments",
         }
     }
 }
@@ -244,6 +250,11 @@ mod tests {
         assert!(s.shows(CalendarSource::Tasks));
         s.set_shown(CalendarSource::Habits, true);
         assert!(s.shows(CalendarSource::Habits));
+        assert!(s.shows(CalendarSource::Payments));
+        s.set_shown(CalendarSource::Payments, false);
+        assert!(!s.shows(CalendarSource::Payments));
+        assert_eq!(s.hidden_calendars, ["future", "payments"]);
+        s.set_shown(CalendarSource::Payments, true);
         // An id this version does not know is kept.
         assert_eq!(s.hidden_calendars, ["future"]);
         let _ = std::fs::remove_dir_all(&dir);

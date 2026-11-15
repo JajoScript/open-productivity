@@ -6,6 +6,7 @@
 use std::fmt;
 
 mod accounts;
+mod agenda;
 mod bills;
 mod budget;
 mod categories;
@@ -19,6 +20,8 @@ mod scheduled;
 mod summary;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_agenda;
 #[cfg(test)]
 mod tests_bills;
 #[cfg(test)]
@@ -56,6 +59,7 @@ mod transfers;
 mod worth;
 
 pub use accounts::*;
+pub use agenda::*;
 pub use bills::*;
 pub use budget::*;
 pub use categories::*;
