@@ -85,8 +85,32 @@ pub struct Goal {
     /// What is compared with the pace: tasks for a project, the measure for a numeric goal;
     /// `None` for a goal without a measure, even with tasks.
     pub progress: Option<u32>,
-    /// Only with `progress` and a deadline.
+    /// Only with `progress` and a deadline, and never once completed.
     pub pace: Option<Pace>,
+    pub completed: bool,
+    pub archived: bool,
+}
+
+/// The views of the goals list; `in_tab` says which goals each one shows.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Tab {
+    All,
+    Goals,
+    Projects,
+    Completed,
+    Archived,
+}
+
+/// Archived goals show only in `Archived`; the other tabs hide them.
+pub fn in_tab(goal: &Goal, tab: Tab) -> bool {
+    match tab {
+        Tab::Archived => goal.archived,
+        _ if goal.archived => false,
+        Tab::All => true,
+        Tab::Goals => goal.kind == GoalKind::Goal,
+        Tab::Projects => goal.kind == GoalKind::Project,
+        Tab::Completed => goal.completed,
+    }
 }
 
 /// Whole percent of `done` over `total`, truncated; 0 when there is nothing to do.
@@ -249,6 +273,53 @@ pub fn update(conn: &Connection, id: GoalId, draft: &GoalDraft) -> Result<(), Go
     Ok(())
 }
 
+/// Completes the goal now. It is final: completing again keeps the first date.
+pub fn complete(conn: &Connection, id: GoalId) -> Result<(), GoalError> {
+    let tx = conn.unchecked_transaction()?;
+    let n = tx.execute(
+        "UPDATE goal SET completed_at = coalesce(completed_at, strftime('%Y-%m-%dT%H:%M:%fZ', 'now'))
+         WHERE id = ?1",
+        [id.0],
+    )?;
+    if n == 0 {
+        return Err(GoalError::NotFound);
+    }
+    Ok(tx.commit()?)
+}
+
+/// Archives or restores a goal without touching its completion.
+pub fn set_archived(conn: &Connection, id: GoalId, archived: bool) -> Result<(), GoalError> {
+    let tx = conn.unchecked_transaction()?;
+    if tx.execute(
+        "UPDATE goal SET archived = ?1 WHERE id = ?2",
+        params![archived, id.0],
+    )? == 0
+    {
+        return Err(GoalError::NotFound);
+    }
+    Ok(tx.commit()?)
+}
+
+/// Completes now every uncompleted goal (archived too) whose progress reached 100 %: a numeric
+/// goal whose entries add up to the target, or a project with tasks that are all done. A goal
+/// without a measure never completes by itself. Returns how many it completed.
+pub fn complete_reached(conn: &Connection) -> Result<usize, GoalError> {
+    let tx = conn.unchecked_transaction()?;
+    let n = tx.execute(
+        "UPDATE goal SET completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+         WHERE completed_at IS NULL AND CASE
+           WHEN target_count IS NOT NULL THEN
+             (SELECT coalesce(sum(value), 0) FROM goal_entry WHERE goal_id = goal.id) >= target_count
+           WHEN kind = 'project' THEN
+             EXISTS (SELECT 1 FROM task WHERE goal_id = goal.id)
+             AND NOT EXISTS (SELECT 1 FROM task WHERE goal_id = goal.id AND done_at IS NULL)
+           ELSE 0 END",
+        [],
+    )?;
+    tx.commit()?;
+    Ok(n)
+}
+
 pub fn delete(conn: &Connection, id: GoalId) -> Result<(), GoalError> {
     let tx = conn.unchecked_transaction()?;
     tx.execute("UPDATE task SET goal_id = NULL WHERE goal_id = ?1", [id.0])?;
@@ -265,7 +336,7 @@ const SELECT: &str = "SELECT id, title, emoji, description, kind, deadline,
     (SELECT count(*) FROM task WHERE goal_id = goal.id),
     target_count, coalesce(unit, ''),
     (SELECT coalesce(sum(value), 0) FROM goal_entry WHERE goal_id = goal.id),
-    created_at
+    created_at, completed_at IS NOT NULL, archived
     FROM goal";
 
 fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, GoalError>> {
@@ -275,6 +346,7 @@ fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, Goa
     let (tasks_done, tasks_total): (u32, u32) = (r.get(6)?, r.get(7)?);
     let (target, unit, total): (Option<i64>, String, i64) = (r.get(8)?, r.get(9)?, r.get(10)?);
     let created_at: String = r.get(11)?;
+    let (completed, archived): (bool, bool) = (r.get(12)?, r.get(13)?);
     let kind = match kind.as_str() {
         "goal" => GoalKind::Goal,
         "project" => GoalKind::Project,
@@ -299,9 +371,13 @@ fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, Goa
         (None, GoalKind::Project) => Some(tasks_percent),
         (None, GoalKind::Goal) => None,
     };
-    let pace = match pace::pace(progress, &created_at, deadline, today) {
-        Ok(p) => p,
-        Err(e) => return Ok(Err(e)),
+    let pace = if completed {
+        None
+    } else {
+        match pace::pace(progress, &created_at, deadline, today) {
+            Ok(p) => p,
+            Err(e) => return Ok(Err(e)),
+        }
     };
     Ok(Ok(Goal {
         id: GoalId(id),
@@ -317,6 +393,8 @@ fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, Goa
         numeric,
         progress,
         pace,
+        completed,
+        archived,
     }))
 }
 

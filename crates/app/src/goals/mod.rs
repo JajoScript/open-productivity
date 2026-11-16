@@ -105,6 +105,22 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         move |id| state.finish(goals::delete(&state.conn, GoalId(id.into())))
     });
 
+    store.on_complete({
+        let state = state.clone();
+        move |id| state.finish(goals::complete(&state.conn, GoalId(id.into())))
+    });
+
+    store.on_set_archived({
+        let state = state.clone();
+        move |id, archived| {
+            state.finish(goals::set_archived(
+                &state.conn,
+                GoalId(id.into()),
+                archived,
+            ))
+        }
+    });
+
     store.on_open({
         let state = state.clone();
         move |id| {

@@ -542,3 +542,165 @@ fn timeline_has_only_dated_goals_by_date_then_title() {
     let titles: Vec<_> = timeline(&goals).iter().map(|g| g.title.as_str()).collect();
     assert_eq!(titles, ["a", "b", "late"]);
 }
+
+fn status(conn: &Connection, id: GoalId) -> (bool, bool, Option<String>) {
+    let g = get(conn, id, today()).unwrap();
+    let at = conn
+        .query_row("SELECT completed_at FROM goal WHERE id = ?1", [id.0], |r| {
+            r.get(0)
+        })
+        .unwrap();
+    (g.completed, g.archived, at)
+}
+
+#[test]
+fn tabs_filter_by_kind_completion_and_archive() {
+    let conn = test_conn();
+    let g = create(&conn, GoalKind::Goal, &draft("g", None)).unwrap();
+    let p = create(&conn, GoalKind::Project, &draft("p", None)).unwrap();
+    let done = create(&conn, GoalKind::Goal, &draft("done", None)).unwrap();
+    let old = create(&conn, GoalKind::Project, &draft("old", None)).unwrap();
+    complete(&conn, done).unwrap();
+    set_archived(&conn, old, true).unwrap();
+    let goals = list(&conn, today()).unwrap();
+    let ids = |tab| -> Vec<GoalId> {
+        goals
+            .iter()
+            .filter(|x| in_tab(x, tab))
+            .map(|x| x.id)
+            .collect()
+    };
+    assert_eq!(ids(Tab::All), [g, p, done]);
+    assert_eq!(ids(Tab::Goals), [g, done]);
+    assert_eq!(ids(Tab::Projects), [p]);
+    assert_eq!(ids(Tab::Completed), [done]);
+    assert_eq!(ids(Tab::Archived), [old]);
+}
+
+#[test]
+fn complete_is_final_and_keeps_first_date() {
+    let conn = test_conn();
+    let id = goal(&conn);
+    assert_eq!(status(&conn, id), (false, false, None));
+    complete(&conn, id).unwrap();
+    conn.execute(
+        "UPDATE goal SET completed_at = '2026-01-01T00:00:00.000Z'",
+        [],
+    )
+    .unwrap();
+    complete(&conn, id).unwrap();
+    update(&conn, id, &draft("edited", None)).unwrap();
+    set_archived(&conn, id, true).unwrap();
+    assert_eq!(
+        status(&conn, id),
+        (true, true, Some("2026-01-01T00:00:00.000Z".into()))
+    );
+    assert!(matches!(
+        complete(&conn, GoalId(99)),
+        Err(GoalError::NotFound)
+    ));
+}
+
+#[test]
+fn restore_keeps_completed_and_missing_is_not_found() {
+    let conn = test_conn();
+    let id = goal(&conn);
+    complete(&conn, id).unwrap();
+    set_archived(&conn, id, true).unwrap();
+    set_archived(&conn, id, false).unwrap();
+    let (completed, archived, _) = status(&conn, id);
+    assert!(completed && !archived);
+    assert!(matches!(
+        set_archived(&conn, GoalId(99), true),
+        Err(GoalError::NotFound)
+    ));
+}
+
+#[test]
+fn complete_reached_follows_the_measure() {
+    let conn = test_conn();
+    assert_eq!(complete_reached(&conn).unwrap(), 0);
+    let exact = numeric_goal(&conn, 10);
+    let over = numeric_goal(&conn, 10);
+    let under = numeric_goal(&conn, 10);
+    add_entry(&conn, exact, today(), 10).unwrap();
+    add_entry(&conn, over, today(), 12).unwrap();
+    add_entry(&conn, under, today(), 9).unwrap();
+    let full = create(&conn, GoalKind::Project, &draft("full", None)).unwrap();
+    let t = create_task(&conn, full, "t", None).unwrap();
+    crate::tasks::set_done(&conn, t, true, today()).unwrap();
+    let half = create(&conn, GoalKind::Project, &draft("half", None)).unwrap();
+    let t = create_task(&conn, half, "t", None).unwrap();
+    create_task(&conn, half, "u", None).unwrap();
+    crate::tasks::set_done(&conn, t, true, today()).unwrap();
+    create(&conn, GoalKind::Project, &draft("empty", None)).unwrap();
+    let plain = goal(&conn);
+    let t = create_task(&conn, plain, "t", None).unwrap();
+    crate::tasks::set_done(&conn, t, true, today()).unwrap();
+    set_archived(&conn, over, true).unwrap();
+
+    assert_eq!(complete_reached(&conn).unwrap(), 3);
+    for id in [exact, over, full] {
+        assert!(status(&conn, id).0);
+    }
+    for id in [under, half, plain] {
+        assert!(!status(&conn, id).0);
+    }
+    assert_eq!(complete_reached(&conn).unwrap(), 0);
+}
+
+#[test]
+fn completed_stays_completed_when_progress_drops() {
+    let conn = test_conn();
+    let n = numeric_goal(&conn, 10);
+    let e = add_entry(&conn, n, today(), 10).unwrap();
+    let p = create(&conn, GoalKind::Project, &draft("p", None)).unwrap();
+    let t = create_task(&conn, p, "t", None).unwrap();
+    crate::tasks::set_done(&conn, t, true, today()).unwrap();
+    assert_eq!(complete_reached(&conn).unwrap(), 2);
+    delete_entry(&conn, e).unwrap();
+    crate::tasks::set_done(&conn, t, false, today()).unwrap();
+    assert_eq!(complete_reached(&conn).unwrap(), 0);
+    assert!(status(&conn, n).0 && status(&conn, p).0);
+}
+
+#[test]
+fn a_repeating_task_never_completes_its_project() {
+    let conn = test_conn();
+    let p = create(&conn, GoalKind::Project, &draft("p", None)).unwrap();
+    let t = create_task(&conn, p, "t", Some(d(2026, 6, 1))).unwrap();
+    crate::tasks::set_recurrence(&conn, t, Some((crate::recurrence::Frequency::Weekly, "1")))
+        .unwrap();
+    crate::tasks::set_done(&conn, t, true, today()).unwrap();
+    // The copy born pending keeps the project below 100 %; the user completes it by hand.
+    assert_eq!(get(&conn, p, today()).unwrap().tasks_total, 2);
+    assert_eq!(complete_reached(&conn).unwrap(), 0);
+}
+
+#[test]
+fn completed_has_no_pace_and_hidden_goals_leave_portfolio_and_timeline() {
+    let conn = test_conn();
+    let dl = Some(d(2026, 1, 11));
+    let mk = |t| create(&conn, GoalKind::Project, &draft(t, dl)).unwrap();
+    let (live, done, old) = (mk("live"), mk("done"), mk("old"));
+    for id in [live, done, old] {
+        created(&conn, id, "2026-01-01");
+    }
+    complete(&conn, done).unwrap();
+    set_archived(&conn, old, true).unwrap();
+    let goals = list(&conn, d(2026, 1, 6)).unwrap();
+    let get_ = |id| goals.iter().find(|g| g.id == id).unwrap();
+    assert_eq!(get_(done).pace, None);
+    assert!(get_(live).pace.is_some() && get_(old).pace.is_some());
+    assert_eq!(get_(done).progress, Some(0));
+    assert_eq!(
+        portfolio(&goals),
+        Portfolio {
+            count: 1,
+            progress: 0,
+            pace: 50
+        }
+    );
+    let titles: Vec<_> = timeline(&goals).iter().map(|g| g.title.as_str()).collect();
+    assert_eq!(titles, ["live"]);
+}

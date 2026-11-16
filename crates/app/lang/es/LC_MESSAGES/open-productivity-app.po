@@ -1903,3 +1903,53 @@ msgstr "No hay objetivos con fecha límite."
 
 msgid "{} · {} %"
 msgstr "{} · {} %"
+
+msgctxt "goal tab"
+msgid "Goals"
+msgstr "Metas"
+
+msgid "Projects"
+msgstr "Proyectos"
+
+msgctxt "goal tab"
+msgid "Completed"
+msgstr "Completados"
+
+msgctxt "goal tab"
+msgid "Archived"
+msgstr "Archivados"
+
+msgctxt "goal stamp"
+msgid "Completed"
+msgstr "Completado"
+
+msgctxt "goal status"
+msgid "Archived"
+msgstr "Archivado"
+
+msgid "Completed · Archived"
+msgstr "Completado · Archivado"
+
+msgid "Complete"
+msgstr "Completar"
+
+msgid "Mark {} as completed? This can't be undone."
+msgstr "¿Marcar {} como completado? No se puede deshacer."
+
+msgid "Nothing completed yet"
+msgstr "Nada completado todavía"
+
+msgid "Nothing archived"
+msgstr "Nada archivado"
+
+msgid "No goals yet"
+msgstr "Aún no hay metas"
+
+msgid "No projects yet"
+msgstr "Aún no hay proyectos"
+
+msgid "When you finish a goal, mark it as completed and it stays here, so you can see everything you achieved."
+msgstr "Cuando termines un objetivo, márcalo como completado y se queda aquí, para que veas todo lo que lograste."
+
+msgid "Archive a goal you set aside to take it off the list without deleting it. You can restore it whenever you want."
+msgstr "Archiva un objetivo que dejaste de lado para sacarlo de la lista sin eliminarlo. Puedes restaurarlo cuando quieras."

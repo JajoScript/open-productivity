@@ -38,6 +38,39 @@ export component PaceBadge inherits Rectangle {
     }
 }
 
+// "Completed" as a small pill with a check, in place of the pace.
+export component CompletedBadge inherits Rectangle {
+    width: row.preferred-width;
+    height: 20px;
+    border-radius: 10px;
+    background: Theme.selected;
+    accessible-role: none;
+
+    row := HorizontalLayout {
+        padding-left: 8px;
+        padding-right: 8px;
+        spacing: 4px;
+        alignment: center;
+        Image {
+            source: @image-url("../icons/check.svg");
+            colorize: Theme.ink;
+            width: 12px;
+            height: 12px;
+            y: (parent.height - self.height) / 2;
+            accessible-role: none;
+        }
+
+        Text {
+            text: @tr("goal stamp" => "Completed");
+            color: Theme.ink;
+            font-size: 11px;
+            font-weight: 600;
+            vertical-alignment: center;
+            accessible-role: none;
+        }
+    }
+}
+
 // A goal as a card: a band with its emoji, then title, deadline and the days left.
 export component GoalCard inherits Rectangle {
     in property <GoalRow> goal;
@@ -108,14 +141,16 @@ export component GoalCard inherits Rectangle {
                     accessible-role: none;
                 }
 
-                if root.goal.has-pace: PaceBadge {
+                if root.goal.completed: CompletedBadge { }
+
+                if !root.goal.completed && root.goal.has-pace: PaceBadge {
                     pace: root.goal.pace;
                 }
             }
 
             Text {
                 text: GoalsStore.days-text(root.goal.has-deadline, root.goal.days-left);
-                color: root.goal.has-deadline && root.goal.days-left < 0 ? Theme.critical : Palette.foreground;
+                color: !root.goal.completed && root.goal.has-deadline && root.goal.days-left < 0 ? Theme.critical : Palette.foreground;
                 font-weight: 600;
                 accessible-role: none;
             }

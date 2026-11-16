@@ -22,6 +22,8 @@ export component GoalDetail inherits Rectangle {
     callback add-task;
     callback add-entry;
     callback delete;
+    callback complete;
+    callback set-archived(bool);
 
     border-width: 1px;
     border-color: Theme.hairline;
@@ -69,6 +71,12 @@ export component GoalDetail inherits Rectangle {
                 width: parent.width;
                 KindLabel {
                     kind: root.goal.kind;
+                }
+
+                if root.goal.completed || root.goal.archived: Text {
+                    text: root.goal.completed && root.goal.archived ? @tr("Completed · Archived") : root.goal.completed ? @tr("goal stamp" => "Completed") : @tr("goal status" => "Archived");
+                    font-size: 12px;
+                    color: Theme.muted;
                 }
 
                 Text {
@@ -192,6 +200,35 @@ export component GoalDetail inherits Rectangle {
 
         HorizontalLayout {
             padding: 12px;
+            padding-bottom: 0px;
+            spacing: 8px;
+            alignment: end;
+            if !root.goal.archived: SubtleButton {
+                text: @tr("Archive");
+                color: Palette.foreground;
+                clicked => {
+                    root.set-archived(true);
+                }
+            }
+
+            if root.goal.archived: SubtleButton {
+                text: @tr("Restore");
+                color: Palette.foreground;
+                clicked => {
+                    root.set-archived(false);
+                }
+            }
+
+            if !root.goal.completed && !root.goal.archived: InkButton {
+                text: @tr("Complete");
+                clicked => {
+                    confirm-complete.show();
+                }
+            }
+        }
+
+        HorizontalLayout {
+            padding: 12px;
             spacing: 8px;
             alignment: end;
             SubtleButton {
@@ -222,6 +259,45 @@ export component GoalDetail inherits Rectangle {
                 text: @tr("Edit");
                 clicked => {
                     root.edit();
+                }
+            }
+        }
+    }
+
+    confirm-complete := PopupWindow {
+        x: (root.width - self.width) / 2;
+        y: root.height - 200px;
+        width: min(root.width - 24px, 320px);
+        PopupSurface {
+            VerticalLayout {
+                padding: 12px;
+                spacing: 12px;
+                Text {
+                    text: GoalsStore.complete-question(root.goal.title);
+                    wrap: word-wrap;
+                }
+
+                HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Cancel");
+                        color: Palette.foreground;
+                        init => {
+                            self.focus();
+                        }
+                        clicked => {
+                            confirm-complete.close();
+                        }
+                    }
+
+                    InkButton {
+                        text: @tr("Complete");
+                        clicked => {
+                            confirm-complete.close();
+                            root.complete();
+                        }
+                    }
                 }
             }
         }

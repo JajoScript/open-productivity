@@ -5,6 +5,9 @@ import { Date } from "std-widgets.slint";
 
 export enum GoalKind { goal, project }
 
+// Which goals the grid shows.
+export enum GoalTab { all, goals, projects, completed, archived }
+
 // How the progress of a goal compares with the share of its time already gone.
 export enum GoalPace { ahead, on-pace, behind }
 
@@ -31,6 +34,8 @@ export struct GoalRow {
     // Only with progress and a deadline.
     has-pace: bool,
     pace: GoalPace,
+    completed: bool,
+    archived: bool,
 }
 
 // Averages of the goals that have a pace, whole 0..=100 from core.
@@ -80,6 +85,7 @@ export global GoalsStore {
     in property <[GoalTaskRow]> tasks;
     // The entries of the open goal: most recent first.
     in property <[GoalEntryRow]> entries;
+    in-out property <GoalTab> tab: GoalTab.all;
     in-out property <bool> detail-open;
     in-out property <string> error;
 
@@ -119,10 +125,16 @@ export global GoalsStore {
         return @tr("Delete {}? This can't be undone.", title);
     }
 
+    public pure function complete-question(title: string) -> string {
+        return @tr("Mark {} as completed? This can't be undone.", title);
+    }
+
     // The ones that return a string give the error to show; empty means it worked.
     callback create(GoalKind, string, string, string, bool, Date, bool, string, string) -> string;
     callback update(int, string, string, string, bool, Date, bool, string, string) -> string;
     callback delete(int) -> string;
+    callback complete(int) -> string;
+    callback set-archived(int, bool) -> string;
     callback create-task(int, string, bool, Date) -> string;
     callback set-task-done(int, bool);
     callback add-entry(int, Date, string) -> string;

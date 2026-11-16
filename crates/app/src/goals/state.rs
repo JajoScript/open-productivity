@@ -13,7 +13,7 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
 use crate::{
-    AppWindow, GoalEntryRow, GoalKind, GoalPace, GoalPortfolio, GoalRow, GoalTaskRow,
+    AppWindow, GoalEntryRow, GoalKind, GoalPace, GoalPortfolio, GoalRow, GoalTab, GoalTaskRow,
     GoalTimelineRow, GoalsStore,
 };
 
@@ -37,6 +37,16 @@ pub fn core_kind(k: GoalKind) -> goals::GoalKind {
     match k {
         GoalKind::Goal => goals::GoalKind::Goal,
         GoalKind::Project => goals::GoalKind::Project,
+    }
+}
+
+fn core_tab(t: GoalTab) -> goals::Tab {
+    match t {
+        GoalTab::All => goals::Tab::All,
+        GoalTab::Goals => goals::Tab::Goals,
+        GoalTab::Projects => goals::Tab::Projects,
+        GoalTab::Completed => goals::Tab::Completed,
+        GoalTab::Archived => goals::Tab::Archived,
     }
 }
 
@@ -87,6 +97,8 @@ fn goal_row(g: Goal) -> Result<GoalRow, String> {
         numeric_percent: ui_id(n.percent.into())?,
         has_pace: g.pace.is_some(),
         pace: g.pace.map_or(GoalPace::OnPace, |p| goal_pace(p.label)),
+        completed: g.completed,
+        archived: g.archived,
     })
 }
 
@@ -111,6 +123,7 @@ fn entry_row(e: Entry) -> Result<GoalEntryRow, String> {
 impl State {
     fn reload(&self, w: &AppWindow) -> Result<(), String> {
         let today = Local::now().date_naive();
+        goals::complete_reached(&self.conn).map_err(|e| e.to_string())?;
         let all = goals::list(&self.conn, today).map_err(|e| e.to_string())?;
         let timeline = goals::timeline(&all)
             .into_iter()
@@ -122,18 +135,21 @@ impl State {
             progress: ui_id(p.progress.into())?,
             pace: ui_id(p.pace.into())?,
         };
-        let rows = all
+        let store = w.global::<GoalsStore>();
+        let tab = core_tab(store.get_tab());
+        let shown = all.iter().filter(|g| goals::in_tab(g, tab)).cloned();
+        let shown = shown.map(goal_row).collect::<Result<Vec<_>, _>>()?;
+        let all = all
             .into_iter()
             .map(goal_row)
             .collect::<Result<Vec<_>, _>>()?;
-        let store = w.global::<GoalsStore>();
         store.set_portfolio(portfolio);
         self.timeline.set_vec(timeline);
-        store.set_any_goal(!rows.is_empty());
+        store.set_any_goal(!all.is_empty());
         // The open goal follows its edits; one that is gone closes the panel.
         if store.get_detail_open() {
             let id = store.get_detail().id;
-            match rows.iter().find(|r| r.id == id) {
+            match all.iter().find(|r| r.id == id) {
                 Some(r) => {
                     store.set_detail(r.clone());
                     self.load_tasks(GoalId(id.into()))?;
@@ -142,7 +158,7 @@ impl State {
                 None => store.set_detail_open(false),
             }
         }
-        self.rows.set_vec(rows);
+        self.rows.set_vec(shown);
         Ok(())
     }
 

@@ -21,7 +21,7 @@ pub struct Pace {
     pub label: PaceLabel,
 }
 
-/// Averages over the goals that have a pace, as whole 0..=100 truncated; all 0 when none has.
+/// Averages over the goals that have a pace (so not the completed ones), as whole 0..=100 truncated; all 0 when none has.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Portfolio {
     pub count: u32,
@@ -70,7 +70,7 @@ pub(super) fn pace(
 
 pub fn portfolio(goals: &[Goal]) -> Portfolio {
     let (mut count, mut progress, mut pace) = (0, 0, 0);
-    for g in goals {
+    for g in goals.iter().filter(|g| !g.archived) {
         if let (Some(p), Some(q)) = (g.progress, g.pace) {
             count += 1;
             progress += p;
@@ -87,9 +87,12 @@ pub fn portfolio(goals: &[Goal]) -> Portfolio {
     }
 }
 
-/// The goals with a deadline, nearest first, ties by title.
+/// The goals with a deadline, not completed or archived, nearest first, ties by title.
 pub fn timeline(goals: &[Goal]) -> Vec<&Goal> {
-    let mut dated: Vec<&Goal> = goals.iter().filter(|g| g.deadline.is_some()).collect();
+    let mut dated: Vec<&Goal> = goals
+        .iter()
+        .filter(|g| g.deadline.is_some() && !g.completed && !g.archived)
+        .collect();
     dated.sort_by(|a, b| {
         a.deadline
             .cmp(&b.deadline)

@@ -4,11 +4,12 @@
 import { ScrollView } from "std-widgets.slint";
 import { EmptyState } from "../empty-state.slint";
 import { InkButton } from "../ink-button.slint";
+import { SettingsTab } from "../settings/settings-tab.slint";
 import { Theme } from "../theme.slint";
 import { GoalCard } from "goal-card.slint";
 import { GoalDetail } from "goal-detail.slint";
 import { GoalsSidebar } from "goals-sidebar.slint";
-import { GoalsStore } from "goals-store.slint";
+import { GoalTab, GoalsStore } from "goals-store.slint";
 
 // What the empty state shows: three cards in use, quiet and non-interactive.
 component GoalsPreview inherits HorizontalLayout {
@@ -58,11 +59,20 @@ export component GoalsView inherits VerticalLayout {
     callback new-entry();
 
     property <length> gap: 16px;
+    property <[GoalTab]> tabs: [GoalTab.all, GoalTab.goals, GoalTab.projects, GoalTab.completed, GoalTab.archived];
+    property <[string]> tab-names: [@tr("All"), @tr("goal tab" => "Goals"), @tr("Projects"), @tr("goal tab" => "Completed"), @tr("goal tab" => "Archived")];
     property <length> min-card: 240px;
 
     padding: 24px;
     padding-top: 20px;
     spacing: 12px;
+
+    function choose(index: int) {
+        if index >= 0 && index < root.tabs.length && GoalsStore.tab != root.tabs[index] {
+            GoalsStore.tab = root.tabs[index];
+            GoalsStore.refresh();
+        }
+    }
 
     HorizontalLayout {
         spacing: 8px;
@@ -92,6 +102,22 @@ export component GoalsView inherits VerticalLayout {
         wrap: word-wrap;
     }
 
+    if GoalsStore.any-goal: HorizontalLayout {
+        spacing: 0px;
+        alignment: start;
+        accessible-role: tab-list;
+        for name[i] in root.tab-names: SettingsTab {
+            text: name;
+            selected: GoalsStore.tab == root.tabs[i];
+            chosen => {
+                root.choose(i);
+            }
+            step(d) => {
+                root.choose(i + d);
+            }
+        }
+    }
+
     if GoalsStore.error != "": Text {
         text: GoalsStore.error;
         color: Theme.critical;
@@ -116,7 +142,19 @@ export component GoalsView inherits VerticalLayout {
         // Room for the floating create button under the panel's actions.
         padding-bottom: 64px;
 
-        grid := ScrollView {
+        if GoalsStore.goals.length == 0: EmptyState {
+            horizontal-stretch: 1;
+            title: GoalsStore.tab == GoalTab.completed ? @tr("Nothing completed yet") : GoalsStore.tab == GoalTab.archived ? @tr("Nothing archived") : GoalsStore.tab == GoalTab.projects ? @tr("No projects yet") : @tr("No goals yet");
+            description: GoalsStore.tab == GoalTab.completed ? @tr("When you finish a goal, mark it as completed and it stays here, so you can see everything you achieved.") : GoalsStore.tab == GoalTab.archived ? @tr("Archive a goal you set aside to take it off the list without deleting it. You can restore it whenever you want.") : @tr("Write down what you want to reach, with an emoji and a deadline. Each card counts the days you have left.");
+            action: GoalsStore.tab == GoalTab.completed || GoalsStore.tab == GoalTab.archived ? "" : @tr("New goal");
+            clicked => {
+                root.new-goal();
+            }
+
+            GoalsPreview { }
+        }
+
+        if GoalsStore.goals.length > 0: grid := ScrollView {
             // The scroll bar takes the right edge of the viewport.
             property <length> avail: self.visible-width - 16px;
             property <int> cols: max(1, floor((self.avail + root.gap) / (root.min-card + root.gap)));
@@ -158,6 +196,12 @@ export component GoalsView inherits VerticalLayout {
             }
             delete => {
                 GoalsStore.error = GoalsStore.delete(GoalsStore.detail.id);
+            }
+            complete => {
+                GoalsStore.error = GoalsStore.complete(GoalsStore.detail.id);
+            }
+            set-archived(archived) => {
+                GoalsStore.error = GoalsStore.set-archived(GoalsStore.detail.id, archived);
             }
         }
     }
