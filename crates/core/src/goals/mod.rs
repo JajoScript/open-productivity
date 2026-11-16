@@ -9,11 +9,13 @@ use chrono::NaiveDate;
 use rusqlite::{Connection, params};
 
 mod entries;
+mod pace;
 mod tasks;
 #[cfg(test)]
 mod tests;
 
 pub use entries::{Entry, EntryId, add_entry, delete_entry, list_entries};
+pub use pace::{Pace, PaceLabel, Portfolio, expected_pace, pace_label, portfolio, timeline};
 pub use tasks::{GoalTask, create_task, list_tasks};
 
 const DATE_FORMAT: &str = "%Y-%m-%d";
@@ -80,6 +82,11 @@ pub struct Goal {
     /// `tasks_done` over `tasks_total` as a whole 0..=100; 0 without tasks.
     pub tasks_percent: u32,
     pub numeric: Option<NumericProgress>,
+    /// What is compared with the pace: tasks for a project, the measure for a numeric goal;
+    /// `None` for a goal without a measure, even with tasks.
+    pub progress: Option<u32>,
+    /// Only with `progress` and a deadline.
+    pub pace: Option<Pace>,
 }
 
 /// Whole percent of `done` over `total`, truncated; 0 when there is nothing to do.
@@ -257,7 +264,8 @@ const SELECT: &str = "SELECT id, title, emoji, description, kind, deadline,
     (SELECT count(*) FROM task WHERE goal_id = goal.id AND done_at IS NOT NULL),
     (SELECT count(*) FROM task WHERE goal_id = goal.id),
     target_count, coalesce(unit, ''),
-    (SELECT coalesce(sum(value), 0) FROM goal_entry WHERE goal_id = goal.id)
+    (SELECT coalesce(sum(value), 0) FROM goal_entry WHERE goal_id = goal.id),
+    created_at
     FROM goal";
 
 fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, GoalError>> {
@@ -266,6 +274,7 @@ fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, Goa
     let (id, title, emoji, description) = (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?);
     let (tasks_done, tasks_total): (u32, u32) = (r.get(6)?, r.get(7)?);
     let (target, unit, total): (Option<i64>, String, i64) = (r.get(8)?, r.get(9)?, r.get(10)?);
+    let created_at: String = r.get(11)?;
     let kind = match kind.as_str() {
         "goal" => GoalKind::Goal,
         "project" => GoalKind::Project,
@@ -278,6 +287,22 @@ fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, Goa
             Err(_) => return Ok(Err(GoalError::BadDate(d))),
         },
     };
+    let numeric = target.map(|target| NumericProgress {
+        target,
+        unit,
+        total,
+        percent: (total.saturating_mul(100) / target).min(100) as u32,
+    });
+    let tasks_percent = percent(tasks_done, tasks_total);
+    let progress = match (&numeric, kind) {
+        (Some(n), _) => Some(n.percent),
+        (None, GoalKind::Project) => Some(tasks_percent),
+        (None, GoalKind::Goal) => None,
+    };
+    let pace = match pace::pace(progress, &created_at, deadline, today) {
+        Ok(p) => p,
+        Err(e) => return Ok(Err(e)),
+    };
     Ok(Ok(Goal {
         id: GoalId(id),
         title,
@@ -288,13 +313,10 @@ fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, Goa
         days_left: deadline.map(|d| days_left(d, today)),
         tasks_done,
         tasks_total,
-        tasks_percent: percent(tasks_done, tasks_total),
-        numeric: target.map(|target| NumericProgress {
-            target,
-            unit,
-            total,
-            percent: (total.saturating_mul(100) / target).min(100) as u32,
-        }),
+        tasks_percent,
+        numeric,
+        progress,
+        pace,
     }))
 }
 

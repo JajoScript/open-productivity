@@ -1873,3 +1873,33 @@ msgstr "Cantidad"
 
 msgid "Quantity ({})"
 msgstr "Cantidad ({})"
+
+msgid "Ahead"
+msgstr "Adelantada"
+
+msgid "On pace"
+msgstr "En ritmo"
+
+msgid "Behind"
+msgstr "Atrasada"
+
+msgid "Portfolio pace"
+msgstr "Ritmo del portafolio"
+
+msgid "No goals with a deadline and progress yet."
+msgstr "Aún no hay objetivos con fecha límite y avance."
+
+msgid "Progress {} %"
+msgstr "Progreso {} %"
+
+msgid "Pace {} %"
+msgstr "Ritmo {} %"
+
+msgid "Timeline"
+msgstr "Línea de tiempo"
+
+msgid "No goals with a deadline."
+msgstr "No hay objetivos con fecha límite."
+
+msgid "{} · {} %"
+msgstr "{} · {} %"

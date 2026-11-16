@@ -5,7 +5,7 @@ import { Palette } from "std-widgets.slint";
 import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
 import { GoalProgress } from "goal-progress.slint";
-import { GoalKind, GoalRow, GoalsStore } from "goals-store.slint";
+import { GoalKind, GoalPace, GoalRow, GoalsStore } from "goals-store.slint";
 
 // The kind of a goal as a small label.
 export component KindLabel inherits Text {
@@ -15,6 +15,27 @@ export component KindLabel inherits Text {
     font-size: 12px;
     color: Theme.muted;
     accessible-role: none;
+}
+
+// "Ahead" / "On pace" / "Behind" as a small pill; only behind is flagged.
+export component PaceBadge inherits Rectangle {
+    in property <GoalPace> pace;
+
+    width: label.preferred-width + 16px;
+    height: 20px;
+    border-radius: 10px;
+    background: Theme.selected;
+    accessible-role: none;
+
+    label := Text {
+        text: root.pace == GoalPace.ahead ? @tr("Ahead") : root.pace == GoalPace.behind ? @tr("Behind") : @tr("On pace");
+        color: root.pace == GoalPace.behind ? Theme.critical : root.pace == GoalPace.ahead ? Theme.ink : Theme.muted;
+        font-size: 11px;
+        font-weight: 600;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+        accessible-role: none;
+    }
 }
 
 // A goal as a card: a band with its emoji, then title, deadline and the days left.
@@ -77,10 +98,19 @@ export component GoalCard inherits Rectangle {
                 accessible-role: none;
             }
 
-            if root.goal.has-deadline: Text {
-                text: Strings.date(root.goal.deadline.day, root.goal.deadline.month, root.goal.deadline.year);
-                color: Theme.muted;
-                accessible-role: none;
+            if root.goal.has-deadline: HorizontalLayout {
+                spacing: 8px;
+                Text {
+                    text: Strings.date(root.goal.deadline.day, root.goal.deadline.month, root.goal.deadline.year);
+                    color: Theme.muted;
+                    vertical-alignment: center;
+                    overflow: elide;
+                    accessible-role: none;
+                }
+
+                if root.goal.has-pace: PaceBadge {
+                    pace: root.goal.pace;
+                }
             }
 
             Text {

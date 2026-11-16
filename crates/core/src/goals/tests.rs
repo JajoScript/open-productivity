@@ -423,3 +423,122 @@ fn parse_count_reads_positive_whole_numbers() {
         );
     }
 }
+
+fn created(conn: &Connection, id: GoalId, day: &str) {
+    // Midday UTC keeps the local date the same in almost every time zone.
+    conn.execute(
+        "UPDATE goal SET created_at = ?1 WHERE id = ?2",
+        params![format!("{day}T12:00:00.000Z"), id.0],
+    )
+    .unwrap();
+}
+
+#[test]
+fn expected_pace_is_the_elapsed_share() {
+    let (c, dl) = (d(2026, 1, 1), d(2026, 1, 11));
+    assert_eq!(expected_pace(c, dl, d(2026, 1, 1)), 0);
+    assert_eq!(expected_pace(c, dl, d(2026, 1, 6)), 50);
+    assert_eq!(expected_pace(c, dl, d(2026, 1, 4)), 30);
+    assert_eq!(expected_pace(c, dl, d(2026, 2, 1)), 100);
+    assert_eq!(expected_pace(c, dl, d(2025, 12, 1)), 0);
+    assert_eq!(expected_pace(c, c, c), 100);
+}
+
+#[test]
+fn pace_label_compares_progress_with_pace() {
+    assert_eq!(pace_label(60, 50), PaceLabel::Ahead);
+    assert_eq!(pace_label(40, 50), PaceLabel::Behind);
+    assert_eq!(pace_label(50, 50), PaceLabel::OnPace);
+}
+
+#[test]
+fn progress_depends_on_the_class() {
+    let conn = test_conn();
+    let project = create(&conn, GoalKind::Project, &draft("p", None)).unwrap();
+    assert_eq!(get(&conn, project, today()).unwrap().progress, Some(0));
+    create_task(&conn, project, "t", None).unwrap();
+    assert_eq!(get(&conn, project, today()).unwrap().progress, Some(0));
+    let n = numeric_goal(&conn, 10);
+    add_entry(&conn, n, today(), 5).unwrap();
+    assert_eq!(get(&conn, n, today()).unwrap().progress, Some(50));
+    let plain = goal(&conn);
+    create_task(&conn, plain, "t", None).unwrap();
+    assert_eq!(get(&conn, plain, today()).unwrap().progress, None);
+}
+
+#[test]
+fn pace_needs_progress_and_a_deadline() {
+    let conn = test_conn();
+    let dl = Some(d(2026, 1, 11));
+    let project = create(&conn, GoalKind::Project, &draft("p", dl)).unwrap();
+    created(&conn, project, "2026-01-01");
+    let on = |id| get(&conn, id, d(2026, 1, 6)).unwrap().pace;
+    assert_eq!(
+        on(project),
+        Some(Pace {
+            expected: 50,
+            label: PaceLabel::Behind
+        })
+    );
+    let undated = create(&conn, GoalKind::Project, &draft("u", None)).unwrap();
+    assert_eq!(on(undated), None);
+    let plain = create(&conn, GoalKind::Goal, &draft("g", dl)).unwrap();
+    assert_eq!(on(plain), None);
+}
+
+#[test]
+fn unreadable_creation_date_is_an_error() {
+    let conn = test_conn();
+    let id = create(&conn, GoalKind::Project, &draft("p", Some(today()))).unwrap();
+    conn.execute("UPDATE goal SET created_at = 'x'", [])
+        .unwrap();
+    assert!(matches!(
+        get(&conn, id, today()),
+        Err(GoalError::BadDate(_))
+    ));
+}
+
+#[test]
+fn portfolio_averages_only_goals_with_pace() {
+    let conn = test_conn();
+    assert_eq!(portfolio(&[]), Portfolio::default());
+    let dl = Some(d(2026, 1, 11));
+    let a = create(&conn, GoalKind::Project, &draft("a", dl)).unwrap();
+    let b = numeric_goal(&conn, 10);
+    conn.execute(
+        "UPDATE goal SET deadline = '2026-01-11' WHERE id = ?1",
+        [b.0],
+    )
+    .unwrap();
+    add_entry(&conn, b, today(), 9).unwrap();
+    create(&conn, GoalKind::Project, &draft("no deadline", None)).unwrap();
+    created(&conn, a, "2026-01-01");
+    created(&conn, b, "2026-01-01");
+    let goals = list(&conn, d(2026, 1, 4)).unwrap();
+    assert_eq!(
+        portfolio(&goals),
+        Portfolio {
+            count: 2,
+            progress: 45,
+            pace: 30
+        }
+    );
+    let none = create(&conn, GoalKind::Goal, &draft("g", dl)).unwrap();
+    assert_eq!(get(&conn, none, today()).unwrap().pace, None);
+    assert_eq!(
+        portfolio(&[get(&conn, none, today()).unwrap()]),
+        Portfolio::default()
+    );
+}
+
+#[test]
+fn timeline_has_only_dated_goals_by_date_then_title() {
+    let conn = test_conn();
+    create(&conn, GoalKind::Goal, &draft("none", None)).unwrap();
+    create(&conn, GoalKind::Goal, &draft("b", Some(d(2026, 7, 1)))).unwrap();
+    create(&conn, GoalKind::Goal, &draft("late", Some(d(2026, 12, 1)))).unwrap();
+    create(&conn, GoalKind::Goal, &draft("a", Some(d(2026, 7, 1)))).unwrap();
+    let goals = list(&conn, today()).unwrap();
+    let titles: Vec<_> = timeline(&goals).iter().map(|g| g.title.as_str()).collect();
+    assert_eq!(titles, ["a", "b", "late"]);
+}

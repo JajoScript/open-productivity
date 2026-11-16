@@ -7,6 +7,7 @@ import { InkButton } from "../ink-button.slint";
 import { Theme } from "../theme.slint";
 import { GoalCard } from "goal-card.slint";
 import { GoalDetail } from "goal-detail.slint";
+import { GoalsSidebar } from "goals-sidebar.slint";
 import { GoalsStore } from "goals-store.slint";
 
 // What the empty state shows: three cards in use, quiet and non-interactive.
@@ -135,6 +136,8 @@ export component GoalsView inherits VerticalLayout {
                 }
             }
         }
+
+        if !GoalsStore.detail-open: GoalsSidebar { }
 
         if GoalsStore.detail-open: GoalDetail {
             width: 320px;

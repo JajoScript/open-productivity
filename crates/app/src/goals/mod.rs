@@ -23,12 +23,14 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         rows: Rc::default(),
         tasks: Rc::default(),
         entries: Rc::default(),
+        timeline: Rc::default(),
         window: window.as_weak(),
     });
     let store = window.global::<GoalsStore>();
     store.set_goals(state.model());
     store.set_tasks(state.tasks_model());
     store.set_entries(state.entries_model());
+    store.set_timeline(state.timeline_model());
     state.show_load();
 
     // A date the picker cannot produce is an error, never "no deadline". The measure is read as

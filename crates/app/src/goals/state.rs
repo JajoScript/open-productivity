@@ -12,13 +12,17 @@ use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
-use crate::{AppWindow, GoalEntryRow, GoalKind, GoalRow, GoalTaskRow, GoalsStore};
+use crate::{
+    AppWindow, GoalEntryRow, GoalKind, GoalPace, GoalPortfolio, GoalRow, GoalTaskRow,
+    GoalTimelineRow, GoalsStore,
+};
 
 pub struct State {
     pub conn: Rc<Connection>,
     pub rows: Rc<VecModel<GoalRow>>,
     pub tasks: Rc<VecModel<GoalTaskRow>>,
     pub entries: Rc<VecModel<GoalEntryRow>>,
+    pub timeline: Rc<VecModel<GoalTimelineRow>>,
     pub window: slint::Weak<AppWindow>,
 }
 
@@ -34,6 +38,26 @@ pub fn core_kind(k: GoalKind) -> goals::GoalKind {
         GoalKind::Goal => goals::GoalKind::Goal,
         GoalKind::Project => goals::GoalKind::Project,
     }
+}
+
+fn goal_pace(l: goals::PaceLabel) -> GoalPace {
+    match l {
+        goals::PaceLabel::Ahead => GoalPace::Ahead,
+        goals::PaceLabel::OnPace => GoalPace::OnPace,
+        goals::PaceLabel::Behind => GoalPace::Behind,
+    }
+}
+
+fn timeline_row(g: &Goal) -> Result<GoalTimelineRow, String> {
+    Ok(GoalTimelineRow {
+        id: ui_id(g.id.0)?,
+        title: g.title.as_str().into(),
+        emoji: g.emoji.as_str().into(),
+        deadline: g.deadline.map(ui_date).unwrap_or_default(),
+        days_left: g.days_left.map(ui_id).transpose()?.unwrap_or_default(),
+        progress: ui_id(g.progress.unwrap_or_default().into())?,
+        has_progress: g.progress.is_some(),
+    })
 }
 
 fn goal_row(g: Goal) -> Result<GoalRow, String> {
@@ -61,6 +85,8 @@ fn goal_row(g: Goal) -> Result<GoalRow, String> {
         unit: n.unit.into(),
         total: ui_id(n.total)?,
         numeric_percent: ui_id(n.percent.into())?,
+        has_pace: g.pace.is_some(),
+        pace: g.pace.map_or(GoalPace::OnPace, |p| goal_pace(p.label)),
     })
 }
 
@@ -85,12 +111,24 @@ fn entry_row(e: Entry) -> Result<GoalEntryRow, String> {
 impl State {
     fn reload(&self, w: &AppWindow) -> Result<(), String> {
         let today = Local::now().date_naive();
-        let rows = goals::list(&self.conn, today)
-            .map_err(|e| e.to_string())?
+        let all = goals::list(&self.conn, today).map_err(|e| e.to_string())?;
+        let timeline = goals::timeline(&all)
+            .into_iter()
+            .map(timeline_row)
+            .collect::<Result<Vec<_>, _>>()?;
+        let p = goals::portfolio(&all);
+        let portfolio = GoalPortfolio {
+            count: ui_id(p.count.into())?,
+            progress: ui_id(p.progress.into())?,
+            pace: ui_id(p.pace.into())?,
+        };
+        let rows = all
             .into_iter()
             .map(goal_row)
             .collect::<Result<Vec<_>, _>>()?;
         let store = w.global::<GoalsStore>();
+        store.set_portfolio(portfolio);
+        self.timeline.set_vec(timeline);
         store.set_any_goal(!rows.is_empty());
         // The open goal follows its edits; one that is gone closes the panel.
         if store.get_detail_open() {
@@ -187,6 +225,10 @@ impl State {
 
     pub fn tasks_model(&self) -> ModelRc<GoalTaskRow> {
         ModelRc::from(self.tasks.clone())
+    }
+
+    pub fn timeline_model(&self) -> ModelRc<GoalTimelineRow> {
+        ModelRc::from(self.timeline.clone())
     }
 
     pub fn entries_model(&self) -> ModelRc<GoalEntryRow> {

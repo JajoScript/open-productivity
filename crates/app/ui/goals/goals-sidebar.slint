@@ -1,0 +1,176 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { ScrollView } from "std-widgets.slint";
+import { Strings } from "../strings.slint";
+import { Theme } from "../theme.slint";
+import { GoalsStore } from "goals-store.slint";
+
+// A bordered card with a bold title, like the goal cards.
+component SideCard inherits Rectangle {
+    in property <string> title;
+
+    border-radius: 8px;
+    border-width: 1px;
+    border-color: Theme.hairline;
+
+    VerticalLayout {
+        padding: 12px;
+        spacing: 8px;
+        Text {
+            text: root.title;
+            font-weight: 700;
+            vertical-stretch: 0;
+        }
+
+        @children
+    }
+}
+
+// Portfolio pace and the timeline of the goals with a deadline.
+export component GoalsSidebar inherits VerticalLayout {
+    width: 280px;
+    spacing: 12px;
+
+    SideCard {
+        title: @tr("Portfolio pace");
+        vertical-stretch: 0;
+
+        if GoalsStore.portfolio.count == 0: Text {
+            text: @tr("No goals with a deadline and progress yet.");
+            color: Theme.muted;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+
+        if GoalsStore.portfolio.count > 0: VerticalLayout {
+            spacing: 6px;
+            HorizontalLayout {
+                Text {
+                    text: @tr("Progress {} %", GoalsStore.portfolio.progress);
+                    font-size: 12px;
+                    horizontal-stretch: 1;
+                }
+
+                Text {
+                    text: @tr("Pace {} %", GoalsStore.portfolio.pace);
+                    color: Theme.muted;
+                    font-size: 12px;
+                }
+            }
+
+            Rectangle {
+                height: 10px;
+                accessible-role: none;
+                Rectangle {
+                    height: 6px;
+                    border-radius: 3px;
+                    background: Theme.hairline;
+                }
+
+                Rectangle {
+                    x: 0px;
+                    height: 6px;
+                    width: parent.width * GoalsStore.portfolio.progress / 100;
+                    border-radius: 3px;
+                    background: Theme.ink;
+                }
+
+                // Where the progress should be by now.
+                Rectangle {
+                    x: parent.width * GoalsStore.portfolio.pace / 100 - 1px;
+                    width: 2px;
+                    height: 10px;
+                    background: Theme.muted;
+                }
+            }
+        }
+    }
+
+    SideCard {
+        title: @tr("Timeline");
+        vertical-stretch: 1;
+        min-height: 80px;
+
+        if GoalsStore.timeline.length == 0: Text {
+            text: @tr("No goals with a deadline.");
+            color: Theme.muted;
+            font-size: 12px;
+            wrap: word-wrap;
+            vertical-stretch: 1;
+            vertical-alignment: top;
+        }
+
+        if GoalsStore.timeline.length > 0: ScrollView {
+            VerticalLayout {
+                alignment: start;
+                for t in GoalsStore.timeline: Rectangle {
+                    height: 44px;
+                    background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
+                    border-radius: 6px;
+                    forward-focus: focus;
+                    accessible-role: button;
+                    accessible-label: t.title + ", " + GoalsStore.days-text(true, t.days-left);
+                    accessible-action-default => {
+                        GoalsStore.open(t.id);
+                    }
+
+                    HorizontalLayout {
+                        spacing: 10px;
+                        Text {
+                            text: Strings.short-date(t.deadline.day, t.deadline.month);
+                            color: Theme.muted;
+                            font-size: 12px;
+                            font-weight: 700;
+                            vertical-alignment: center;
+                            min-width: 48px;
+                            accessible-role: none;
+                        }
+
+                        VerticalLayout {
+                            horizontal-stretch: 1;
+                            min-width: 0px;
+                            alignment: center;
+                            Text {
+                                text: t.emoji == "" ? t.title : t.emoji + " " + t.title;
+                                overflow: elide;
+                                accessible-role: none;
+                            }
+
+                            Text {
+                                text: t.has-progress ? @tr("{} · {} %", GoalsStore.days-text(true, t.days-left), t.progress) : GoalsStore.days-text(true, t.days-left);
+                                color: Theme.muted;
+                                font-size: 11px;
+                                overflow: elide;
+                                accessible-role: none;
+                            }
+                        }
+                    }
+
+                    touch := TouchArea {
+                        clicked => {
+                            GoalsStore.open(t.id);
+                        }
+                    }
+
+                    focus := FocusScope {
+                        width: 0px; // keyboard only; clicks go to the TouchArea
+                        key-pressed(event) => {
+                            if event.text == Key.Space || event.text == Key.Return {
+                                GoalsStore.open(t.id);
+                                return accept;
+                            }
+                            reject
+                        }
+                    }
+
+                    if focus.has-focus: Rectangle {
+                        border-radius: 6px;
+                        border-width: 2px;
+                        border-color: Theme.ink;
+                    }
+                }
+            }
+        }
+    }
+}

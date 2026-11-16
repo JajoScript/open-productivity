@@ -5,6 +5,9 @@ import { Date } from "std-widgets.slint";
 
 export enum GoalKind { goal, project }
 
+// How the progress of a goal compares with the share of its time already gone.
+export enum GoalPace { ahead, on-pace, behind }
+
 // One goal or project; `days-left` is negative once the deadline passed.
 export struct GoalRow {
     id: int,
@@ -25,6 +28,27 @@ export struct GoalRow {
     unit: string,
     total: int,
     numeric-percent: int,
+    // Only with progress and a deadline.
+    has-pace: bool,
+    pace: GoalPace,
+}
+
+// Averages of the goals that have a pace, whole 0..=100 from core.
+export struct GoalPortfolio {
+    count: int,
+    progress: int,
+    pace: int,
+}
+
+// A goal with a deadline in the timeline; `progress` only matters when `has-progress`.
+export struct GoalTimelineRow {
+    id: int,
+    title: string,
+    emoji: string,
+    deadline: Date,
+    days-left: int,
+    progress: int,
+    has-progress: bool,
 }
 
 // A progress entry of the open numeric goal.
@@ -48,6 +72,9 @@ export global GoalsStore {
     // Nearest deadline first, undated last.
     in property <[GoalRow]> goals;
     in property <bool> any-goal;
+    in property <GoalPortfolio> portfolio;
+    // Goals with a deadline, nearest first.
+    in property <[GoalTimelineRow]> timeline;
     in property <GoalRow> detail;
     // The tasks of the open goal: pending first, then done.
     in property <[GoalTaskRow]> tasks;
