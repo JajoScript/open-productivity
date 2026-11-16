@@ -78,7 +78,7 @@ export component GoalCard inherits Rectangle {
     callback opened;
 
     height: 224px;
-    border-radius: 8px;
+    border-radius: 6px;
     border-width: root.selected ? 2px : 1px;
     border-color: root.selected ? Theme.ink : Theme.hairline;
     background: touch.pressed ? Theme.pressed : touch.has-hover ? Theme.hover : transparent;
@@ -91,11 +91,14 @@ export component GoalCard inherits Rectangle {
     }
 
     VerticalLayout {
+        // The band takes the height the content leaves, like the legacy cover, so a card without
+        // progress bars has no empty bottom.
         Rectangle {
-            height: 64px;
+            min-height: 64px;
+            vertical-stretch: 1;
             background: Theme.selected;
-            border-top-left-radius: 7px;
-            border-top-right-radius: 7px;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
 
             if root.goal.emoji != "": Text {
                 text: root.goal.emoji;
@@ -121,9 +124,9 @@ export component GoalCard inherits Rectangle {
         }
 
         VerticalLayout {
+            vertical-stretch: 0;
             padding: 12px;
             spacing: 6px;
-            alignment: start;
             Text {
                 text: root.goal.title;
                 font-weight: 700;

@@ -31,7 +31,7 @@ export component GoalDetail inherits Rectangle {
 
     border-width: 1px;
     border-color: Theme.hairline;
-    border-radius: 8px;
+    border-radius: 6px;
     clip: true;
 
     VerticalLayout {
@@ -55,13 +55,34 @@ export component GoalDetail inherits Rectangle {
                 accessible-role: none;
             }
 
-            SubtleButton {
+            HorizontalLayout {
                 x: parent.width - self.width - 8px;
                 y: 8px;
-                icon: @image-url("../icons/x.svg");
-                label: @tr("Close");
-                clicked => {
-                    root.close();
+                width: self.preferred-width;
+                height: 28px;
+                spacing: 2px;
+                SubtleButton {
+                    icon: @image-url("../icons/pencil.svg");
+                    label: @tr("Edit");
+                    clicked => {
+                        root.edit();
+                    }
+                }
+
+                SubtleButton {
+                    icon: @image-url("../icons/trash-2.svg");
+                    label: @tr("Delete");
+                    clicked => {
+                        confirm.show();
+                    }
+                }
+
+                SubtleButton {
+                    icon: @image-url("../icons/x.svg");
+                    label: @tr("Close");
+                    clicked => {
+                        root.close();
+                    }
                 }
             }
         }
@@ -154,6 +175,17 @@ export component GoalDetail inherits Rectangle {
                         label: @tr("Delete progress");
                         clicked => {
                             GoalsStore.delete-entry(entry.id);
+                        }
+                    }
+                }
+
+                if root.goal.is-numeric: HorizontalLayout {
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Add progress");
+                        color: Palette.foreground;
+                        clicked => {
+                            root.add-entry();
                         }
                     }
                 }
@@ -264,15 +296,27 @@ export component GoalDetail inherits Rectangle {
                         accessible-role: none;
                     }
                 }
+
+                HorizontalLayout {
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Add task");
+                        color: Palette.foreground;
+                        clicked => {
+                            root.add-task();
+                        }
+                    }
+                }
             }
         }
 
+        // One ink action at a time: completing is the step the panel leads to.
         HorizontalLayout {
             padding: 12px;
-            padding-bottom: 0px;
             spacing: 8px;
             alignment: end;
             if !root.goal.archived: SubtleButton {
+                icon: @image-url("../icons/archive.svg");
                 text: @tr("Archive");
                 color: Palette.foreground;
                 clicked => {
@@ -281,6 +325,7 @@ export component GoalDetail inherits Rectangle {
             }
 
             if root.goal.archived: SubtleButton {
+                icon: @image-url("../icons/archive-restore.svg");
                 text: @tr("Restore");
                 color: Palette.foreground;
                 clicked => {
@@ -295,47 +340,11 @@ export component GoalDetail inherits Rectangle {
                 }
             }
         }
-
-        HorizontalLayout {
-            padding: 12px;
-            spacing: 8px;
-            alignment: end;
-            SubtleButton {
-                text: @tr("Delete");
-                color: Palette.foreground;
-                clicked => {
-                    confirm.show();
-                }
-            }
-
-            if root.goal.is-numeric: SubtleButton {
-                text: @tr("Add progress");
-                color: Palette.foreground;
-                clicked => {
-                    root.add-entry();
-                }
-            }
-
-            SubtleButton {
-                text: @tr("Add task");
-                color: Palette.foreground;
-                clicked => {
-                    root.add-task();
-                }
-            }
-
-            InkButton {
-                text: @tr("Edit");
-                clicked => {
-                    root.edit();
-                }
-            }
-        }
     }
 
     confirm-complete := PopupWindow {
         x: (root.width - self.width) / 2;
-        y: root.height - 200px;
+        y: root.height - 160px;
         width: min(root.width - 24px, 320px);
         PopupSurface {
             VerticalLayout {
@@ -374,7 +383,8 @@ export component GoalDetail inherits Rectangle {
 
     confirm := PopupWindow {
         x: (root.width - self.width) / 2;
-        y: root.height - 160px;
+        // Under the header, where Delete is.
+        y: 44px;
         width: min(root.width - 24px, 320px);
         PopupSurface {
             VerticalLayout {

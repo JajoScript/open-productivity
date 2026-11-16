@@ -1890,7 +1890,7 @@ msgid "No goals with a deadline and progress yet."
 msgstr "Aún no hay objetivos con fecha límite y avance."
 
 msgid "Progress {} %"
-msgstr "Progreso {} %"
+msgstr "Avance {} %"
 
 msgid "Pace {} %"
 msgstr "Ritmo {} %"
@@ -1980,3 +1980,18 @@ msgstr "Escribe un monto mayor que 0."
 
 msgid "Withdraw the reserved money before deleting this goal."
 msgstr "Retira el dinero reservado antes de eliminar esta meta."
+
+msgid "Everything is archived"
+msgstr "Todo está archivado"
+
+msgid "A project gathers the tasks that get something done. Its card shows how many are finished."
+msgstr "Un proyecto reúne las tareas para sacar algo adelante. Su tarjeta muestra cuántas están terminadas."
+
+msgid "A goal is something you want to reach by a date. Measure it with a number or with money you set aside, and see whether you keep the pace."
+msgstr "Una meta es algo que quieres lograr para una fecha. Mídela con un número o con dinero que apartas, y mira si llevas el ritmo."
+
+msgid "Your goals are in Archived. Restore one to see it here again."
+msgstr "Tus objetivos están en Archivados. Restaura uno para verlo aquí de nuevo."
+
+msgid "Create an account that is not a credit card in Finances to set money aside for this goal."
+msgstr "Crea en Finanzas una cuenta que no sea de crédito para apartar dinero para esta meta."

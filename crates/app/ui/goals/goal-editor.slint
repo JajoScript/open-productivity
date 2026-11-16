@@ -227,7 +227,7 @@ component EditorBody inherits FocusScope {
                 }
             }
 
-            if !root.editing: FormField {
+            if !root.editing && FinanceStore.has-reservable: FormField {
                 label: @tr("Account");
                 InkSelect {
                     label: @tr("Account");
@@ -247,7 +247,15 @@ component EditorBody inherits FocusScope {
             }
         }
 
-        if root.money && root.kind == GoalKind.goal && !root.editing: Text {
+        // Like the legacy: without a plain account there is nothing to pick, so say where to make one.
+        if root.money && root.kind == GoalKind.goal && !root.editing && !FinanceStore.has-reservable: Text {
+            text: @tr("Create an account that is not a credit card in Finances to set money aside for this goal.");
+            color: Palette.foreground;
+            font-size: 12px;
+            wrap: word-wrap;
+        }
+
+        if root.money && root.kind == GoalKind.goal && !root.editing && FinanceStore.has-reservable: Text {
             text: @tr("The money is set aside in a reserve of the account, also shown in Finances.");
             color: Theme.muted;
             font-size: 12px;

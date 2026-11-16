@@ -18,7 +18,7 @@ component GoalsPreview inherits HorizontalLayout {
     for n in 3: Rectangle {
         width: 56px;
         height: 68px;
-        border-radius: 8px;
+        border-radius: 6px;
         border-width: 1px;
         border-color: Theme.hairline;
         opacity: n == 0 ? 1 : 0.6;
@@ -26,8 +26,8 @@ component GoalsPreview inherits HorizontalLayout {
             height: 28px;
             y: 0px;
             background: Theme.selected;
-            border-top-left-radius: 7px;
-            border-top-right-radius: 7px;
+            border-top-left-radius: 5px;
+            border-top-right-radius: 5px;
         }
 
         Rectangle {
@@ -145,8 +145,9 @@ export component GoalsView inherits VerticalLayout {
 
         if GoalsStore.goals.length == 0: EmptyState {
             horizontal-stretch: 1;
-            title: GoalsStore.tab == GoalTab.completed ? @tr("Nothing completed yet") : GoalsStore.tab == GoalTab.archived ? @tr("Nothing archived") : GoalsStore.tab == GoalTab.projects ? @tr("No projects yet") : @tr("No goals yet");
-            description: GoalsStore.tab == GoalTab.completed ? @tr("When you finish a goal, mark it as completed and it stays here, so you can see everything you achieved.") : GoalsStore.tab == GoalTab.archived ? @tr("Archive a goal you set aside to take it off the list without deleting it. You can restore it whenever you want.") : @tr("Write down what you want to reach, with an emoji and a deadline. Each card counts the days you have left.");
+            // Each tab says what belongs in it; "All" is empty only when every goal is archived.
+            title: GoalsStore.tab == GoalTab.completed ? @tr("Nothing completed yet") : GoalsStore.tab == GoalTab.archived ? @tr("Nothing archived") : GoalsStore.tab == GoalTab.projects ? @tr("No projects yet") : GoalsStore.tab == GoalTab.goals ? @tr("No goals yet") : @tr("Everything is archived");
+            description: GoalsStore.tab == GoalTab.completed ? @tr("When you finish a goal, mark it as completed and it stays here, so you can see everything you achieved.") : GoalsStore.tab == GoalTab.archived ? @tr("Archive a goal you set aside to take it off the list without deleting it. You can restore it whenever you want.") : GoalsStore.tab == GoalTab.projects ? @tr("A project gathers the tasks that get something done. Its card shows how many are finished.") : GoalsStore.tab == GoalTab.goals ? @tr("A goal is something you want to reach by a date. Measure it with a number or with money you set aside, and see whether you keep the pace.") : @tr("Your goals are in Archived. Restore one to see it here again.");
             action: GoalsStore.tab == GoalTab.completed || GoalsStore.tab == GoalTab.archived ? "" : @tr("New goal");
             clicked => {
                 root.new-goal();
