@@ -8,8 +8,11 @@ use std::fmt;
 use chrono::NaiveDate;
 use rusqlite::{Connection, params};
 
+mod tasks;
 #[cfg(test)]
 mod tests;
+
+pub use tasks::{GoalTask, create_task, list_tasks};
 
 const DATE_FORMAT: &str = "%Y-%m-%d";
 
@@ -50,6 +53,15 @@ pub struct Goal {
     pub deadline: Option<NaiveDate>,
     /// Days from `today` to the deadline (negative once passed); `None` without a deadline.
     pub days_left: Option<i64>,
+    pub tasks_done: u32,
+    pub tasks_total: u32,
+    /// `tasks_done` over `tasks_total` as a whole 0..=100; 0 without tasks.
+    pub tasks_percent: u32,
+}
+
+/// Whole percent of `done` over `total`, truncated; 0 when there is nothing to do.
+pub fn percent(done: u32, total: u32) -> u32 {
+    (done * 100).checked_div(total).unwrap_or(0)
 }
 
 #[derive(Debug)]
@@ -144,6 +156,7 @@ pub fn update(conn: &Connection, id: GoalId, draft: &GoalDraft) -> Result<(), Go
 
 pub fn delete(conn: &Connection, id: GoalId) -> Result<(), GoalError> {
     let tx = conn.unchecked_transaction()?;
+    tx.execute("UPDATE task SET goal_id = NULL WHERE goal_id = ?1", [id.0])?;
     if tx.execute("DELETE FROM goal WHERE id = ?1", [id.0])? == 0 {
         return Err(GoalError::NotFound);
     }
@@ -151,12 +164,16 @@ pub fn delete(conn: &Connection, id: GoalId) -> Result<(), GoalError> {
     Ok(())
 }
 
-const SELECT: &str = "SELECT id, title, emoji, description, kind, deadline FROM goal";
+const SELECT: &str = "SELECT id, title, emoji, description, kind, deadline,
+    (SELECT count(*) FROM task WHERE goal_id = goal.id AND done_at IS NOT NULL),
+    (SELECT count(*) FROM task WHERE goal_id = goal.id)
+    FROM goal";
 
 fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, GoalError>> {
     let kind: String = r.get(4)?;
     let deadline: Option<String> = r.get(5)?;
     let (id, title, emoji, description) = (r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?);
+    let (tasks_done, tasks_total): (u32, u32) = (r.get(6)?, r.get(7)?);
     let kind = match kind.as_str() {
         "goal" => GoalKind::Goal,
         "project" => GoalKind::Project,
@@ -177,6 +194,9 @@ fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, Goa
         kind,
         deadline,
         days_left: deadline.map(|d| days_left(d, today)),
+        tasks_done,
+        tasks_total,
+        tasks_percent: percent(tasks_done, tasks_total),
     }))
 }
 

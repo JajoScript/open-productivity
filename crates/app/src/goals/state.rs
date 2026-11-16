@@ -7,16 +7,17 @@ use std::rc::Rc;
 
 use open_productivity_core::chrono::Local;
 use open_productivity_core::db::Connection;
-use open_productivity_core::goals::{self, Goal, GoalError, GoalId};
+use open_productivity_core::goals::{self, Goal, GoalError, GoalId, GoalTask};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
-use crate::{AppWindow, GoalKind, GoalRow, GoalsStore};
+use crate::{AppWindow, GoalKind, GoalRow, GoalTaskRow, GoalsStore};
 
 pub struct State {
     pub conn: Rc<Connection>,
     pub rows: Rc<VecModel<GoalRow>>,
+    pub tasks: Rc<VecModel<GoalTaskRow>>,
     pub window: slint::Weak<AppWindow>,
 }
 
@@ -44,6 +45,19 @@ fn goal_row(g: Goal) -> Result<GoalRow, String> {
         has_deadline: g.deadline.is_some(),
         deadline: g.deadline.map(ui_date).unwrap_or_default(),
         days_left: g.days_left.map(ui_id).transpose()?.unwrap_or_default(),
+        tasks_done: ui_id(g.tasks_done.into())?,
+        tasks_total: ui_id(g.tasks_total.into())?,
+        tasks_percent: ui_id(g.tasks_percent.into())?,
+    })
+}
+
+fn task_row(t: GoalTask) -> Result<GoalTaskRow, String> {
+    Ok(GoalTaskRow {
+        id: ui_id(t.id.0)?,
+        title: t.title.into(),
+        done: t.done,
+        has_due: t.due.is_some(),
+        due: t.due.map(ui_date).unwrap_or_default(),
     })
 }
 
@@ -61,11 +75,24 @@ impl State {
         if store.get_detail_open() {
             let id = store.get_detail().id;
             match rows.iter().find(|r| r.id == id) {
-                Some(r) => store.set_detail(r.clone()),
+                Some(r) => {
+                    store.set_detail(r.clone());
+                    self.load_tasks(GoalId(id.into()))?;
+                }
                 None => store.set_detail_open(false),
             }
         }
         self.rows.set_vec(rows);
+        Ok(())
+    }
+
+    fn load_tasks(&self, id: GoalId) -> Result<(), String> {
+        let tasks = goals::list_tasks(&self.conn, id)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(task_row)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.tasks.set_vec(tasks);
         Ok(())
     }
 
@@ -76,6 +103,7 @@ impl State {
         let g = goals::get(&self.conn, id, Local::now().date_naive()).map_err(|e| e.to_string())?;
         let store = w.global::<GoalsStore>();
         store.set_detail(goal_row(g)?);
+        self.load_tasks(id)?;
         store.set_detail_open(true);
         Ok(())
     }
@@ -117,5 +145,9 @@ impl State {
 
     pub fn model(&self) -> ModelRc<GoalRow> {
         ModelRc::from(self.rows.clone())
+    }
+
+    pub fn tasks_model(&self) -> ModelRc<GoalTaskRow> {
+        ModelRc::from(self.tasks.clone())
     }
 }

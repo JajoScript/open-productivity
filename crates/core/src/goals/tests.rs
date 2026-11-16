@@ -147,3 +147,84 @@ fn goal_carries_days_left() {
     .collect();
     assert_eq!(got, [Some(10), Some(0), Some(-2), None]);
 }
+
+fn goal(conn: &Connection) -> GoalId {
+    create(conn, GoalKind::Goal, &draft("g", None)).unwrap()
+}
+
+#[test]
+fn create_task_links_it_with_optional_date_and_validates() {
+    let conn = test_conn();
+    let g = goal(&conn);
+    let a = create_task(&conn, g, "  a ", Some(d(2026, 6, 5))).unwrap();
+    let b = create_task(&conn, g, "b", None).unwrap();
+    let tasks = list_tasks(&conn, g).unwrap();
+    assert_eq!(tasks.iter().map(|t| t.id).collect::<Vec<_>>(), [a, b]);
+    assert_eq!(tasks[0].title, "a");
+    assert_eq!(tasks[0].due, Some(d(2026, 6, 5)));
+    assert_eq!(tasks[1].due, None);
+    assert!(matches!(
+        create_task(&conn, g, "  ", None),
+        Err(GoalError::EmptyTitle)
+    ));
+    assert!(matches!(
+        create_task(&conn, GoalId(99), "x", None),
+        Err(GoalError::NotFound)
+    ));
+}
+
+#[test]
+fn list_tasks_puts_pending_before_done() {
+    let conn = test_conn();
+    let g = goal(&conn);
+    let a = create_task(&conn, g, "a", None).unwrap();
+    let b = create_task(&conn, g, "b", None).unwrap();
+    crate::tasks::set_done(&conn, a, true, today()).unwrap();
+    let ids: Vec<_> = list_tasks(&conn, g).unwrap().iter().map(|t| t.id).collect();
+    assert_eq!(ids, [b, a]);
+}
+
+#[test]
+fn task_progress_counts_done_over_total() {
+    let conn = test_conn();
+    let g = goal(&conn);
+    let got = get(&conn, g, today()).unwrap();
+    assert_eq!(
+        (got.tasks_done, got.tasks_total, got.tasks_percent),
+        (0, 0, 0)
+    );
+    let a = create_task(&conn, g, "a", None).unwrap();
+    create_task(&conn, g, "b", None).unwrap();
+    create_task(&conn, g, "c", None).unwrap();
+    crate::tasks::set_done(&conn, a, true, today()).unwrap();
+    let got = get(&conn, g, today()).unwrap();
+    assert_eq!(
+        (got.tasks_done, got.tasks_total, got.tasks_percent),
+        (1, 3, 33)
+    );
+    assert_eq!(list(&conn, today()).unwrap()[0].tasks_percent, 33);
+}
+
+#[test]
+fn percent_truncates_and_handles_zero() {
+    assert_eq!(percent(0, 0), 0);
+    assert_eq!(percent(1, 3), 33);
+    assert_eq!(percent(2, 3), 66);
+    assert_eq!(percent(3, 3), 100);
+}
+
+#[test]
+fn delete_unlinks_tasks_without_deleting_them() {
+    let conn = test_conn();
+    let g = goal(&conn);
+    let t = create_task(&conn, g, "a", None).unwrap();
+    delete(&conn, g).unwrap();
+    let kept: i64 = conn
+        .query_row(
+            "SELECT count(*) FROM task WHERE id = ?1 AND goal_id IS NULL",
+            [t.0],
+            |r| r.get(0),
+        )
+        .unwrap();
+    assert_eq!(kept, 1);
+}

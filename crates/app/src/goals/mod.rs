@@ -7,22 +7,26 @@ mod state;
 
 use std::rc::Rc;
 
+use open_productivity_core::chrono::Local;
 use open_productivity_core::db::Connection;
 use open_productivity_core::goals::{self, GoalDraft, GoalId};
+use open_productivity_core::tasks::{self, TaskId};
 use slint::ComponentHandle;
 
 use self::state::{State, core_kind};
 use crate::dates::core_date;
-use crate::{AppWindow, Date, GoalsStore};
+use crate::{AppWindow, Date, GoalsStore, Strings};
 
 pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     let state = Rc::new(State {
         conn,
         rows: Rc::default(),
+        tasks: Rc::default(),
         window: window.as_weak(),
     });
     let store = window.global::<GoalsStore>();
     store.set_goals(state.model());
+    store.set_tasks(state.tasks_model());
     state.show_load();
 
     // A date the picker cannot produce is an error, never "no deadline".
@@ -83,6 +87,36 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
             {
                 let s = w.global::<GoalsStore>();
                 s.set_error(s.invoke_load_failed(e.into()));
+            }
+        }
+    });
+
+    store.on_create_task({
+        let state = state.clone();
+        move |goal, title, has_due, due: Date| {
+            // A date the picker cannot produce is an error, never "no date".
+            match has_due.then(|| core_date(due)).transpose() {
+                Ok(due) => state.finish(
+                    goals::create_task(&state.conn, GoalId(goal.into()), &title, due).map(|_| ()),
+                ),
+                Err(e) => state_failed(&state, e),
+            }
+        }
+    });
+
+    store.on_set_task_done({
+        let state = state.clone();
+        move |id, done| {
+            let res = tasks::set_done(
+                &state.conn,
+                TaskId(id.into()),
+                done,
+                Local::now().date_naive(),
+            );
+            state.show_load();
+            if let (Err(e), Some(w)) = (res, state.window.upgrade()) {
+                let msg = crate::tasks::task_message(&w.global::<Strings>(), e);
+                w.global::<GoalsStore>().set_error(msg);
             }
         }
     });

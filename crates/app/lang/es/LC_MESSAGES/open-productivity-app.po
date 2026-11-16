@@ -1813,3 +1813,9 @@ msgstr "No se pudieron cargar los objetivos: {}"
 
 msgid "Could not save the goal: {}"
 msgstr "No se pudo guardar el objetivo: {}"
+
+msgid "{} % · {}/{}"
+msgstr "{} % · {}/{}"
+
+msgid "Add"
+msgstr "Añadir"

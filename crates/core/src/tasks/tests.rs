@@ -921,6 +921,24 @@ fn a_repeated_study_topic_keeps_its_subject() {
 }
 
 #[test]
+fn a_repeated_goal_task_keeps_its_goal() {
+    let conn = db::test_conn();
+    let goal = crate::goals::create(
+        &conn,
+        crate::goals::GoalKind::Goal,
+        &crate::goals::GoalDraft {
+            title: "Run".into(),
+            ..Default::default()
+        },
+    )
+    .unwrap();
+    let id = crate::goals::create_task(&conn, goal, "Jog", Some(d("2026-06-20"))).unwrap();
+    set_recurrence(&conn, id, Some((Frequency::Weekly, "1"))).unwrap();
+    set_done(&conn, id, true, d(TODAY)).unwrap();
+    assert_eq!(crate::goals::list_tasks(&conn, goal).unwrap().len(), 2);
+}
+
+#[test]
 fn a_task_without_a_rule_creates_nothing() {
     let conn = db::test_conn();
     let id = create_on(&conn, "x", d("2026-06-10")).unwrap();

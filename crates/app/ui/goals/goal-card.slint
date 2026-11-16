@@ -4,6 +4,7 @@
 import { Palette } from "std-widgets.slint";
 import { Strings } from "../strings.slint";
 import { Theme } from "../theme.slint";
+import { GoalProgress } from "goal-progress.slint";
 import { GoalKind, GoalRow, GoalsStore } from "goals-store.slint";
 
 // The kind of a goal as a small label.
@@ -22,7 +23,7 @@ export component GoalCard inherits Rectangle {
     in property <bool> selected;
     callback opened;
 
-    height: 148px;
+    height: 176px;
     border-radius: 8px;
     border-width: root.selected ? 2px : 1px;
     border-color: root.selected ? Theme.ink : Theme.hairline;
@@ -67,7 +68,8 @@ export component GoalCard inherits Rectangle {
 
         VerticalLayout {
             padding: 12px;
-            spacing: 4px;
+            spacing: 6px;
+            alignment: start;
             Text {
                 text: root.goal.title;
                 font-weight: 700;
@@ -86,6 +88,12 @@ export component GoalCard inherits Rectangle {
                 color: root.goal.has-deadline && root.goal.days-left < 0 ? Theme.critical : Palette.foreground;
                 font-weight: 600;
                 accessible-role: none;
+            }
+
+            if root.goal.tasks-total > 0: GoalProgress {
+                done: root.goal.tasks-done;
+                total: root.goal.tasks-total;
+                percent: root.goal.tasks-percent;
             }
         }
     }

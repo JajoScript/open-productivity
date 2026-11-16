@@ -15,6 +15,7 @@ import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
 import { StudyStore } from "study/study-store.slint";
 import { GoalEditor } from "goals/goal-editor.slint";
+import { GoalTaskCreator } from "goals/goal-task-creator.slint";
 import { GoalKind, GoalRow, GoalsStore } from "goals/goals-store.slint";
 import { GoalsView } from "goals/goals-view.slint";
 import { AccountCreator } from "finances/account-creator.slint";
@@ -483,6 +484,11 @@ export component AppWindow inherits Window {
             y: 80px;
         }
 
+        goal-task-creator := GoalTaskCreator {
+            x: (root.width - self.width) / 2;
+            y: 120px;
+        }
+
         subject-creator := SubjectCreator {
             editing: root.subject-editing;
             subject-id: StudyStore.subject-detail.id;
@@ -819,6 +825,9 @@ export component AppWindow inherits Window {
                     edit-goal => {
                         root.goal-editing = true;
                         goal-editor.show();
+                    }
+                    new-task => {
+                        goal-task-creator.show();
                     }
                 }
 

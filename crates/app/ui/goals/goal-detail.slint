@@ -2,19 +2,23 @@
 // Copyright (C) 2026 JajoScript
 
 import { Palette, ScrollView } from "std-widgets.slint";
+import { InkCheck } from "../ink-check.slint";
 import { InkButton } from "../ink-button.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { KindLabel } from "goal-card.slint";
-import { GoalRow, GoalsStore } from "goals-store.slint";
+import { GoalProgress } from "goal-progress.slint";
+import { GoalRow, GoalTaskRow, GoalsStore } from "goals-store.slint";
 
 // One goal in a side panel: its emoji, title, description and deadline, with edit and delete.
 export component GoalDetail inherits Rectangle {
     in property <GoalRow> goal;
+    in property <[GoalTaskRow]> tasks;
     callback close;
     callback edit;
+    callback add-task;
     callback delete;
 
     border-width: 1px;
@@ -98,6 +102,48 @@ export component GoalDetail inherits Rectangle {
                     color: root.goal.days-left < 0 ? Theme.critical : Palette.foreground;
                     font-weight: 600;
                 }
+
+                Rectangle {
+                    height: 8px;
+                }
+
+                if root.goal.tasks-total > 0: GoalProgress {
+                    done: root.goal.tasks-done;
+                    total: root.goal.tasks-total;
+                    percent: root.goal.tasks-percent;
+                }
+
+                if root.goal.tasks-total == 0: Text {
+                    text: @tr("No tasks yet.");
+                    color: Theme.muted;
+                }
+
+                for task in root.tasks: HorizontalLayout {
+                    spacing: 8px;
+                    InkCheck {
+                        checked: task.done;
+                        label: task.title;
+                        toggled(done) => {
+                            GoalsStore.set-task-done(task.id, done);
+                        }
+                    }
+
+                    Text {
+                        text: task.title;
+                        color: task.done ? Theme.done : Palette.foreground;
+                        vertical-alignment: center;
+                        wrap: word-wrap;
+                        horizontal-stretch: 1;
+                        accessible-role: none;
+                    }
+
+                    if task.has-due: Text {
+                        text: Strings.short-date(task.due.day, task.due.month);
+                        color: Theme.muted;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+                }
             }
         }
 
@@ -110,6 +156,14 @@ export component GoalDetail inherits Rectangle {
                 color: Palette.foreground;
                 clicked => {
                     confirm.show();
+                }
+            }
+
+            SubtleButton {
+                text: @tr("Add task");
+                color: Palette.foreground;
+                clicked => {
+                    root.add-task();
                 }
             }
 
