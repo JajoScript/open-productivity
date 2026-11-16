@@ -9,7 +9,10 @@ use std::rc::Rc;
 
 use open_productivity_core::chrono::Local;
 use open_productivity_core::db::Connection;
-use open_productivity_core::goals::{self, EntryId, GoalDraft, GoalError, GoalId, Numeric};
+use open_productivity_core::finances::{self, AccountId, ReserveId};
+use open_productivity_core::goals::{
+    self, EntryId, Financial, GoalDraft, GoalError, GoalId, Numeric,
+};
 use open_productivity_core::tasks::{self, TaskId};
 use slint::ComponentHandle;
 
@@ -23,6 +26,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         rows: Rc::default(),
         tasks: Rc::default(),
         entries: Rc::default(),
+        moves: Rc::default(),
         timeline: Rc::default(),
         window: window.as_weak(),
     });
@@ -30,11 +34,12 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
     store.set_goals(state.model());
     store.set_tasks(state.tasks_model());
     store.set_entries(state.entries_model());
+    store.set_moves(state.moves_model());
     store.set_timeline(state.timeline_model());
     state.show_load();
 
-    // A date the picker cannot produce is an error, never "no deadline". The measure is read as
-    // numbers only when the goal has one.
+    // A date the picker cannot produce is an error, never "no deadline". The numeric measure is
+    // read as numbers only when the goal has one; the money one is read by core.
     fn draft(
         title: &str,
         emoji: &str,
@@ -42,6 +47,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         has_deadline: bool,
         deadline: Date,
         measure: Option<(&str, &str)>,
+        money: Option<(&str, i32)>,
     ) -> Result<GoalDraft, GoalError> {
         Ok(GoalDraft {
             title: title.into(),
@@ -59,13 +65,29 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
                     })
                 })
                 .transpose()?,
+            financial: money.map(|(target, account)| Financial {
+                target: target.into(),
+                account: AccountId(account.into()),
+            }),
         })
     }
 
     store.on_create({
         let state = state.clone();
-        move |kind, title, emoji, description, has_deadline, deadline, numeric, target, unit| {
+        move |kind,
+              title,
+              emoji,
+              description,
+              has_deadline,
+              deadline,
+              numeric,
+              target,
+              unit,
+              money,
+              amount,
+              account| {
             let measure = numeric.then_some((target.as_str(), unit.as_str()));
+            let money = money.then_some((amount.as_str(), account));
             state.finish(
                 draft(
                     &title,
@@ -74,6 +96,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
                     has_deadline,
                     deadline,
                     measure,
+                    money,
                 )
                 .and_then(|d| goals::create(&state.conn, core_kind(kind), &d))
                 .map(|_| ()),
@@ -83,8 +106,20 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
 
     store.on_update({
         let state = state.clone();
-        move |id, title, emoji, description, has_deadline, deadline, numeric, target, unit| {
+        move |id,
+              title,
+              emoji,
+              description,
+              has_deadline,
+              deadline,
+              numeric,
+              target,
+              unit,
+              money,
+              amount,
+              account| {
             let measure = numeric.then_some((target.as_str(), unit.as_str()));
+            let money = money.then_some((amount.as_str(), account));
             state.finish(
                 draft(
                     &title,
@@ -93,6 +128,7 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
                     has_deadline,
                     deadline,
                     measure,
+                    money,
                 )
                 .and_then(|d| goals::update(&state.conn, GoalId(id.into()), &d)),
             )
@@ -158,6 +194,23 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
                     })
                     .map(|_| ()),
             )
+        }
+    });
+
+    store.on_move_money({
+        let state = state.clone();
+        move |reserve, withdraw, amount, date, description| {
+            let date = match core_date(date) {
+                Ok(d) => d,
+                Err(e) => return state_failed(&state, e),
+            };
+            let reserve = ReserveId(reserve.into());
+            let res = if withdraw {
+                finances::withdraw_from_reserve(&state.conn, reserve, &amount, date, &description)
+            } else {
+                finances::reserve_money(&state.conn, reserve, &amount, date, &description)
+            };
+            state.finish(res.map_err(GoalError::from))
         }
     });
 

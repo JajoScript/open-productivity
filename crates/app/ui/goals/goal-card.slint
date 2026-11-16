@@ -161,6 +161,12 @@ export component GoalCard inherits Rectangle {
                 percent: root.goal.numeric-percent;
             }
 
+            if root.goal.is-financial: GoalProgress {
+                label: @tr("Reserved");
+                counts: GoalsStore.money-text(root.goal.reserved, root.goal.target-amount);
+                percent: root.goal.money-percent;
+            }
+
             if root.goal.tasks-total > 0: GoalProgress {
                 done: root.goal.tasks-done;
                 total: root.goal.tasks-total;

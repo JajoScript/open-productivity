@@ -34,6 +34,7 @@ fn create_trims_and_stores() {
             description: " daily ".into(),
             deadline: Some(d(2026, 12, 31)),
             numeric: None,
+            financial: None,
         },
     )
     .unwrap();
@@ -83,6 +84,7 @@ fn update_edits_fields_keeps_kind_and_can_clear_deadline() {
             description: "x".into(),
             deadline: Some(d(2026, 8, 1)),
             numeric: None,
+            financial: None,
         },
     )
     .unwrap();

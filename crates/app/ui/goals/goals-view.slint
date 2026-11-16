@@ -57,6 +57,7 @@ export component GoalsView inherits VerticalLayout {
     callback edit-goal();
     callback new-task();
     callback new-entry();
+    callback move-money(bool);
 
     property <length> gap: 16px;
     property <[GoalTab]> tabs: [GoalTab.all, GoalTab.goals, GoalTab.projects, GoalTab.completed, GoalTab.archived];
@@ -182,6 +183,7 @@ export component GoalsView inherits VerticalLayout {
             goal: GoalsStore.detail;
             tasks: GoalsStore.tasks;
             entries: GoalsStore.entries;
+            moves: GoalsStore.moves;
             close => {
                 GoalsStore.detail-open = false;
             }
@@ -193,6 +195,9 @@ export component GoalsView inherits VerticalLayout {
             }
             add-entry => {
                 root.new-entry();
+            }
+            move-money(withdraw) => {
+                root.move-money(withdraw);
             }
             delete => {
                 GoalsStore.error = GoalsStore.delete(GoalsStore.detail.id);

@@ -42,6 +42,11 @@ pub(crate) fn style() -> AmountStyle {
     }
 }
 
+/// The user-facing text of a finance error, for other views that touch accounts or reserves.
+pub(crate) fn message(w: &AppWindow, e: finances::FinanceError) -> slint::SharedString {
+    State::message(w, e)
+}
+
 /// A day field's text; anything that is not a number becomes 0, which `core` rejects.
 fn day(text: &str) -> u32 {
     text.trim().parse().unwrap_or(0)

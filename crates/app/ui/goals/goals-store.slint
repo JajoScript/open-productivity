@@ -2,6 +2,7 @@
 // Copyright (C) 2026 JajoScript
 
 import { Date } from "std-widgets.slint";
+import { ReserveMoveRow } from "../finances/reserve-row.slint";
 
 export enum GoalKind { goal, project }
 
@@ -31,6 +32,17 @@ export struct GoalRow {
     unit: string,
     total: int,
     numeric-percent: int,
+    // A goal with a money measure: `reserved` of `target-amount` in the reserve `reserve-id` of
+    // the account, formatted in its `currency`; `target-input` fills the edit field.
+    is-financial: bool,
+    reserve-id: int,
+    account-id: int,
+    account-name: string,
+    currency: string,
+    reserved: string,
+    target-amount: string,
+    target-input: string,
+    money-percent: int,
     // Only with progress and a deadline.
     has-pace: bool,
     pace: GoalPace,
@@ -85,6 +97,8 @@ export global GoalsStore {
     in property <[GoalTaskRow]> tasks;
     // The entries of the open goal: most recent first.
     in property <[GoalEntryRow]> entries;
+    // The moves of the open goal's reserve: most recent first.
+    in property <[ReserveMoveRow]> moves;
     in-out property <GoalTab> tab: GoalTab.all;
     in-out property <bool> detail-open;
     in-out property <string> error;
@@ -97,6 +111,9 @@ export global GoalsStore {
     out property <string> project-measure: @tr("A project has no numeric measure.");
     out property <string> measure-changed: @tr("The measure of a goal cannot change.");
     out property <string> not-numeric: @tr("This goal has no numeric measure.");
+    out property <string> two-measures: @tr("A goal takes one measure: numeric or money.");
+    out property <string> bad-amount: @tr("Type an amount above 0.");
+    out property <string> reserve-not-empty: @tr("Withdraw the reserved money before deleting this goal.");
 
     public pure function load-failed(error: string) -> string {
         return @tr("Could not load the goals: {}", error);
@@ -121,6 +138,11 @@ export global GoalsStore {
         return unit == "" ? @tr("{} of {}", total, target) : @tr("{} of {} {}", total, target, unit);
     }
 
+    // "$30.000 of $100.000", already formatted in the account's currency.
+    public pure function money-text(reserved: string, target: string) -> string {
+        return @tr("{} of {}", reserved, target);
+    }
+
     public pure function delete-question(title: string) -> string {
         return @tr("Delete {}? This can't be undone.", title);
     }
@@ -130,8 +152,9 @@ export global GoalsStore {
     }
 
     // The ones that return a string give the error to show; empty means it worked.
-    callback create(GoalKind, string, string, string, bool, Date, bool, string, string) -> string;
-    callback update(int, string, string, string, bool, Date, bool, string, string) -> string;
+    // After the numeric measure (bool, target, unit) comes the money one (bool, amount, account).
+    callback create(GoalKind, string, string, string, bool, Date, bool, string, string, bool, string, int) -> string;
+    callback update(int, string, string, string, bool, Date, bool, string, string, bool, string, int) -> string;
     callback delete(int) -> string;
     callback complete(int) -> string;
     callback set-archived(int, bool) -> string;
@@ -139,6 +162,8 @@ export global GoalsStore {
     callback set-task-done(int, bool);
     callback add-entry(int, Date, string) -> string;
     callback delete-entry(int);
+    // Reserves (or withdraws) an amount in the reserve `int` of the open goal.
+    callback move-money(int, bool, string, Date, string) -> string;
     callback open(int);
     callback refresh();
 }

@@ -8,11 +8,15 @@ use std::fmt;
 use chrono::NaiveDate;
 use rusqlite::{Connection, params};
 
+use crate::finances::{self, AccountId, Currency, FinanceError, ReserveId};
+
 mod entries;
 mod pace;
 mod tasks;
 #[cfg(test)]
 mod tests;
+#[cfg(test)]
+mod tests_financial;
 
 pub use entries::{Entry, EntryId, add_entry, delete_entry, list_entries};
 pub use pace::{Pace, PaceLabel, Portfolio, expected_pace, pace_label, portfolio, timeline};
@@ -56,6 +60,28 @@ pub struct NumericProgress {
     pub percent: u32,
 }
 
+/// The money measure: reserve `target` (typed in the account's currency) in the goal's own
+/// reserve, which is created with the goal in `account`.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Financial {
+    pub target: String,
+    pub account: AccountId,
+}
+
+/// Progress toward a financial goal's target, in its account's currency.
+#[derive(Clone, Debug, PartialEq)]
+pub struct FinancialProgress {
+    pub target: i64,
+    /// The reserve's balance; it may pass `target`.
+    pub reserved: i64,
+    /// `reserved` over `target` as a whole 0..=100, truncated and capped.
+    pub percent: u32,
+    pub currency: &'static Currency,
+    pub reserve: ReserveId,
+    pub account: AccountId,
+    pub account_name: String,
+}
+
 /// What the user types when creating or editing.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct GoalDraft {
@@ -63,8 +89,10 @@ pub struct GoalDraft {
     pub emoji: String,
     pub description: String,
     pub deadline: Option<NaiveDate>,
-    /// Only goals (not projects) take a measure, and it never changes after creating.
+    /// Only goals (not projects) take a measure, at most one, and it never changes after
+    /// creating; editing changes only its target (and the unit).
     pub numeric: Option<Numeric>,
+    pub financial: Option<Financial>,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -82,7 +110,8 @@ pub struct Goal {
     /// `tasks_done` over `tasks_total` as a whole 0..=100; 0 without tasks.
     pub tasks_percent: u32,
     pub numeric: Option<NumericProgress>,
-    /// What is compared with the pace: tasks for a project, the measure for a numeric goal;
+    pub financial: Option<FinancialProgress>,
+    /// What is compared with the pace: tasks for a project, the measure for a goal with one;
     /// `None` for a goal without a measure, even with tasks.
     pub progress: Option<u32>,
     /// Only with `progress` and a deadline, and never once completed.
@@ -139,8 +168,16 @@ pub fn parse_count(text: &str) -> Result<i64, GoalError> {
 pub enum GoalError {
     EmptyTitle,
     NotFound,
-    /// A project takes no numeric measure.
+    /// A project takes no measure.
     ProjectMeasure,
+    /// A goal takes one measure: numeric or financial.
+    TwoMeasures,
+    /// The target amount is not a valid amount above 0 in the account's currency.
+    BadAmount,
+    /// The goal's reserve still holds money, so the goal cannot be deleted.
+    ReserveNotEmpty,
+    /// The reserve or its account refused it.
+    Finance(FinanceError),
     /// The target is not above 0.
     BadTarget,
     /// Editing tried to add or remove the measure.
@@ -162,6 +199,10 @@ impl fmt::Display for GoalError {
             GoalError::EmptyTitle => write!(f, "the title is empty"),
             GoalError::NotFound => write!(f, "goal not found"),
             GoalError::ProjectMeasure => write!(f, "a project takes no measure"),
+            GoalError::TwoMeasures => write!(f, "a goal takes one measure"),
+            GoalError::BadAmount => write!(f, "the target amount is not valid"),
+            GoalError::ReserveNotEmpty => write!(f, "the goal's reserve holds money"),
+            GoalError::Finance(e) => write!(f, "{e}"),
             GoalError::BadTarget => write!(f, "the target must be above 0"),
             GoalError::MeasureChanged => write!(f, "the measure cannot change"),
             GoalError::BadValue => write!(f, "the value must be above 0"),
@@ -177,6 +218,7 @@ impl std::error::Error for GoalError {
     fn source(&self) -> Option<&(dyn std::error::Error + 'static)> {
         match self {
             GoalError::Sqlite(e) => Some(e),
+            GoalError::Finance(e) => Some(e),
             _ => None,
         }
     }
@@ -185,6 +227,15 @@ impl std::error::Error for GoalError {
 impl From<rusqlite::Error> for GoalError {
     fn from(e: rusqlite::Error) -> Self {
         GoalError::Sqlite(e)
+    }
+}
+
+impl From<FinanceError> for GoalError {
+    fn from(e: FinanceError) -> Self {
+        match e {
+            FinanceError::Sqlite(e) => GoalError::Sqlite(e),
+            e => GoalError::Finance(e),
+        }
     }
 }
 
@@ -213,16 +264,35 @@ fn measure(draft: &GoalDraft) -> Result<(Option<i64>, Option<&str>), GoalError> 
     }
 }
 
+/// The target amount typed for `account`, in the smallest unit of its currency.
+fn target_amount(conn: &Connection, f: &Financial) -> Result<i64, GoalError> {
+    let account = finances::get_account(conn, f.account)?;
+    finances::parse_amount(&f.target, account.currency)
+        .filter(|a| *a > 0)
+        .ok_or(GoalError::BadAmount)
+}
+
+/// Creates a goal or project. A financial goal gets its empty reserve, named like it, in the
+/// same transaction: the account must be an active plain one.
 pub fn create(conn: &Connection, kind: GoalKind, draft: &GoalDraft) -> Result<GoalId, GoalError> {
     let title = title(draft)?;
-    if draft.numeric.is_some() && kind == GoalKind::Project {
+    let measured = draft.numeric.is_some() || draft.financial.is_some();
+    if measured && kind == GoalKind::Project {
         return Err(GoalError::ProjectMeasure);
+    }
+    if draft.numeric.is_some() && draft.financial.is_some() {
+        return Err(GoalError::TwoMeasures);
     }
     let (target, unit) = measure(draft)?;
     let tx = conn.unchecked_transaction()?;
+    let amount = draft
+        .financial
+        .as_ref()
+        .map(|f| target_amount(&tx, f))
+        .transpose()?;
     tx.execute(
-        "INSERT INTO goal (title, emoji, description, kind, deadline, target_count, unit)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        "INSERT INTO goal (title, emoji, description, kind, deadline, target_count, unit,
+         target_amount) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
         params![
             title,
             draft.emoji.trim(),
@@ -230,35 +300,51 @@ pub fn create(conn: &Connection, kind: GoalKind, draft: &GoalDraft) -> Result<Go
             kind.as_str(),
             deadline_text(draft),
             target,
-            unit
+            unit,
+            amount
         ],
     )?;
     let id = tx.last_insert_rowid();
+    if let Some(f) = &draft.financial {
+        let reserve = finances::create_reserve(&tx, title, f.account)?;
+        tx.execute(
+            "UPDATE finance_reserve SET goal_id = ?1 WHERE id = ?2",
+            [id, reserve.0],
+        )?;
+    }
     tx.commit()?;
     Ok(GoalId(id))
 }
 
-/// Edits the text and the deadline, and the target and unit of a numeric goal. The kind and the
-/// measure never change, and `None` clears the deadline.
+/// Edits the text and the deadline, and the target (and unit) of a goal with a measure; the
+/// reserve of a financial goal takes the new title. The kind, the measure and the account never
+/// change, and `None` clears the deadline.
 pub fn update(conn: &Connection, id: GoalId, draft: &GoalDraft) -> Result<(), GoalError> {
     let title = title(draft)?;
     let (target, unit) = measure(draft)?;
     let tx = conn.unchecked_transaction()?;
-    let numeric: bool = match tx.query_row(
-        "SELECT target_count IS NOT NULL FROM goal WHERE id = ?1",
+    let (numeric, account): (bool, Option<i64>) = match tx.query_row(
+        "SELECT g.target_count IS NOT NULL, r.account_id
+         FROM goal g LEFT JOIN finance_reserve r ON r.goal_id = g.id WHERE g.id = ?1",
         [id.0],
-        |r| r.get(0),
+        |r| Ok((r.get(0)?, r.get(1)?)),
     ) {
         Ok(n) => n,
         Err(rusqlite::Error::QueryReturnedNoRows) => return Err(GoalError::NotFound),
         Err(e) => return Err(e.into()),
     };
-    if numeric != draft.numeric.is_some() {
+    let same_account = account == draft.financial.as_ref().map(|f| f.account.0);
+    if numeric != draft.numeric.is_some() || !same_account {
         return Err(GoalError::MeasureChanged);
     }
+    let amount = draft
+        .financial
+        .as_ref()
+        .map(|f| target_amount(&tx, f))
+        .transpose()?;
     tx.execute(
         "UPDATE goal SET title = ?1, emoji = ?2, description = ?3, deadline = ?4,
-         target_count = ?5, unit = ?6 WHERE id = ?7",
+         target_count = ?5, unit = ?6, target_amount = ?7 WHERE id = ?8",
         params![
             title,
             draft.emoji.trim(),
@@ -266,8 +352,13 @@ pub fn update(conn: &Connection, id: GoalId, draft: &GoalDraft) -> Result<(), Go
             deadline_text(draft),
             target,
             unit,
+            amount,
             id.0
         ],
+    )?;
+    tx.execute(
+        "UPDATE finance_reserve SET name = ?1 WHERE goal_id = ?2",
+        params![title, id.0],
     )?;
     tx.commit()?;
     Ok(())
@@ -301,29 +392,45 @@ pub fn set_archived(conn: &Connection, id: GoalId, archived: bool) -> Result<(),
 }
 
 /// Completes now every uncompleted goal (archived too) whose progress reached 100 %: a numeric
-/// goal whose entries add up to the target, or a project with tasks that are all done. A goal
-/// without a measure never completes by itself. Returns how many it completed.
+/// goal whose entries add up to the target, a financial goal whose reserve holds the target, or
+/// a project with tasks that are all done. A goal without a measure never completes by itself.
+/// Returns how many it completed.
 pub fn complete_reached(conn: &Connection) -> Result<usize, GoalError> {
     let tx = conn.unchecked_transaction()?;
     let n = tx.execute(
-        "UPDATE goal SET completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+        &format!("UPDATE goal SET completed_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
          WHERE completed_at IS NULL AND CASE
            WHEN target_count IS NOT NULL THEN
              (SELECT coalesce(sum(value), 0) FROM goal_entry WHERE goal_id = goal.id) >= target_count
+           WHEN target_amount IS NOT NULL THEN
+             (SELECT {RESERVED} FROM finance_reserve r WHERE r.goal_id = goal.id) >= target_amount
            WHEN kind = 'project' THEN
              EXISTS (SELECT 1 FROM task WHERE goal_id = goal.id)
              AND NOT EXISTS (SELECT 1 FROM task WHERE goal_id = goal.id AND done_at IS NULL)
-           ELSE 0 END",
+           ELSE 0 END"
+        ),
         [],
     )?;
     tx.commit()?;
     Ok(n)
 }
 
+/// Deletes the goal with its entries and its reserve, which must be empty; its tasks stay,
+/// unlinked.
 pub fn delete(conn: &Connection, id: GoalId) -> Result<(), GoalError> {
     let tx = conn.unchecked_transaction()?;
     tx.execute("UPDATE task SET goal_id = NULL WHERE goal_id = ?1", [id.0])?;
     tx.execute("DELETE FROM goal_entry WHERE goal_id = ?1", [id.0])?;
+    let reserved: i64 = tx.query_row(
+        &format!("SELECT coalesce(sum({RESERVED}), 0) FROM finance_reserve r WHERE r.goal_id = ?1"),
+        [id.0],
+        |r| r.get(0),
+    )?;
+    if reserved != 0 {
+        return Err(GoalError::ReserveNotEmpty);
+    }
+    // Its moves go with it (ON DELETE CASCADE).
+    tx.execute("DELETE FROM finance_reserve WHERE goal_id = ?1", [id.0])?;
     if tx.execute("DELETE FROM goal WHERE id = ?1", [id.0])? == 0 {
         return Err(GoalError::NotFound);
     }
@@ -331,13 +438,24 @@ pub fn delete(conn: &Connection, id: GoalId) -> Result<(), GoalError> {
     Ok(())
 }
 
-const SELECT: &str = "SELECT id, title, emoji, description, kind, deadline,
+/// The balance of the reserve `r`: deposits minus withdrawals.
+const RESERVED: &str =
+    "coalesce((SELECT sum(CASE m.kind WHEN 'deposit' THEN m.amount ELSE -m.amount END)
+    FROM finance_reserve_move m WHERE m.reserve_id = r.id), 0)";
+
+fn select() -> String {
+    format!(
+        "SELECT goal.id, goal.title, goal.emoji, goal.description, goal.kind, goal.deadline,
     (SELECT count(*) FROM task WHERE goal_id = goal.id AND done_at IS NOT NULL),
     (SELECT count(*) FROM task WHERE goal_id = goal.id),
-    target_count, coalesce(unit, ''),
+    goal.target_count, coalesce(goal.unit, ''),
     (SELECT coalesce(sum(value), 0) FROM goal_entry WHERE goal_id = goal.id),
-    created_at, completed_at IS NOT NULL, archived
-    FROM goal";
+    goal.created_at, goal.completed_at IS NOT NULL, goal.archived,
+    goal.target_amount, r.id, a.id, a.name, a.currency, {RESERVED}
+    FROM goal LEFT JOIN finance_reserve r ON r.goal_id = goal.id
+    LEFT JOIN finance_account a ON a.id = r.account_id"
+    )
+}
 
 fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, GoalError>> {
     let kind: String = r.get(4)?;
@@ -347,6 +465,25 @@ fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, Goa
     let (target, unit, total): (Option<i64>, String, i64) = (r.get(8)?, r.get(9)?, r.get(10)?);
     let created_at: String = r.get(11)?;
     let (completed, archived): (bool, bool) = (r.get(12)?, r.get(13)?);
+    let financial = match (r.get::<_, Option<i64>>(14)?, r.get::<_, Option<i64>>(15)?) {
+        (Some(target), Some(reserve)) => {
+            let code: String = r.get(18)?;
+            let Some(currency) = finances::currency(&code) else {
+                return Ok(Err(GoalError::BadDate(code)));
+            };
+            let reserved: i64 = r.get(19)?;
+            Some(FinancialProgress {
+                target,
+                reserved,
+                percent: (reserved.max(0).saturating_mul(100) / target).min(100) as u32,
+                currency,
+                reserve: ReserveId(reserve),
+                account: AccountId(r.get(16)?),
+                account_name: r.get(17)?,
+            })
+        }
+        _ => None,
+    };
     let kind = match kind.as_str() {
         "goal" => GoalKind::Goal,
         "project" => GoalKind::Project,
@@ -366,10 +503,11 @@ fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, Goa
         percent: (total.saturating_mul(100) / target).min(100) as u32,
     });
     let tasks_percent = percent(tasks_done, tasks_total);
-    let progress = match (&numeric, kind) {
-        (Some(n), _) => Some(n.percent),
-        (None, GoalKind::Project) => Some(tasks_percent),
-        (None, GoalKind::Goal) => None,
+    let progress = match (&numeric, &financial, kind) {
+        (Some(n), _, _) => Some(n.percent),
+        (_, Some(f), _) => Some(f.percent),
+        (None, None, GoalKind::Project) => Some(tasks_percent),
+        (None, None, GoalKind::Goal) => None,
     };
     let pace = if completed {
         None
@@ -391,6 +529,7 @@ fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, Goa
         tasks_total,
         tasks_percent,
         numeric,
+        financial,
         progress,
         pace,
         completed,
@@ -399,7 +538,7 @@ fn row(r: &rusqlite::Row, today: NaiveDate) -> rusqlite::Result<Result<Goal, Goa
 }
 
 pub fn get(conn: &Connection, id: GoalId, today: NaiveDate) -> Result<Goal, GoalError> {
-    match conn.query_row(&format!("{SELECT} WHERE id = ?1"), [id.0], |r| {
+    match conn.query_row(&format!("{} WHERE goal.id = ?1", select()), [id.0], |r| {
         row(r, today)
     }) {
         Ok(g) => g,
@@ -411,7 +550,8 @@ pub fn get(conn: &Connection, id: GoalId, today: NaiveDate) -> Result<Goal, Goal
 /// Nearest deadline first, undated last, then creation order.
 pub fn list(conn: &Connection, today: NaiveDate) -> Result<Vec<Goal>, GoalError> {
     let mut stmt = conn.prepare(&format!(
-        "{SELECT} ORDER BY deadline IS NULL, deadline, created_at, id"
+        "{} ORDER BY goal.deadline IS NULL, goal.deadline, goal.created_at, goal.id",
+        select()
     ))?;
     let rows = stmt.query_map([], |r| row(r, today))?;
     rows.map(|r| r?).collect()

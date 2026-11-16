@@ -285,7 +285,7 @@ impl State {
     }
 
     /// The user-facing text of an error; only database errors and corrupt stored data show raw.
-    fn message(w: &AppWindow, e: FinanceError) -> SharedString {
+    pub(super) fn message(w: &AppWindow, e: FinanceError) -> SharedString {
         let s = w.global::<Strings>();
         match e {
             FinanceError::EmptyName => s.get_finance_empty_name(),

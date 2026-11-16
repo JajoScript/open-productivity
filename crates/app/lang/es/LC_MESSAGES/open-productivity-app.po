@@ -1953,3 +1953,30 @@ msgstr "Cuando termines un objetivo, márcalo como completado y se queda aquí, 
 
 msgid "Archive a goal you set aside to take it off the list without deleting it. You can restore it whenever you want."
 msgstr "Archiva un objetivo que dejaste de lado para sacarlo de la lista sin eliminarlo. Puedes restaurarlo cuando quieras."
+
+msgid "Money"
+msgstr "Dinero"
+
+msgid "Reserved"
+msgstr "Reservado"
+
+msgid "Target amount"
+msgstr "Monto objetivo"
+
+msgid "Target amount ({})"
+msgstr "Monto objetivo ({})"
+
+msgid "Withdraw from the reserve"
+msgstr "Retirar de la reserva"
+
+msgid "The money is set aside in a reserve of the account, also shown in Finances."
+msgstr "El dinero se aparta en una reserva de la cuenta, que también aparece en Finanzas."
+
+msgid "A goal takes one measure: numeric or money."
+msgstr "Una meta lleva una sola medida: numérica o dinero."
+
+msgid "Type an amount above 0."
+msgstr "Escribe un monto mayor que 0."
+
+msgid "Withdraw the reserved money before deleting this goal."
+msgstr "Retira el dinero reservado antes de eliminar esta meta."

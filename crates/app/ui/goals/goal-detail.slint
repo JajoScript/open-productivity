@@ -10,6 +10,7 @@ import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { KindLabel } from "goal-card.slint";
 import { GoalProgress } from "goal-progress.slint";
+import { ReserveMoveRow } from "../finances/reserve-row.slint";
 import { GoalEntryRow, GoalRow, GoalTaskRow, GoalsStore } from "goals-store.slint";
 
 // One goal in a side panel: its emoji, title, description and deadline, with edit and delete.
@@ -17,10 +18,13 @@ export component GoalDetail inherits Rectangle {
     in property <GoalRow> goal;
     in property <[GoalTaskRow]> tasks;
     in property <[GoalEntryRow]> entries;
+    in property <[ReserveMoveRow]> moves;
     callback close;
     callback edit;
     callback add-task;
     callback add-entry;
+    // Opens the reserve modal: to withdraw, or to reserve money.
+    callback move-money(bool);
     callback delete;
     callback complete;
     callback set-archived(bool);
@@ -155,6 +159,71 @@ export component GoalDetail inherits Rectangle {
                 }
 
                 if root.goal.is-numeric: Rectangle {
+                    height: 8px;
+                }
+
+                if root.goal.is-financial: GoalProgress {
+                    label: @tr("Reserved");
+                    counts: GoalsStore.money-text(root.goal.reserved, root.goal.target-amount);
+                    percent: root.goal.money-percent;
+                }
+
+                if root.goal.is-financial: Text {
+                    text: root.goal.account-name;
+                    font-size: 12px;
+                    color: Theme.muted;
+                    overflow: elide;
+                }
+
+                if root.goal.is-financial && root.moves.length == 0: Text {
+                    text: @tr("No moves yet.");
+                    color: Theme.muted;
+                }
+
+                for m in root.moves: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: Strings.date(m.date.day, m.date.month, m.date.year);
+                        color: Theme.muted;
+                        accessible-role: none;
+                    }
+
+                    Text {
+                        text: m.description;
+                        horizontal-stretch: 1;
+                        overflow: elide;
+                        accessible-role: none;
+                    }
+
+                    Text {
+                        text: m.withdraw ? "\u{2212}" + m.amount : "+" + m.amount;
+                        font-weight: 600;
+                        horizontal-alignment: right;
+                        accessible-role: none;
+                    }
+                }
+
+                if root.goal.is-financial && !root.goal.archived: HorizontalLayout {
+                    spacing: 8px;
+                    alignment: end;
+                    SubtleButton {
+                        text: @tr("Withdraw");
+                        color: Palette.foreground;
+                        clicked => {
+                            root.move-money(true);
+                        }
+                    }
+
+                    SubtleButton {
+                        text: @tr("Reserve money");
+                        color: Palette.foreground;
+                        clicked => {
+                            root.move-money(false);
+                        }
+                    }
+                }
+
+                if root.goal.is-financial: Rectangle {
                     height: 8px;
                 }
 

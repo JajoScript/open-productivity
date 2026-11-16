@@ -15,6 +15,7 @@ import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
 import { StudyStore } from "study/study-store.slint";
 import { GoalEntryCreator } from "goals/goal-entry-creator.slint";
+import { GoalMoneyMover } from "goals/goal-money-mover.slint";
 import { GoalEditor } from "goals/goal-editor.slint";
 import { GoalTaskCreator } from "goals/goal-task-creator.slint";
 import { GoalEntryRow, GoalKind, GoalPace, GoalPortfolio, GoalRow, GoalTab, GoalTimelineRow, GoalsStore } from "goals/goals-store.slint";
@@ -294,6 +295,7 @@ export component AppWindow inherits Window {
     property <[bool]> habit-edit-days;
     property <Date> habit-edit-start;
     property <bool> goal-editing;
+    property <bool> goal-withdraw;
     property <bool> study-session-open;
     // What the session modal opens with.
     property <int> log-subject;
@@ -496,6 +498,12 @@ export component AppWindow inherits Window {
         }
 
         goal-entry-creator := GoalEntryCreator {
+            x: (root.width - self.width) / 2;
+            y: 120px;
+        }
+
+        goal-money-mover := GoalMoneyMover {
+            withdraw: root.goal-withdraw;
             x: (root.width - self.width) / 2;
             y: 120px;
         }
@@ -842,6 +850,10 @@ export component AppWindow inherits Window {
                     }
                     new-entry => {
                         goal-entry-creator.show();
+                    }
+                    move-money(withdraw) => {
+                        root.goal-withdraw = withdraw;
+                        goal-money-mover.show();
                     }
                 }
 

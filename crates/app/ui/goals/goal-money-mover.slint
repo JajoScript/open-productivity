@@ -1,0 +1,161 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette } from "std-widgets.slint";
+import { FormField } from "../form-field.slint";
+import { InkButton } from "../ink-button.slint";
+import { Calendar, InkDatePopup } from "../ink-date-popup.slint";
+import { InkField } from "../ink-field.slint";
+import { InkFieldButton } from "../ink-field-button.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { GoalsStore } from "goals-store.slint";
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component MoverBody inherits FocusScope {
+    in property <bool> withdraw;
+    in property <string> currency;
+    in property <string> reserved;
+    callback save(string, Date, string) -> string;
+    callback cancel;
+
+    property <Date> date: Calendar.today();
+    property <string> amount;
+    property <string> description;
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.amount, root.date, root.description);
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: root.withdraw ? @tr("Withdraw from the reserve") : @tr("Reserve money");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        Text {
+            text: @tr("Reserved: {}", root.reserved);
+            color: Theme.muted;
+        }
+
+        HorizontalLayout {
+            spacing: 12px;
+            FormField {
+                label: @tr("Amount ({})", root.currency);
+                InkField {
+                    text <=> root.amount;
+                    placeholder-text: @tr("Amount");
+                    init => {
+                        self.focus();
+                    }
+                    accepted(text) => {
+                        root.submit();
+                    }
+                }
+            }
+
+            FormField {
+                label: @tr("Date");
+                Rectangle {
+                    height: 36px;
+                    picker := InkDatePopup {
+                        y: 38px;
+                        day: root.date.day;
+                        month: root.date.month;
+                        year: root.date.year;
+                        picked(date) => {
+                            root.date = date;
+                        }
+                    }
+
+                    InkFieldButton {
+                        label: @tr("Date");
+                        text: Strings.date(root.date.day, root.date.month, root.date.year);
+                        icon: @image-url("../icons/calendar.svg");
+                        clicked => {
+                            picker.show();
+                        }
+                    }
+                }
+            }
+        }
+
+        FormField {
+            label: @tr("Description");
+            InkField {
+                text <=> root.description;
+                placeholder-text: @tr("Optional");
+                accepted(text) => {
+                    root.submit();
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: root.withdraw ? @tr("Withdraw") : @tr("Reserve money");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+}
+
+// Reserves money for the open financial goal, or withdraws it; the date starts today. Closing by
+// clicking outside discards it.
+export component GoalMoneyMover inherits PopupWindow {
+    // Set by the opener before show().
+    in property <bool> withdraw;
+
+    close-policy: close-on-click-outside;
+    width: 400px;
+
+    PopupSurface {
+        MoverBody {
+            withdraw: root.withdraw;
+            currency: GoalsStore.detail.currency;
+            reserved: GoalsStore.detail.reserved;
+            save(amount, date, description) => {
+                let error = GoalsStore.move-money(GoalsStore.detail.reserve-id, root.withdraw, amount, date, description);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

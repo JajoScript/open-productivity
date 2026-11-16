@@ -27,7 +27,7 @@ pub struct Reserve {
     /// Deposits minus withdrawals.
     pub balance: i64,
     pub archived: bool,
-    /// Has moves, so it cannot be deleted.
+    /// Has moves or belongs to a goal, so it cannot be deleted.
     pub in_use: bool,
 }
 
@@ -44,7 +44,7 @@ const SELECT: &str = "SELECT r.id, r.name, r.account_id, a.name, a.archived, a.c
     coalesce((SELECT sum(CASE m.kind WHEN 'deposit' THEN m.amount ELSE -m.amount END)
         FROM finance_reserve_move m WHERE m.reserve_id = r.id), 0),
     r.archived,
-    EXISTS (SELECT 1 FROM finance_reserve_move m WHERE m.reserve_id = r.id)
+    EXISTS (SELECT 1 FROM finance_reserve_move m WHERE m.reserve_id = r.id) OR r.goal_id IS NOT NULL
     FROM finance_reserve r JOIN finance_account a ON a.id = r.account_id";
 
 fn row(r: &rusqlite::Row) -> rusqlite::Result<Result<Reserve, FinanceError>> {

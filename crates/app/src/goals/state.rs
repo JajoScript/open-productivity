@@ -7,14 +7,16 @@ use std::rc::Rc;
 
 use open_productivity_core::chrono::Local;
 use open_productivity_core::db::Connection;
+use open_productivity_core::finances::{self, ReserveId};
 use open_productivity_core::goals::{self, Entry, Goal, GoalError, GoalId, GoalTask};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::dates::ui_date;
+use crate::finances::style;
 use crate::tasks::ui_id;
 use crate::{
     AppWindow, GoalEntryRow, GoalKind, GoalPace, GoalPortfolio, GoalRow, GoalTab, GoalTaskRow,
-    GoalTimelineRow, GoalsStore,
+    GoalTimelineRow, GoalsStore, ReserveMoveRow,
 };
 
 pub struct State {
@@ -22,6 +24,7 @@ pub struct State {
     pub rows: Rc<VecModel<GoalRow>>,
     pub tasks: Rc<VecModel<GoalTaskRow>>,
     pub entries: Rc<VecModel<GoalEntryRow>>,
+    pub moves: Rc<VecModel<ReserveMoveRow>>,
     pub timeline: Rc<VecModel<GoalTimelineRow>>,
     pub window: slint::Weak<AppWindow>,
 }
@@ -78,6 +81,21 @@ fn goal_row(g: Goal) -> Result<GoalRow, String> {
         total: 0,
         percent: 0,
     });
+    let is_financial = g.financial.is_some();
+    let (reserve_id, account_id, account_name, currency, reserved, target_amount, target_input) =
+        match &g.financial {
+            Some(f) => (
+                ui_id(f.reserve.0)?,
+                ui_id(f.account.0)?,
+                f.account_name.as_str().into(),
+                f.currency.code.into(),
+                finances::format_amount(f.reserved, f.currency, style()).into(),
+                finances::format_amount(f.target, f.currency, style()).into(),
+                finances::format_input(f.target, f.currency, style()).into(),
+            ),
+            None => Default::default(),
+        };
+    let money_percent = ui_id(g.financial.map_or(0, |f| f.percent).into())?;
     Ok(GoalRow {
         id: ui_id(g.id.0)?,
         title: g.title.into(),
@@ -95,6 +113,15 @@ fn goal_row(g: Goal) -> Result<GoalRow, String> {
         unit: n.unit.into(),
         total: ui_id(n.total)?,
         numeric_percent: ui_id(n.percent.into())?,
+        is_financial,
+        reserve_id,
+        account_id,
+        account_name,
+        currency,
+        reserved,
+        target_amount,
+        target_input,
+        money_percent,
         has_pace: g.pace.is_some(),
         pace: g.pace.map_or(GoalPace::OnPace, |p| goal_pace(p.label)),
         completed: g.completed,
@@ -154,6 +181,7 @@ impl State {
                     store.set_detail(r.clone());
                     self.load_tasks(GoalId(id.into()))?;
                     self.load_entries(GoalId(id.into()))?;
+                    self.load_moves(r)?;
                 }
                 None => store.set_detail_open(false),
             }
@@ -182,15 +210,39 @@ impl State {
         Ok(())
     }
 
+    /// The history of the open goal's reserve; empty without one.
+    fn load_moves(&self, goal: &GoalRow) -> Result<(), String> {
+        if !goal.is_financial {
+            self.moves.set_vec(Vec::new());
+            return Ok(());
+        }
+        let r = finances::get_reserve(&self.conn, ReserveId(goal.reserve_id.into()))
+            .map_err(|e| e.to_string())?;
+        let moves = finances::list_moves(&self.conn, r.id)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(|m| ReserveMoveRow {
+                date: ui_date(m.date),
+                description: m.description.into(),
+                amount: finances::format_amount(m.amount, r.currency, style()).into(),
+                withdraw: m.withdraw,
+            })
+            .collect::<Vec<_>>();
+        self.moves.set_vec(moves);
+        Ok(())
+    }
+
     pub fn open(&self, id: GoalId) -> Result<(), String> {
         let Some(w) = self.window.upgrade() else {
             return Ok(());
         };
         let g = goals::get(&self.conn, id, Local::now().date_naive()).map_err(|e| e.to_string())?;
         let store = w.global::<GoalsStore>();
-        store.set_detail(goal_row(g)?);
+        let row = goal_row(g)?;
         self.load_tasks(id)?;
         self.load_entries(id)?;
+        self.load_moves(&row)?;
+        store.set_detail(row);
         store.set_detail_open(true);
         Ok(())
     }
@@ -217,6 +269,10 @@ impl State {
             GoalError::ProjectMeasure => s.get_project_measure(),
             GoalError::MeasureChanged => s.get_measure_changed(),
             GoalError::NotNumeric => s.get_not_numeric(),
+            GoalError::TwoMeasures => s.get_two_measures(),
+            GoalError::BadAmount => s.get_bad_amount(),
+            GoalError::ReserveNotEmpty => s.get_reserve_not_empty(),
+            GoalError::Finance(e) => crate::finances::message(w, e),
             e => s.invoke_failed(e.to_string().into()),
         }
     }
@@ -245,6 +301,10 @@ impl State {
 
     pub fn timeline_model(&self) -> ModelRc<GoalTimelineRow> {
         ModelRc::from(self.timeline.clone())
+    }
+
+    pub fn moves_model(&self) -> ModelRc<ReserveMoveRow> {
+        ModelRc::from(self.moves.clone())
     }
 
     pub fn entries_model(&self) -> ModelRc<GoalEntryRow> {

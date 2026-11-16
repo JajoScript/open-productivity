@@ -7,13 +7,19 @@ import { InkButton } from "../ink-button.slint";
 import { Calendar, InkDatePopup } from "../ink-date-popup.slint";
 import { InkField } from "../ink-field.slint";
 import { InkFieldButton } from "../ink-field-button.slint";
+import { InkOption, InkSelect } from "../ink-select.slint";
 import { InkTextArea } from "../ink-text-area.slint";
 import { PopupSurface } from "../popup-surface.slint";
 import { SettingsTab } from "../settings/settings-tab.slint";
 import { Strings } from "../strings.slint";
 import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
+import { AccountKind } from "../finances/account-row.slint";
+import { FinanceStore } from "../finances/finance-store.slint";
 import { GoalKind, GoalsStore } from "goals-store.slint";
+
+// The measure a new goal takes; it never changes afterwards.
+enum Measure { none, numeric, money }
 
 // Rebuilt on every show(), so the fields and the error always start fresh.
 component EditorBody inherits FocusScope {
@@ -28,7 +34,13 @@ component EditorBody inherits FocusScope {
     in-out property <bool> numeric;
     in-out property <string> target;
     in-out property <string> unit;
-    callback save(GoalKind, string, string, string, bool, Date, bool, string, string) -> string;
+    // A money goal: `amount` in the currency of its reserve's account, chosen once.
+    in-out property <bool> money;
+    in-out property <string> amount;
+    in-out property <int> account-id;
+    in-out property <string> account-name;
+    in-out property <string> currency;
+    callback save(GoalKind, string, string, string, bool, Date, bool, string, string, bool, string, int) -> string;
     callback cancel;
 
     property <string> error;
@@ -42,7 +54,16 @@ component EditorBody inherits FocusScope {
     }
 
     function submit() {
-        root.error = root.save(root.kind, root.goal-title, root.emoji, root.description, root.has-deadline, root.deadline, root.numeric && root.kind == GoalKind.goal, root.target, root.unit);
+        root.error = root.save(root.kind, root.goal-title, root.emoji, root.description, root.has-deadline, root.deadline, root.numeric && root.kind == GoalKind.goal, root.target, root.unit, root.money && root.kind == GoalKind.goal, root.amount, root.account-id);
+    }
+
+    function measure() -> Measure {
+        return root.numeric ? Measure.numeric : root.money ? Measure.money : Measure.none;
+    }
+
+    function choose(m: Measure) {
+        root.numeric = m == Measure.numeric;
+        root.money = m == Measure.money;
     }
 
     VerticalLayout {
@@ -125,23 +146,34 @@ component EditorBody inherits FocusScope {
             accessible-role: tab-list;
             SettingsTab {
                 text: @tr("No measure");
-                selected: !root.numeric;
+                selected: root.measure() == Measure.none;
                 chosen => {
-                    root.numeric = false;
+                    root.choose(Measure.none);
                 }
                 step(d) => {
-                    root.numeric = d > 0;
+                    root.choose(d > 0 ? Measure.numeric : Measure.none);
                 }
             }
 
             SettingsTab {
                 text: @tr("Numeric");
-                selected: root.numeric;
+                selected: root.measure() == Measure.numeric;
                 chosen => {
-                    root.numeric = true;
+                    root.choose(Measure.numeric);
                 }
                 step(d) => {
-                    root.numeric = d > 0;
+                    root.choose(d > 0 ? Measure.money : Measure.none);
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Money");
+                selected: root.measure() == Measure.money;
+                chosen => {
+                    root.choose(Measure.money);
+                }
+                step(d) => {
+                    root.choose(d > 0 ? Measure.money : Measure.numeric);
                 }
             }
         }
@@ -169,6 +201,57 @@ component EditorBody inherits FocusScope {
                     }
                 }
             }
+        }
+
+        if root.money && root.kind == GoalKind.goal: HorizontalLayout {
+            spacing: 12px;
+            FormField {
+                label: root.currency == "" ? @tr("Target amount") : @tr("Target amount ({})", root.currency);
+                InkField {
+                    text <=> root.amount;
+                    placeholder-text: "100.000";
+                    accepted(text) => {
+                        root.submit();
+                    }
+                }
+            }
+
+            // The reserve is created in this account, and it never moves.
+            if root.editing: FormField {
+                label: @tr("Account");
+                Text {
+                    text: root.account-name;
+                    height: 36px;
+                    vertical-alignment: center;
+                    overflow: elide;
+                }
+            }
+
+            if !root.editing: FormField {
+                label: @tr("Account");
+                InkSelect {
+                    label: @tr("Account");
+                    text: root.account-name;
+                    for account in FinanceStore.accounts: VerticalLayout {
+                        if account.kind != AccountKind.credit && account.kind != AccountKind.credit-line: InkOption {
+                            label: account.name;
+                            chosen: account.id == root.account-id;
+                            picked => {
+                                root.account-id = account.id;
+                                root.account-name = account.name;
+                                root.currency = account.currency;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if root.money && root.kind == GoalKind.goal && !root.editing: Text {
+            text: @tr("The money is set aside in a reserve of the account, also shown in Finances.");
+            color: Theme.muted;
+            font-size: 12px;
+            wrap: word-wrap;
         }
 
         FormField {
@@ -255,8 +338,13 @@ export component GoalEditor inherits PopupWindow {
             numeric: root.editing ? GoalsStore.detail.is-numeric : false;
             target: root.editing && GoalsStore.detail.is-numeric ? "\{GoalsStore.detail.target}" : "";
             unit: root.editing ? GoalsStore.detail.unit : "";
-            save(kind, title, emoji, description, has-deadline, deadline, numeric, target, unit) => {
-                let error = root.editing ? GoalsStore.update(GoalsStore.detail.id, title, emoji, description, has-deadline, deadline, numeric, target, unit) : GoalsStore.create(kind, title, emoji, description, has-deadline, deadline, numeric, target, unit);
+            money: root.editing ? GoalsStore.detail.is-financial : false;
+            amount: root.editing ? GoalsStore.detail.target-input : "";
+            account-id: root.editing ? GoalsStore.detail.account-id : 0;
+            account-name: root.editing ? GoalsStore.detail.account-name : "";
+            currency: root.editing ? GoalsStore.detail.currency : "";
+            save(kind, title, emoji, description, has-deadline, deadline, numeric, target, unit, money, amount, account) => {
+                let error = root.editing ? GoalsStore.update(GoalsStore.detail.id, title, emoji, description, has-deadline, deadline, numeric, target, unit, money, amount, account) : GoalsStore.create(kind, title, emoji, description, has-deadline, deadline, numeric, target, unit, money, amount, account);
                 if error == "" {
                     root.close();
                 }
