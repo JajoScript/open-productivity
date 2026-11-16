@@ -1819,3 +1819,57 @@ msgstr "{} % · {}/{}"
 
 msgid "Add"
 msgstr "Añadir"
+
+msgid "The target must be a whole number above 0."
+msgstr "El objetivo debe ser un número entero mayor que 0."
+
+msgid "Type a whole number above 0."
+msgstr "Escribe un número entero mayor que 0."
+
+msgid "A project has no numeric measure."
+msgstr "Un proyecto no tiene medida numérica."
+
+msgid "The measure of a goal cannot change."
+msgstr "La medida de un objetivo no se puede cambiar."
+
+msgid "This goal has no numeric measure."
+msgstr "Este objetivo no tiene medida numérica."
+
+msgid "{} of {} {}"
+msgstr "{} de {} {}"
+
+msgid "No measure"
+msgstr "Sin medida"
+
+msgid "Numeric"
+msgstr "Numérica"
+
+msgid "Target"
+msgstr "Objetivo"
+
+msgid "Unit"
+msgstr "Unidad"
+
+msgid "Progress"
+msgstr "Avance"
+
+msgid "{} % · {}"
+msgstr "{} % · {}"
+
+msgid "No progress yet."
+msgstr "Aún no hay avances."
+
+msgid "Delete progress"
+msgstr "Borrar avance"
+
+msgid "Add progress"
+msgstr "Añadir avance"
+
+msgid "New progress"
+msgstr "Nuevo avance"
+
+msgid "Quantity"
+msgstr "Cantidad"
+
+msgid "Quantity ({})"
+msgstr "Cantidad ({})"

@@ -9,7 +9,7 @@ use std::rc::Rc;
 
 use open_productivity_core::chrono::Local;
 use open_productivity_core::db::Connection;
-use open_productivity_core::goals::{self, GoalDraft, GoalId};
+use open_productivity_core::goals::{self, EntryId, GoalDraft, GoalError, GoalId, Numeric};
 use open_productivity_core::tasks::{self, TaskId};
 use slint::ComponentHandle;
 
@@ -22,54 +22,78 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
         conn,
         rows: Rc::default(),
         tasks: Rc::default(),
+        entries: Rc::default(),
         window: window.as_weak(),
     });
     let store = window.global::<GoalsStore>();
     store.set_goals(state.model());
     store.set_tasks(state.tasks_model());
+    store.set_entries(state.entries_model());
     state.show_load();
 
-    // A date the picker cannot produce is an error, never "no deadline".
+    // A date the picker cannot produce is an error, never "no deadline". The measure is read as
+    // numbers only when the goal has one.
     fn draft(
         title: &str,
         emoji: &str,
         description: &str,
         has_deadline: bool,
         deadline: Date,
-    ) -> Result<GoalDraft, String> {
+        measure: Option<(&str, &str)>,
+    ) -> Result<GoalDraft, GoalError> {
         Ok(GoalDraft {
             title: title.into(),
             emoji: emoji.into(),
             description: description.into(),
-            deadline: has_deadline.then(|| core_date(deadline)).transpose()?,
+            deadline: has_deadline
+                .then(|| core_date(deadline))
+                .transpose()
+                .map_err(GoalError::BadDate)?,
+            numeric: measure
+                .map(|(target, unit)| {
+                    Ok::<_, GoalError>(Numeric {
+                        target: goals::parse_count(target)?,
+                        unit: unit.into(),
+                    })
+                })
+                .transpose()?,
         })
     }
 
     store.on_create({
         let state = state.clone();
-        move |kind, title, emoji, description, has_deadline, deadline| match draft(
-            &title,
-            &emoji,
-            &description,
-            has_deadline,
-            deadline,
-        ) {
-            Ok(d) => state.finish(goals::create(&state.conn, core_kind(kind), &d).map(|_| ())),
-            Err(e) => state_failed(&state, e),
+        move |kind, title, emoji, description, has_deadline, deadline, numeric, target, unit| {
+            let measure = numeric.then_some((target.as_str(), unit.as_str()));
+            state.finish(
+                draft(
+                    &title,
+                    &emoji,
+                    &description,
+                    has_deadline,
+                    deadline,
+                    measure,
+                )
+                .and_then(|d| goals::create(&state.conn, core_kind(kind), &d))
+                .map(|_| ()),
+            )
         }
     });
 
     store.on_update({
         let state = state.clone();
-        move |id, title, emoji, description, has_deadline, deadline| match draft(
-            &title,
-            &emoji,
-            &description,
-            has_deadline,
-            deadline,
-        ) {
-            Ok(d) => state.finish(goals::update(&state.conn, GoalId(id.into()), &d)),
-            Err(e) => state_failed(&state, e),
+        move |id, title, emoji, description, has_deadline, deadline, numeric, target, unit| {
+            let measure = numeric.then_some((target.as_str(), unit.as_str()));
+            state.finish(
+                draft(
+                    &title,
+                    &emoji,
+                    &description,
+                    has_deadline,
+                    deadline,
+                    measure,
+                )
+                .and_then(|d| goals::update(&state.conn, GoalId(id.into()), &d)),
+            )
         }
     });
 
@@ -100,6 +124,32 @@ pub fn init(window: &AppWindow, conn: Rc<Connection>) {
                     goals::create_task(&state.conn, GoalId(goal.into()), &title, due).map(|_| ()),
                 ),
                 Err(e) => state_failed(&state, e),
+            }
+        }
+    });
+
+    store.on_add_entry({
+        let state = state.clone();
+        move |goal, date, value| {
+            state.finish(
+                core_date(date)
+                    .map_err(GoalError::BadDate)
+                    .and_then(|date| {
+                        let value = goals::parse_count(&value)?;
+                        goals::add_entry(&state.conn, GoalId(goal.into()), date, value)
+                    })
+                    .map(|_| ()),
+            )
+        }
+    });
+
+    store.on_delete_entry({
+        let state = state.clone();
+        move |id| {
+            let res = goals::delete_entry(&state.conn, EntryId(id.into()));
+            state.show_load();
+            if let (Err(e), Some(w)) = (res, state.window.upgrade()) {
+                w.global::<GoalsStore>().set_error(State::message(&w, e));
             }
         }
     });

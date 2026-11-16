@@ -19,6 +19,19 @@ export struct GoalRow {
     tasks-total: int,
     // Whole 0..=100, computed in core.
     tasks-percent: int,
+    // A goal with a numeric measure: `total` of `target` `unit`, `numeric-percent` is 0..=100 from core.
+    is-numeric: bool,
+    target: int,
+    unit: string,
+    total: int,
+    numeric-percent: int,
+}
+
+// A progress entry of the open numeric goal.
+export struct GoalEntryRow {
+    id: int,
+    date: Date,
+    value: int,
 }
 
 // A task of the open goal.
@@ -38,12 +51,19 @@ export global GoalsStore {
     in property <GoalRow> detail;
     // The tasks of the open goal: pending first, then done.
     in property <[GoalTaskRow]> tasks;
+    // The entries of the open goal: most recent first.
+    in property <[GoalEntryRow]> entries;
     in-out property <bool> detail-open;
     in-out property <string> error;
 
     // Texts Rust shows for the errors of core.
     out property <string> empty-title: @tr("Give it a title.");
     out property <string> not-found: @tr("That goal no longer exists.");
+    out property <string> bad-target: @tr("The target must be a whole number above 0.");
+    out property <string> bad-number: @tr("Type a whole number above 0.");
+    out property <string> project-measure: @tr("A project has no numeric measure.");
+    out property <string> measure-changed: @tr("The measure of a goal cannot change.");
+    out property <string> not-numeric: @tr("This goal has no numeric measure.");
 
     public pure function load-failed(error: string) -> string {
         return @tr("Could not load the goals: {}", error);
@@ -63,16 +83,23 @@ export global GoalsStore {
         return days > 0 ? @tr("{} d left", days) : @tr("{} d overdue", -days);
     }
 
+    // "3 of 10 km"; the unit may be empty.
+    public pure function amount-text(total: int, target: int, unit: string) -> string {
+        return unit == "" ? @tr("{} of {}", total, target) : @tr("{} of {} {}", total, target, unit);
+    }
+
     public pure function delete-question(title: string) -> string {
         return @tr("Delete {}? This can't be undone.", title);
     }
 
     // The ones that return a string give the error to show; empty means it worked.
-    callback create(GoalKind, string, string, string, bool, Date) -> string;
-    callback update(int, string, string, string, bool, Date) -> string;
+    callback create(GoalKind, string, string, string, bool, Date, bool, string, string) -> string;
+    callback update(int, string, string, string, bool, Date, bool, string, string) -> string;
     callback delete(int) -> string;
     callback create-task(int, string, bool, Date) -> string;
     callback set-task-done(int, bool);
+    callback add-entry(int, Date, string) -> string;
+    callback delete-entry(int);
     callback open(int);
     callback refresh();
 }

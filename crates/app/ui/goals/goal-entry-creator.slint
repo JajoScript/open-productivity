@@ -1,0 +1,134 @@
+// SPDX-License-Identifier: GPL-3.0-or-later
+// Copyright (C) 2026 JajoScript
+
+import { Date, Palette } from "std-widgets.slint";
+import { FormField } from "../form-field.slint";
+import { InkButton } from "../ink-button.slint";
+import { Calendar, InkDatePopup } from "../ink-date-popup.slint";
+import { InkField } from "../ink-field.slint";
+import { InkFieldButton } from "../ink-field-button.slint";
+import { PopupSurface } from "../popup-surface.slint";
+import { Strings } from "../strings.slint";
+import { SubtleButton } from "../subtle-button.slint";
+import { Theme } from "../theme.slint";
+import { GoalsStore } from "goals-store.slint";
+
+// Rebuilt on every show(), so the fields and the error always start fresh.
+component CreatorBody inherits FocusScope {
+    in property <string> unit;
+    callback save(Date, string) -> string;
+    callback cancel;
+
+    property <Date> date: Calendar.today();
+    property <string> value;
+    property <string> error;
+
+    capture-key-pressed(event) => {
+        if event.text == Key.Escape {
+            root.cancel();
+            return accept;
+        }
+        reject
+    }
+
+    function submit() {
+        root.error = root.save(root.date, root.value);
+    }
+
+    VerticalLayout {
+        padding: 16px;
+        spacing: 12px;
+        Text {
+            text: @tr("New progress");
+            font-size: 14px;
+            font-weight: 700;
+        }
+
+        FormField {
+            label: root.unit == "" ? @tr("Quantity") : @tr("Quantity ({})", root.unit);
+            InkField {
+                text <=> root.value;
+                placeholder-text: "10";
+                init => {
+                    self.focus();
+                }
+                accepted(text) => {
+                    root.submit();
+                }
+            }
+        }
+
+        FormField {
+            label: @tr("Date");
+            Rectangle {
+                height: 36px;
+                picker := InkDatePopup {
+                    y: 38px;
+                    day: root.date.day;
+                    month: root.date.month;
+                    year: root.date.year;
+                    picked(date) => {
+                        root.date = date;
+                    }
+                }
+
+                InkFieldButton {
+                    label: @tr("Date");
+                    text: Strings.date(root.date.day, root.date.month, root.date.year);
+                    icon: @image-url("../icons/calendar.svg");
+                    clicked => {
+                        picker.show();
+                    }
+                }
+            }
+        }
+
+        if root.error != "": Text {
+            text: root.error;
+            color: Theme.critical;
+            wrap: word-wrap;
+        }
+
+        HorizontalLayout {
+            spacing: 8px;
+            alignment: end;
+            SubtleButton {
+                text: @tr("Cancel");
+                color: Palette.foreground;
+                clicked => {
+                    root.cancel();
+                }
+            }
+
+            InkButton {
+                text: @tr("Add");
+                clicked => {
+                    root.submit();
+                }
+            }
+        }
+    }
+}
+
+// Adds a progress entry to the open numeric goal; the date starts today. Closing by clicking
+// outside discards it.
+export component GoalEntryCreator inherits PopupWindow {
+    close-policy: close-on-click-outside;
+    width: 360px;
+
+    PopupSurface {
+        CreatorBody {
+            unit: GoalsStore.detail.unit;
+            save(date, value) => {
+                let error = GoalsStore.add-entry(GoalsStore.detail.id, date, value);
+                if error == "" {
+                    root.close();
+                }
+                return error;
+            }
+            cancel => {
+                root.close();
+            }
+        }
+    }
+}

@@ -7,17 +7,18 @@ use std::rc::Rc;
 
 use open_productivity_core::chrono::Local;
 use open_productivity_core::db::Connection;
-use open_productivity_core::goals::{self, Goal, GoalError, GoalId, GoalTask};
+use open_productivity_core::goals::{self, Entry, Goal, GoalError, GoalId, GoalTask};
 use slint::{ComponentHandle, ModelRc, SharedString, VecModel};
 
 use crate::dates::ui_date;
 use crate::tasks::ui_id;
-use crate::{AppWindow, GoalKind, GoalRow, GoalTaskRow, GoalsStore};
+use crate::{AppWindow, GoalEntryRow, GoalKind, GoalRow, GoalTaskRow, GoalsStore};
 
 pub struct State {
     pub conn: Rc<Connection>,
     pub rows: Rc<VecModel<GoalRow>>,
     pub tasks: Rc<VecModel<GoalTaskRow>>,
+    pub entries: Rc<VecModel<GoalEntryRow>>,
     pub window: slint::Weak<AppWindow>,
 }
 
@@ -36,6 +37,13 @@ pub fn core_kind(k: GoalKind) -> goals::GoalKind {
 }
 
 fn goal_row(g: Goal) -> Result<GoalRow, String> {
+    let is_numeric = g.numeric.is_some();
+    let n = g.numeric.unwrap_or_else(|| goals::NumericProgress {
+        target: 0,
+        unit: String::new(),
+        total: 0,
+        percent: 0,
+    });
     Ok(GoalRow {
         id: ui_id(g.id.0)?,
         title: g.title.into(),
@@ -48,6 +56,11 @@ fn goal_row(g: Goal) -> Result<GoalRow, String> {
         tasks_done: ui_id(g.tasks_done.into())?,
         tasks_total: ui_id(g.tasks_total.into())?,
         tasks_percent: ui_id(g.tasks_percent.into())?,
+        is_numeric,
+        target: ui_id(n.target)?,
+        unit: n.unit.into(),
+        total: ui_id(n.total)?,
+        numeric_percent: ui_id(n.percent.into())?,
     })
 }
 
@@ -58,6 +71,14 @@ fn task_row(t: GoalTask) -> Result<GoalTaskRow, String> {
         done: t.done,
         has_due: t.due.is_some(),
         due: t.due.map(ui_date).unwrap_or_default(),
+    })
+}
+
+fn entry_row(e: Entry) -> Result<GoalEntryRow, String> {
+    Ok(GoalEntryRow {
+        id: ui_id(e.id.0)?,
+        date: ui_date(e.date),
+        value: ui_id(e.value)?,
     })
 }
 
@@ -78,6 +99,7 @@ impl State {
                 Some(r) => {
                     store.set_detail(r.clone());
                     self.load_tasks(GoalId(id.into()))?;
+                    self.load_entries(GoalId(id.into()))?;
                 }
                 None => store.set_detail_open(false),
             }
@@ -96,6 +118,16 @@ impl State {
         Ok(())
     }
 
+    fn load_entries(&self, id: GoalId) -> Result<(), String> {
+        let entries = goals::list_entries(&self.conn, id)
+            .map_err(|e| e.to_string())?
+            .into_iter()
+            .map(entry_row)
+            .collect::<Result<Vec<_>, _>>()?;
+        self.entries.set_vec(entries);
+        Ok(())
+    }
+
     pub fn open(&self, id: GoalId) -> Result<(), String> {
         let Some(w) = self.window.upgrade() else {
             return Ok(());
@@ -104,6 +136,7 @@ impl State {
         let store = w.global::<GoalsStore>();
         store.set_detail(goal_row(g)?);
         self.load_tasks(id)?;
+        self.load_entries(id)?;
         store.set_detail_open(true);
         Ok(())
     }
@@ -120,11 +153,16 @@ impl State {
         w.global::<GoalsStore>().set_error(msg);
     }
 
-    fn message(w: &AppWindow, e: GoalError) -> SharedString {
+    pub fn message(w: &AppWindow, e: GoalError) -> SharedString {
         let s = w.global::<GoalsStore>();
         match e {
             GoalError::EmptyTitle => s.get_empty_title(),
             GoalError::NotFound => s.get_not_found(),
+            GoalError::BadTarget => s.get_bad_target(),
+            GoalError::BadNumber | GoalError::BadValue => s.get_bad_number(),
+            GoalError::ProjectMeasure => s.get_project_measure(),
+            GoalError::MeasureChanged => s.get_measure_changed(),
+            GoalError::NotNumeric => s.get_not_numeric(),
             e => s.invoke_failed(e.to_string().into()),
         }
     }
@@ -149,5 +187,9 @@ impl State {
 
     pub fn tasks_model(&self) -> ModelRc<GoalTaskRow> {
         ModelRc::from(self.tasks.clone())
+    }
+
+    pub fn entries_model(&self) -> ModelRc<GoalEntryRow> {
+        ModelRc::from(self.entries.clone())
     }
 }

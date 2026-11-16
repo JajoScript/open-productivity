@@ -24,7 +24,11 @@ component EditorBody inherits FocusScope {
     in-out property <string> description;
     in-out property <bool> has-deadline;
     in-out property <Date> deadline;
-    callback save(GoalKind, string, string, string, bool, Date) -> string;
+    // Only a goal can have a measure, and it is chosen once.
+    in-out property <bool> numeric;
+    in-out property <string> target;
+    in-out property <string> unit;
+    callback save(GoalKind, string, string, string, bool, Date, bool, string, string) -> string;
     callback cancel;
 
     property <string> error;
@@ -38,7 +42,7 @@ component EditorBody inherits FocusScope {
     }
 
     function submit() {
-        root.error = root.save(root.kind, root.goal-title, root.emoji, root.description, root.has-deadline, root.deadline);
+        root.error = root.save(root.kind, root.goal-title, root.emoji, root.description, root.has-deadline, root.deadline, root.numeric && root.kind == GoalKind.goal, root.target, root.unit);
     }
 
     VerticalLayout {
@@ -111,6 +115,58 @@ component EditorBody inherits FocusScope {
                 min-height: 80px;
                 submitted => {
                     root.submit();
+                }
+            }
+        }
+
+        // The measure is chosen once, for goals only.
+        if !root.editing && root.kind == GoalKind.goal: HorizontalLayout {
+            alignment: start;
+            accessible-role: tab-list;
+            SettingsTab {
+                text: @tr("No measure");
+                selected: !root.numeric;
+                chosen => {
+                    root.numeric = false;
+                }
+                step(d) => {
+                    root.numeric = d > 0;
+                }
+            }
+
+            SettingsTab {
+                text: @tr("Numeric");
+                selected: root.numeric;
+                chosen => {
+                    root.numeric = true;
+                }
+                step(d) => {
+                    root.numeric = d > 0;
+                }
+            }
+        }
+
+        if root.numeric && root.kind == GoalKind.goal: HorizontalLayout {
+            spacing: 12px;
+            FormField {
+                label: @tr("Target");
+                InkField {
+                    text <=> root.target;
+                    placeholder-text: "100";
+                    accepted(text) => {
+                        root.submit();
+                    }
+                }
+            }
+
+            FormField {
+                label: @tr("Unit");
+                InkField {
+                    text <=> root.unit;
+                    placeholder-text: @tr("Optional");
+                    accepted(text) => {
+                        root.submit();
+                    }
                 }
             }
         }
@@ -196,8 +252,11 @@ export component GoalEditor inherits PopupWindow {
             description: root.editing ? GoalsStore.detail.description : "";
             has-deadline: root.editing ? GoalsStore.detail.has-deadline : false;
             deadline: root.editing ? GoalsStore.detail.deadline : Calendar.today();
-            save(kind, title, emoji, description, has-deadline, deadline) => {
-                let error = root.editing ? GoalsStore.update(GoalsStore.detail.id, title, emoji, description, has-deadline, deadline) : GoalsStore.create(kind, title, emoji, description, has-deadline, deadline);
+            numeric: root.editing ? GoalsStore.detail.is-numeric : false;
+            target: root.editing && GoalsStore.detail.is-numeric ? "\{GoalsStore.detail.target}" : "";
+            unit: root.editing ? GoalsStore.detail.unit : "";
+            save(kind, title, emoji, description, has-deadline, deadline, numeric, target, unit) => {
+                let error = root.editing ? GoalsStore.update(GoalsStore.detail.id, title, emoji, description, has-deadline, deadline, numeric, target, unit) : GoalsStore.create(kind, title, emoji, description, has-deadline, deadline, numeric, target, unit);
                 if error == "" {
                     root.close();
                 }

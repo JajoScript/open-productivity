@@ -14,9 +14,10 @@ import { TopicCreator } from "study/topic-creator.slint";
 import { SubjectCreator } from "study/subject-creator.slint";
 import { StudyView } from "study/study-view.slint";
 import { StudyStore } from "study/study-store.slint";
+import { GoalEntryCreator } from "goals/goal-entry-creator.slint";
 import { GoalEditor } from "goals/goal-editor.slint";
 import { GoalTaskCreator } from "goals/goal-task-creator.slint";
-import { GoalKind, GoalRow, GoalsStore } from "goals/goals-store.slint";
+import { GoalEntryRow, GoalKind, GoalRow, GoalsStore } from "goals/goals-store.slint";
 import { GoalsView } from "goals/goals-view.slint";
 import { AccountCreator } from "finances/account-creator.slint";
 import { MainCurrencyEditor } from "finances/main-currency-editor.slint";
@@ -150,6 +151,7 @@ export {
     FinanceStore,
     DayBarRow,
     DaysTab,
+    GoalEntryRow,
     GoalKind,
     GoalRow,
     GoalsStore,
@@ -485,6 +487,11 @@ export component AppWindow inherits Window {
         }
 
         goal-task-creator := GoalTaskCreator {
+            x: (root.width - self.width) / 2;
+            y: 120px;
+        }
+
+        goal-entry-creator := GoalEntryCreator {
             x: (root.width - self.width) / 2;
             y: 120px;
         }
@@ -828,6 +835,9 @@ export component AppWindow inherits Window {
                     }
                     new-task => {
                         goal-task-creator.show();
+                    }
+                    new-entry => {
+                        goal-entry-creator.show();
                     }
                 }
 

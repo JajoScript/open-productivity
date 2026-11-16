@@ -10,15 +10,17 @@ import { SubtleButton } from "../subtle-button.slint";
 import { Theme } from "../theme.slint";
 import { KindLabel } from "goal-card.slint";
 import { GoalProgress } from "goal-progress.slint";
-import { GoalRow, GoalTaskRow, GoalsStore } from "goals-store.slint";
+import { GoalEntryRow, GoalRow, GoalTaskRow, GoalsStore } from "goals-store.slint";
 
 // One goal in a side panel: its emoji, title, description and deadline, with edit and delete.
 export component GoalDetail inherits Rectangle {
     in property <GoalRow> goal;
     in property <[GoalTaskRow]> tasks;
+    in property <[GoalEntryRow]> entries;
     callback close;
     callback edit;
     callback add-task;
+    callback add-entry;
     callback delete;
 
     border-width: 1px;
@@ -107,6 +109,47 @@ export component GoalDetail inherits Rectangle {
                     height: 8px;
                 }
 
+                if root.goal.is-numeric: GoalProgress {
+                    label: @tr("Progress");
+                    counts: GoalsStore.amount-text(root.goal.total, root.goal.target, root.goal.unit);
+                    percent: root.goal.numeric-percent;
+                }
+
+                if root.goal.is-numeric && root.entries.length == 0: Text {
+                    text: @tr("No progress yet.");
+                    color: Theme.muted;
+                }
+
+                for entry in root.entries: HorizontalLayout {
+                    spacing: 8px;
+                    Text {
+                        text: Strings.date(entry.date.day, entry.date.month, entry.date.year);
+                        color: Theme.muted;
+                        vertical-alignment: center;
+                        accessible-role: none;
+                    }
+
+                    Text {
+                        text: root.goal.unit == "" ? "\{entry.value}" : "\{entry.value} \{root.goal.unit}";
+                        vertical-alignment: center;
+                        horizontal-stretch: 1;
+                        wrap: word-wrap;
+                        accessible-role: none;
+                    }
+
+                    SubtleButton {
+                        icon: @image-url("../icons/x.svg");
+                        label: @tr("Delete progress");
+                        clicked => {
+                            GoalsStore.delete-entry(entry.id);
+                        }
+                    }
+                }
+
+                if root.goal.is-numeric: Rectangle {
+                    height: 8px;
+                }
+
                 if root.goal.tasks-total > 0: GoalProgress {
                     done: root.goal.tasks-done;
                     total: root.goal.tasks-total;
@@ -156,6 +199,14 @@ export component GoalDetail inherits Rectangle {
                 color: Palette.foreground;
                 clicked => {
                     confirm.show();
+                }
+            }
+
+            if root.goal.is-numeric: SubtleButton {
+                text: @tr("Add progress");
+                color: Palette.foreground;
+                clicked => {
+                    root.add-entry();
                 }
             }
 

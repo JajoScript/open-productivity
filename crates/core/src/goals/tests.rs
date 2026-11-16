@@ -33,6 +33,7 @@ fn create_trims_and_stores() {
             emoji: " 🦀 ".into(),
             description: " daily ".into(),
             deadline: Some(d(2026, 12, 31)),
+            numeric: None,
         },
     )
     .unwrap();
@@ -81,6 +82,7 @@ fn update_edits_fields_keeps_kind_and_can_clear_deadline() {
             emoji: "🎯".into(),
             description: "x".into(),
             deadline: Some(d(2026, 8, 1)),
+            numeric: None,
         },
     )
     .unwrap();
@@ -227,4 +229,197 @@ fn delete_unlinks_tasks_without_deleting_them() {
         )
         .unwrap();
     assert_eq!(kept, 1);
+}
+
+fn numeric(title: &str, target: i64, unit: &str) -> GoalDraft {
+    GoalDraft {
+        title: title.into(),
+        numeric: Some(Numeric {
+            target,
+            unit: unit.into(),
+        }),
+        ..GoalDraft::default()
+    }
+}
+
+fn numeric_goal(conn: &Connection, target: i64) -> GoalId {
+    create(conn, GoalKind::Goal, &numeric("n", target, "km")).unwrap()
+}
+
+#[test]
+fn create_numeric_validates_and_stores() {
+    let conn = test_conn();
+    let id = create(&conn, GoalKind::Goal, &numeric("run", 100, " km ")).unwrap();
+    let n = get(&conn, id, today()).unwrap().numeric.unwrap();
+    assert_eq!(
+        (n.target, n.unit.as_str(), n.total, n.percent),
+        (100, "km", 0, 0)
+    );
+    let empty_unit = create(&conn, GoalKind::Goal, &numeric("a", 5, "")).unwrap();
+    assert_eq!(
+        get(&conn, empty_unit, today())
+            .unwrap()
+            .numeric
+            .unwrap()
+            .unit,
+        ""
+    );
+    for bad in [0, -3] {
+        assert!(matches!(
+            create(&conn, GoalKind::Goal, &numeric("b", bad, "")),
+            Err(GoalError::BadTarget)
+        ));
+    }
+    assert_eq!(list(&conn, today()).unwrap().len(), 2);
+    let plain = create(&conn, GoalKind::Goal, &draft("p", None)).unwrap();
+    assert_eq!(get(&conn, plain, today()).unwrap().numeric, None);
+}
+
+#[test]
+fn project_takes_no_measure() {
+    let conn = test_conn();
+    assert!(matches!(
+        create(&conn, GoalKind::Project, &numeric("p", 5, "")),
+        Err(GoalError::ProjectMeasure)
+    ));
+    assert!(list(&conn, today()).unwrap().is_empty());
+}
+
+#[test]
+fn update_target_changes_count_and_unit_only() {
+    let conn = test_conn();
+    let id = numeric_goal(&conn, 10);
+    update(&conn, id, &numeric(" t ", 20, " pages ")).unwrap();
+    let g = get(&conn, id, today()).unwrap();
+    assert_eq!(g.title, "t");
+    let n = g.numeric.unwrap();
+    assert_eq!((n.target, n.unit.as_str()), (20, "pages"));
+    assert!(matches!(
+        update(&conn, id, &numeric("t", 0, "")),
+        Err(GoalError::BadTarget)
+    ));
+}
+
+#[test]
+fn update_never_changes_the_measure() {
+    let conn = test_conn();
+    let plain = goal(&conn);
+    let num = numeric_goal(&conn, 10);
+    assert!(matches!(
+        update(&conn, plain, &numeric("g", 5, "")),
+        Err(GoalError::MeasureChanged)
+    ));
+    assert!(matches!(
+        update(&conn, num, &draft("n", None)),
+        Err(GoalError::MeasureChanged)
+    ));
+    assert_eq!(get(&conn, plain, today()).unwrap().numeric, None);
+    assert_eq!(
+        get(&conn, num, today()).unwrap().numeric.unwrap().target,
+        10
+    );
+}
+
+#[test]
+fn add_entry_validates() {
+    let conn = test_conn();
+    let n = numeric_goal(&conn, 10);
+    for bad in [0, -1] {
+        assert!(matches!(
+            add_entry(&conn, n, today(), bad),
+            Err(GoalError::BadValue)
+        ));
+    }
+    assert!(matches!(
+        add_entry(&conn, goal(&conn), today(), 1),
+        Err(GoalError::NotNumeric)
+    ));
+    assert!(matches!(
+        add_entry(&conn, GoalId(99), today(), 1),
+        Err(GoalError::NotNumeric)
+    ));
+    assert!(list_entries(&conn, n).unwrap().is_empty());
+}
+
+#[test]
+fn total_may_exceed_target_and_delete_entry_lowers_it() {
+    let conn = test_conn();
+    let g = numeric_goal(&conn, 10);
+    add_entry(&conn, g, d(2026, 6, 1), 8).unwrap();
+    let b = add_entry(&conn, g, d(2026, 6, 2), 7).unwrap();
+    let n = get(&conn, g, today()).unwrap().numeric.unwrap();
+    assert_eq!((n.total, n.percent), (15, 100));
+    delete_entry(&conn, b).unwrap();
+    let n = get(&conn, g, today()).unwrap().numeric.unwrap();
+    assert_eq!((n.total, n.percent), (8, 80));
+    assert!(matches!(delete_entry(&conn, b), Err(GoalError::NotFound)));
+}
+
+#[test]
+fn numeric_percent_truncates() {
+    let conn = test_conn();
+    let g = numeric_goal(&conn, 3);
+    add_entry(&conn, g, today(), 1).unwrap();
+    let got = list(&conn, today()).unwrap();
+    assert_eq!(got[0].numeric.as_ref().unwrap().percent, 33);
+}
+
+#[test]
+fn entries_list_newest_first_and_stay_with_their_goal() {
+    let conn = test_conn();
+    let (a, b) = (numeric_goal(&conn, 10), numeric_goal(&conn, 10));
+    let old = add_entry(&conn, a, d(2026, 5, 1), 1).unwrap();
+    let new = add_entry(&conn, a, d(2026, 6, 1), 2).unwrap();
+    let same_day = add_entry(&conn, a, d(2026, 6, 1), 3).unwrap();
+    add_entry(&conn, b, d(2026, 6, 1), 9).unwrap();
+    let entries = list_entries(&conn, a).unwrap();
+    let ids: Vec<_> = entries.iter().map(|e| e.id).collect();
+    assert_eq!(ids, [same_day, new, old]);
+    assert_eq!(entries[0].date, d(2026, 6, 1));
+    assert_eq!(get(&conn, a, today()).unwrap().numeric.unwrap().total, 6);
+    assert_eq!(get(&conn, b, today()).unwrap().numeric.unwrap().total, 9);
+}
+
+#[test]
+fn delete_removes_entries() {
+    let conn = test_conn();
+    let g = numeric_goal(&conn, 10);
+    add_entry(&conn, g, today(), 1).unwrap();
+    delete(&conn, g).unwrap();
+    let left: i64 = conn
+        .query_row("SELECT count(*) FROM goal_entry", [], |r| r.get(0))
+        .unwrap();
+    assert_eq!(left, 0);
+}
+
+#[test]
+fn parse_count_reads_positive_whole_numbers() {
+    for (text, want) in [
+        ("5", 5),
+        (" 42 ", 42),
+        ("1.000", 1000),
+        ("12.345.678", 12_345_678),
+    ] {
+        assert_eq!(parse_count(text).unwrap(), want, "{text}");
+    }
+    for bad in [
+        "",
+        "  ",
+        "0",
+        "-3",
+        "1.5",
+        "1,5",
+        "1.00",
+        "1234.567",
+        "1..000",
+        "abc",
+        "1e3",
+        "99999999999999999999",
+        "1.000.000.001",
+    ] {
+        assert!(
+            matches!(parse_count(bad), Err(GoalError::BadNumber)),
+            "{bad}"
+        );
+    }
 }

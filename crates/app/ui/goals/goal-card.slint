@@ -23,7 +23,7 @@ export component GoalCard inherits Rectangle {
     in property <bool> selected;
     callback opened;
 
-    height: 176px;
+    height: 224px;
     border-radius: 8px;
     border-width: root.selected ? 2px : 1px;
     border-color: root.selected ? Theme.ink : Theme.hairline;
@@ -88,6 +88,12 @@ export component GoalCard inherits Rectangle {
                 color: root.goal.has-deadline && root.goal.days-left < 0 ? Theme.critical : Palette.foreground;
                 font-weight: 600;
                 accessible-role: none;
+            }
+
+            if root.goal.is-numeric: GoalProgress {
+                label: @tr("Progress");
+                counts: GoalsStore.amount-text(root.goal.total, root.goal.target, root.goal.unit);
+                percent: root.goal.numeric-percent;
             }
 
             if root.goal.tasks-total > 0: GoalProgress {

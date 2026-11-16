@@ -54,6 +54,7 @@ export component GoalsView inherits VerticalLayout {
     callback new-goal();
     callback edit-goal();
     callback new-task();
+    callback new-entry();
 
     property <length> gap: 16px;
     property <length> min-card: 240px;
@@ -120,7 +121,7 @@ export component GoalsView inherits VerticalLayout {
             property <int> cols: max(1, floor((self.avail + root.gap) / (root.min-card + root.gap)));
             property <length> card-w: (self.avail - (self.cols - 1) * root.gap) / self.cols;
 
-            content-height: ceil(GoalsStore.goals.length / self.cols) * (176px + root.gap);
+            content-height: ceil(GoalsStore.goals.length / self.cols) * (224px + root.gap);
             horizontal-stretch: 1;
 
             for goal[i] in GoalsStore.goals: GoalCard {
@@ -139,6 +140,7 @@ export component GoalsView inherits VerticalLayout {
             width: 320px;
             goal: GoalsStore.detail;
             tasks: GoalsStore.tasks;
+            entries: GoalsStore.entries;
             close => {
                 GoalsStore.detail-open = false;
             }
@@ -147,6 +149,9 @@ export component GoalsView inherits VerticalLayout {
             }
             add-task => {
                 root.new-task();
+            }
+            add-entry => {
+                root.new-entry();
             }
             delete => {
                 GoalsStore.error = GoalsStore.delete(GoalsStore.detail.id);
